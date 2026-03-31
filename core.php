@@ -47,7 +47,7 @@ final class FileStorage
     }
 
     /** Maximum number of page revisions to retain per page */
-    private const MAX_REVISIONS = 10;
+    private const MAX_REVISIONS = 30;
 
     public function ensureDirectories(): void
     {
