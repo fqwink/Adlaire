@@ -5,6 +5,7 @@
 
 ## PHP ファイル構成
 
+- **PHP バージョンは 8.3 以上を必須**とする（`declare(strict_types=1)` 使用）。
 - `index.php` — エントリーポイント。セッション初期化と require のみ。
 - `core.php` — コア基盤。FileStorage クラス、ヘルパー関数。
 - `admin.php` — 管理ツール。App クラス、handleEdit 関数。
