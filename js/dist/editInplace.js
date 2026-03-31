@@ -62,7 +62,11 @@ function plainTextEdit(span) {
     textarea.id = id + '_field';
     textarea.setAttribute('title', titleAttr);
     textarea.value = content;
+    let saved = false;
     textarea.addEventListener('blur', () => {
+        if (saved)
+            return;
+        saved = true;
         fieldSave(id, nl2br(textarea.value));
     });
     span.textContent = '';
