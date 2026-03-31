@@ -18,7 +18,7 @@ const i18n = {
         }
         this.lang = lang;
         try {
-            const response = await fetch(`lang/${lang}.json`);
+            const response = await fetch(`data/lang/${lang}.json`);
             if (response.ok) {
                 this.translations = await response.json();
             }

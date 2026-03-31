@@ -644,7 +644,7 @@ final class App
             $lang = 'ja';
         }
         $this->language = $lang;
-        $file = __DIR__ . '/lang/' . $lang . '.json';
+        $file = __DIR__ . '/data/lang/' . $lang . '.json';
         if (is_file($file)) {
             $json = file_get_contents($file);
             if ($json !== false) {
