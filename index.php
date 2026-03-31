@@ -781,15 +781,17 @@ final class App
         <div class='hide'>
         <div class='change border'><b>{$themeLabel}</b>&nbsp;<span id='themeSelect'><select name='themeSelect' onchange='fieldSave(\"themeSelect\",this.value);'>";
 
-        $cwd = getcwd();
-        if (is_dir('./themes/') && chdir('./themes/')) {
-            $dirs = glob('*', GLOB_ONLYDIR);
-            foreach ($dirs as $val) {
-                $safeVal = esc($val);
-                $selected = ($val === $this->config['themeSelect']) ? ' selected' : '';
-                echo "<option value=\"{$safeVal}\"{$selected}>{$safeVal}</option>\n";
+        $themesDir = __DIR__ . '/themes';
+        if (is_dir($themesDir)) {
+            $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
+            if (is_array($dirs)) {
+                foreach ($dirs as $dir) {
+                    $val = basename($dir);
+                    $safeVal = esc($val);
+                    $selected = ($val === $this->config['themeSelect']) ? ' selected' : '';
+                    echo "<option value=\"{$safeVal}\"{$selected}>{$safeVal}</option>\n";
+                }
             }
-            chdir($cwd);
         }
 
         echo "</select></span></div>";
