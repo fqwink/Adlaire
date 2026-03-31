@@ -4,6 +4,11 @@ declare(strict_types=1);
 /**
  * Adlaire Platform
  *
+ * Version: Ver.{Major}.{Minor}-{Build}
+ *   Major  - Incremented on breaking changes. Resets Minor to 0.
+ *   Minor  - Incremented on backward-compatible feature additions.
+ *   Build  - Cumulative revision number. Never resets.
+ *
  * @copyright Copyright (c) 2014 - 2015 IEAS Group
  * @copyright Copyright (c) 2014 - 2015 AIZM
  * @license Adlaire License
@@ -388,6 +393,11 @@ final class FileStorage
 
 final class App
 {
+    public const VERSION_MAJOR = 2;
+    public const VERSION_MINOR = 0;
+    public const VERSION_BUILD = 9;
+    public const VERSION = 'Ver.2.0-9';
+
     /** @var array<string, mixed> */
     public array $config = [];
 
