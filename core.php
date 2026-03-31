@@ -236,13 +236,16 @@ final class FileStorage
         return is_array($data) && isset($data['content']) ? $data : false;
     }
 
-    public function writePage(string $slug, string $content, string $format = 'html'): bool
+    /**
+     * @param array<int, array{type: string, data: array<string, mixed>}>|null $blocks
+     */
+    public function writePage(string $slug, string $content, string $format = 'html', ?array $blocks = null): bool
     {
         if (!self::validateSlug($slug)) {
             return false;
         }
 
-        if (!in_array($format, ['html', 'markdown'], true)) {
+        if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
             $format = 'html';
         }
 
@@ -263,6 +266,10 @@ final class FileStorage
             'created_at' => $createdAt,
             'updated_at' => $now,
         ];
+
+        if ($format === 'blocks' && $blocks !== null) {
+            $data['blocks'] = $blocks;
+        }
 
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return $this->atomicWrite($path, $json);

@@ -1,12 +1,12 @@
 "use strict";
 /**
  * EditInplace - Inline content editing for Adlaire Platform.
- * Vanilla TypeScript replacement for jQuery-based editInplace.
  *
- * Requires: autosize.ts, markdown.ts, i18n.ts (loaded before this file)
+ * Requires: autosize.ts, markdown.ts, editor.ts, i18n.ts, api.ts
  * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
  */
 let changing = false;
+let activeEditor = null;
 function nl2br(s) {
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
 }
@@ -48,7 +48,6 @@ function plainTextEdit(span) {
     const title = span.getAttribute('title');
     const titleAttr = title ? `"${title}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
-    // For markdown pages, show raw markdown in textarea
     const content = isMarkdown
         ? span.innerHTML
         : span.innerHTML.replace(/<br\s*\/?>/gi, '');
@@ -84,10 +83,61 @@ function renderMarkdownContent() {
         el.innerHTML = markdownToHtml(raw);
     });
 }
+function renderBlocksContent() {
+    document.querySelectorAll('.blocks-content').forEach(el => {
+        const blocksJson = el.dataset.blocks;
+        if (!blocksJson)
+            return;
+        try {
+            const blocks = JSON.parse(blocksJson);
+            el.innerHTML = renderBlocks(blocks);
+        }
+        catch {
+            // Leave content as-is on parse failure
+        }
+    });
+}
+function initBlockEditor() {
+    document.querySelectorAll('.ce-editor-wrapper').forEach(wrapper => {
+        const blocksJson = wrapper.dataset.blocks;
+        let blocks = [];
+        if (blocksJson) {
+            try {
+                blocks = JSON.parse(blocksJson);
+            }
+            catch { /* empty */ }
+        }
+        const editorData = {
+            time: Date.now(),
+            version: '1.0',
+            blocks: blocks.length > 0 ? blocks : [{ type: 'paragraph', data: { text: '' } }],
+        };
+        activeEditor = Editor.create(wrapper, { data: editorData });
+        // Auto-save on focusout from the editor
+        wrapper.addEventListener('focusout', (e) => {
+            const related = e.relatedTarget;
+            // Only save if focus leaves the editor entirely
+            if (related && wrapper.contains(related))
+                return;
+            if (!activeEditor)
+                return;
+            const saved = activeEditor.save();
+            const slug = wrapper.id;
+            if (!slug)
+                return;
+            api.savePage(slug, JSON.stringify(saved.blocks), 'blocks').catch(() => {
+                // Silent fail - will retry on next focusout
+            });
+        });
+    });
+}
 function initEditInplace() {
-    // Render markdown content for visitors
+    // Render content for visitors
     renderMarkdownContent();
-    // Editable text spans
+    renderBlocksContent();
+    // Initialize block editor for admin
+    initBlockEditor();
+    // Editable text spans (non-blocks)
     document.querySelectorAll('span.editText').forEach(span => {
         span.addEventListener('click', () => {
             if (changing)
