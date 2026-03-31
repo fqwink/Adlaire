@@ -759,6 +759,10 @@ final class App
         $items = explode("<br />\n", $this->config['menu']);
         echo '<ul>';
         foreach ($items as $item) {
+            $item = trim($item);
+            if ($item === '') {
+                continue;
+            }
             $slug = self::getSlug($item);
             $safeItem = esc($item);
             $safeSlug = esc($slug);
