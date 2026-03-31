@@ -14,6 +14,214 @@ ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 session_start();
 
+/**
+ * FileStorage - Flat file data management layer
+ *
+ * Provides atomic writes, file locking, JSON config consolidation,
+ * organized directory structure, and automatic migration from legacy format.
+ */
+final class FileStorage
+{
+    private string $basePath;
+    private string $configFile;
+    private string $pagesDir;
+    private string $backupsDir;
+
+    /** Config keys managed in config.json */
+    private const CONFIG_KEYS = [
+        'password', 'themeSelect', 'menu', 'title',
+        'subside', 'description', 'keywords', 'copyright',
+    ];
+
+    public function __construct(string $basePath = 'files')
+    {
+        $this->basePath = $basePath;
+        $this->configFile = $basePath . '/config.json';
+        $this->pagesDir = $basePath . '/pages';
+        $this->backupsDir = $basePath . '/backups';
+    }
+
+    public function ensureDirectories(): void
+    {
+        foreach ([$this->basePath, $this->pagesDir, $this->backupsDir] as $dir) {
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+        }
+        if (!is_dir('plugins')) {
+            mkdir('plugins', 0755, true);
+        }
+    }
+
+    /**
+     * Migrate from legacy flat file format to new structure.
+     * Runs once automatically when config.json does not exist.
+     */
+    public function migrate(): void
+    {
+        if (file_exists($this->configFile)) {
+            return;
+        }
+
+        $config = [];
+        foreach (self::CONFIG_KEYS as $key) {
+            $legacyFile = $this->basePath . '/' . $key;
+            if (file_exists($legacyFile)) {
+                $config[$key] = file_get_contents($legacyFile);
+            }
+        }
+
+        if ($config !== []) {
+            $this->writeConfig($config);
+        }
+
+        // Move page files to pages/ subdirectory
+        $skipFiles = array_merge(self::CONFIG_KEYS, ['config.json']);
+        $files = glob($this->basePath . '/*');
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                if (is_dir($file)) {
+                    continue;
+                }
+                $name = basename($file);
+                if (in_array($name, $skipFiles, true)) {
+                    continue;
+                }
+                $dest = $this->pagesDir . '/' . $name;
+                if (!file_exists($dest)) {
+                    rename($file, $dest);
+                }
+            }
+        }
+
+        // Clean up legacy config files (pages already moved)
+        foreach (self::CONFIG_KEYS as $key) {
+            $legacyFile = $this->basePath . '/' . $key;
+            if (file_exists($legacyFile)) {
+                unlink($legacyFile);
+            }
+        }
+    }
+
+    /**
+     * Read all config values from config.json.
+     * @return array<string, string>
+     */
+    public function readConfig(): array
+    {
+        if (!file_exists($this->configFile)) {
+            return [];
+        }
+
+        $json = $this->lockedRead($this->configFile);
+        if ($json === false) {
+            return [];
+        }
+
+        $data = json_decode($json, true);
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Write config values to config.json with backup and atomic write.
+     * @param array<string, string> $config
+     */
+    public function writeConfig(array $config): bool
+    {
+        // Merge with existing config
+        $existing = $this->readConfig();
+        $merged = array_merge($existing, $config);
+
+        // Backup existing config
+        if (file_exists($this->configFile)) {
+            copy($this->configFile, $this->backupsDir . '/config.json.bak');
+        }
+
+        $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return $this->atomicWrite($this->configFile, $json);
+    }
+
+    /**
+     * Write a single config value.
+     */
+    public function writeConfigValue(string $key, string $value): bool
+    {
+        return $this->writeConfig([$key => $value]);
+    }
+
+    /**
+     * Read a page content file.
+     */
+    public function readPage(string $slug): string|false
+    {
+        $path = $this->pagesDir . '/' . $slug;
+        if (!file_exists($path)) {
+            return false;
+        }
+        return $this->lockedRead($path);
+    }
+
+    /**
+     * Write a page content file with atomic write.
+     */
+    public function writePage(string $slug, string $content): bool
+    {
+        $path = $this->pagesDir . '/' . $slug;
+        return $this->atomicWrite($path, $content);
+    }
+
+    /**
+     * Check if a field name is a config key.
+     */
+    public function isConfigKey(string $key): bool
+    {
+        return in_array($key, self::CONFIG_KEYS, true);
+    }
+
+    /**
+     * Atomic write: write to temp file, then rename.
+     * Prevents data corruption on crash/power loss.
+     */
+    private function atomicWrite(string $path, string $content): bool
+    {
+        $dir = dirname($path);
+        $tmp = tempnam($dir, '.tmp_');
+        if ($tmp === false) {
+            return false;
+        }
+
+        $written = file_put_contents($tmp, $content, LOCK_EX);
+        if ($written === false) {
+            unlink($tmp);
+            return false;
+        }
+
+        chmod($tmp, 0644);
+        return rename($tmp, $path);
+    }
+
+    /**
+     * Read file with shared lock to prevent reading during write.
+     */
+    private function lockedRead(string $path): string|false
+    {
+        $fp = fopen($path, 'r');
+        if ($fp === false) {
+            return false;
+        }
+
+        if (!flock($fp, LOCK_SH)) {
+            fclose($fp);
+            return false;
+        }
+
+        $content = stream_get_contents($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return $content;
+    }
+}
+
 final class App
 {
     /** @var array<string, mixed> */
@@ -29,6 +237,8 @@ final class App
     public readonly string $requestPage;
     public string $credit;
 
+    public readonly FileStorage $storage;
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -40,8 +250,10 @@ final class App
     {
         [$this->host, $this->requestPage] = $this->parseHost();
 
+        $this->storage = new FileStorage('files');
         $this->initDefaults();
-        $this->ensureDirectories();
+        $this->storage->ensureDirectories();
+        $this->storage->migrate();
         $this->loadConfig();
         $this->loadPlugins();
     }
@@ -103,31 +315,23 @@ final class App
         $this->hooks['admin-richText'] = 'rte.php';
     }
 
-    private function ensureDirectories(): void
-    {
-        if (!file_exists('files')) {
-            mkdir('files', 0755, true);
-            mkdir('plugins', 0755, true);
-        }
-    }
-
     private function loadConfig(): void
     {
+        $stored = $this->storage->readConfig();
+
         foreach ($this->config as $key => $val) {
             if ($key === 'content' || $key === 'loggedin') {
                 continue;
             }
 
-            $fpath = 'files/' . $key;
-            $fval = file_exists($fpath) ? file_get_contents($fpath) : false;
             $this->defaults[$key] ??= $val;
 
-            if ($fval !== false) {
-                $this->config[$key] = $fval;
+            if (isset($stored[$key])) {
+                $this->config[$key] = $stored[$key];
             }
 
             match ($key) {
-                'password' => $this->handlePassword($fval, $val),
+                'password' => $this->handlePassword($stored[$key] ?? false, $val),
                 default    => null,
             };
         }
@@ -194,8 +398,7 @@ final class App
             return;
         }
 
-        $pagefile = 'files/' . $this->config['page'];
-        $content = file_exists($pagefile) ? file_get_contents($pagefile) : false;
+        $content = $this->storage->readPage($this->config['page']);
 
         if ($content !== false) {
             $this->config['content'] = $content;
@@ -258,8 +461,7 @@ final class App
         if (strlen($stored) === 32 && ctype_xdigit($stored)) {
             $valid = hash_equals($stored, md5($input));
             if ($valid) {
-                $this->savePassword($input);
-                $this->config['password'] = (string) file_get_contents('files/password');
+                $this->config['password'] = $this->savePassword($input);
             }
         } else {
             $valid = password_verify($input, $stored);
@@ -287,9 +489,9 @@ final class App
     public function savePassword(string $password): string
     {
         $hash = password_hash($password, PASSWORD_DEFAULT);
-        $result = file_put_contents('files/password', $hash);
-        if ($result === false) {
-            echo 'Set 644 permission to the password file.';
+        $result = $this->storage->writeConfigValue('password', $hash);
+        if (!$result) {
+            echo 'Set 755 permission to the files folder.';
             exit;
         }
         return $hash;
@@ -411,9 +613,15 @@ function handleEdit(): void
 
     csrf_verify();
 
-    $filepath = __DIR__ . '/files/' . $fieldname;
-    $result = file_put_contents($filepath, $content);
-    if ($result === false) {
+    $storage = new FileStorage('files');
+
+    if ($storage->isConfigKey($fieldname)) {
+        $result = $storage->writeConfigValue($fieldname, $content);
+    } else {
+        $result = $storage->writePage($fieldname, $content);
+    }
+
+    if (!$result) {
         echo 'Set 755 permission to the files folder.';
         exit;
     }
