@@ -27,8 +27,6 @@ final class FileStorage
     private string $configLock;
     private string $pagesDir;
     private string $backupsDir;
-    private string $pageMetaFile;
-
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
         'password', 'themeSelect', 'menu', 'title',
@@ -36,7 +34,7 @@ final class FileStorage
     ];
 
     /** Maximum number of config backup generations to retain */
-    private const MAX_BACKUPS = 5;
+    private const MAX_BACKUPS = 9;
 
     public function __construct(string $basePath = 'files')
     {
@@ -45,7 +43,6 @@ final class FileStorage
         $this->configLock = $basePath . '/.config.lock';
         $this->pagesDir = $basePath . '/pages';
         $this->backupsDir = $basePath . '/backups';
-        $this->pageMetaFile = $basePath . '/pages.meta.json';
     }
 
     public function ensureDirectories(): void
@@ -93,10 +90,8 @@ final class FileStorage
             $this->writeConfig($config);
         }
 
-        // Move page files to pages/ subdirectory
+        // Migrate page files to JSON format in pages/ subdirectory
         $skipFiles = array_merge(self::CONFIG_KEYS, ['config.json']);
-        $now = date('c');
-        $meta = [];
         $files = glob($this->basePath . '/*');
         if (is_array($files)) {
             foreach ($files as $file) {
@@ -107,20 +102,19 @@ final class FileStorage
                 if (in_array($name, $skipFiles, true)) {
                     continue;
                 }
-                $dest = $this->pagesDir . '/' . $name;
+                $dest = $this->pagesDir . '/' . $name . '.json';
                 if (!file_exists($dest)) {
                     $mtime = date('c', filemtime($file) ?: time());
-                    rename($file, $dest);
-                    $meta[$name] = [
+                    $content = file_get_contents($file);
+                    $pageData = [
+                        'content'    => $content !== false ? $content : '',
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
+                    $this->atomicWrite($dest, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                    unlink($file);
                 }
             }
-        }
-
-        if ($meta !== []) {
-            $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
 
         // Clean up legacy config files (pages already moved)
@@ -207,22 +201,48 @@ final class FileStorage
     }
 
     /**
-     * Read a page content file.
+     * Read a page content from JSON data file.
      */
     public function readPage(string $slug): string|false
     {
         if (!self::validateSlug($slug)) {
             return false;
         }
-        $path = $this->pagesDir . '/' . $slug;
+        $path = $this->pagesDir . '/' . $slug . '.json';
         if (!file_exists($path)) {
             return false;
         }
-        return $this->lockedRead($path);
+        $json = $this->lockedRead($path);
+        if ($json === false) {
+            return false;
+        }
+        $data = json_decode($json, true);
+        return is_array($data) && isset($data['content']) ? $data['content'] : false;
     }
 
     /**
-     * Write a page content file with atomic write and metadata tracking.
+     * Read full page data (content + metadata) from JSON data file.
+     * @return array{content: string, created_at: string, updated_at: string}|false
+     */
+    public function readPageData(string $slug): array|false
+    {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+        $path = $this->pagesDir . '/' . $slug . '.json';
+        if (!file_exists($path)) {
+            return false;
+        }
+        $json = $this->lockedRead($path);
+        if ($json === false) {
+            return false;
+        }
+        $data = json_decode($json, true);
+        return is_array($data) && isset($data['content']) ? $data : false;
+    }
+
+    /**
+     * Write a page as JSON data file with content and metadata.
      */
     public function writePage(string $slug, string $content): bool
     {
@@ -230,15 +250,21 @@ final class FileStorage
             return false;
         }
 
-        $path = $this->pagesDir . '/' . $slug;
-        $isNew = !file_exists($path);
+        $path = $this->pagesDir . '/' . $slug . '.json';
+        $now = date('c');
 
-        if (!$this->atomicWrite($path, $content)) {
-            return false;
-        }
+        // Preserve created_at from existing page
+        $existing = $this->readPageData($slug);
+        $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
 
-        $this->updatePageMeta($slug, $isNew);
-        return true;
+        $data = [
+            'content'    => $content,
+            'created_at' => $createdAt,
+            'updated_at' => $now,
+        ];
+
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return $this->atomicWrite($path, $json);
     }
 
     /**
@@ -250,28 +276,26 @@ final class FileStorage
             return false;
         }
 
-        $path = $this->pagesDir . '/' . $slug;
+        $path = $this->pagesDir . '/' . $slug . '.json';
         if (!file_exists($path)) {
             return false;
         }
 
         // Backup before deletion
-        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '.bak';
+        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '.json';
         copy($path, $backupPath);
 
         unlink($path);
-        $this->removePageMeta($slug);
         return true;
     }
 
     /**
-     * List all pages with optional metadata.
-     * @return array<string, array{created_at: string, updated_at: string}>
+     * List all pages with metadata from JSON data files.
+     * @return array<string, array{content: string, created_at: string, updated_at: string}>
      */
     public function listPages(): array
     {
-        $meta = $this->readPageMeta();
-        $files = glob($this->pagesDir . '/*');
+        $files = glob($this->pagesDir . '/*.json');
         $pages = [];
 
         if (is_array($files)) {
@@ -279,11 +303,11 @@ final class FileStorage
                 if (is_dir($file)) {
                     continue;
                 }
-                $slug = basename($file);
-                $pages[$slug] = $meta[$slug] ?? [
-                    'created_at' => date('c', filemtime($file) ?: time()),
-                    'updated_at' => date('c', filemtime($file) ?: time()),
-                ];
+                $slug = basename($file, '.json');
+                $data = $this->readPageData($slug);
+                if ($data !== false) {
+                    $pages[$slug] = $data;
+                }
             }
         }
 
@@ -358,40 +382,6 @@ final class FileStorage
         }
     }
 
-    // --- Page metadata ---
-
-    private function readPageMeta(): array
-    {
-        if (!file_exists($this->pageMetaFile)) {
-            return [];
-        }
-        $json = $this->lockedRead($this->pageMetaFile);
-        if ($json === false) {
-            return [];
-        }
-        return json_decode($json, true) ?: [];
-    }
-
-    private function updatePageMeta(string $slug, bool $isNew): void
-    {
-        $meta = $this->readPageMeta();
-        $now = date('c');
-
-        if ($isNew || !isset($meta[$slug])) {
-            $meta[$slug] = ['created_at' => $now, 'updated_at' => $now];
-        } else {
-            $meta[$slug]['updated_at'] = $now;
-        }
-
-        $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
-
-    private function removePageMeta(string $slug): void
-    {
-        $meta = $this->readPageMeta();
-        unset($meta[$slug]);
-        $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
 }
 
 final class App
