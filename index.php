@@ -873,7 +873,7 @@ function handleEdit(): void
     }
 
     if (!$result) {
-        echo 'permission_error';
+        header('HTTP/1.1 500 Internal Server Error');
         exit;
     }
 
