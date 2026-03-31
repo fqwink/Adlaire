@@ -2,9 +2,12 @@
  * EditInplace - Inline content editing for Adlaire Platform.
  * Vanilla TypeScript replacement for jQuery-based editInplace.
  *
- * Requires: autosize.ts (loaded before this file)
- * Expects: global `csrfToken` variable set by PHP.
+ * Requires: autosize.ts, markdown.ts, i18n.ts (loaded before this file)
+ * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
  */
+
+declare const pageLang: string | undefined;
+declare const pageFormat: string | undefined;
 
 let changing = false;
 
@@ -25,7 +28,7 @@ function fieldSave(key: string, val: string): void {
     })
     .then(response => response.text())
     .then(data => {
-        if (key === 'themeSelect') {
+        if (key === 'themeSelect' || key === 'language') {
             location.reload();
             return;
         }
@@ -45,21 +48,16 @@ function fieldSave(key: string, val: string): void {
     });
 }
 
-/**
- * Rich text edit hook placeholder.
- * This function is replaced at runtime by the PHP-injected hook content.
- * The hook receives the clicked span element and performs rich text editing.
- */
-function richTextHook(span: HTMLElement): void {
-    // Default: same as plain text edit (overridden by rte hook injection)
-    plainTextEdit(span);
-}
-
 function plainTextEdit(span: HTMLElement): void {
     const id = span.id;
     const title = span.getAttribute('title');
     const titleAttr = title ? `"${title}" ` : '';
-    const content = span.innerHTML.replace(/<br\s*\/?>/gi, '');
+    const isMarkdown = span.dataset.format === 'markdown';
+
+    // For markdown pages, show raw markdown in textarea
+    const content = isMarkdown
+        ? span.innerHTML
+        : span.innerHTML.replace(/<br\s*\/?>/gi, '');
 
     const textarea = document.createElement('textarea');
     textarea.name = 'textarea';
@@ -71,7 +69,11 @@ function plainTextEdit(span: HTMLElement): void {
     textarea.addEventListener('blur', () => {
         if (saved) return;
         saved = true;
-        fieldSave(id, nl2br(textarea.value));
+        if (isMarkdown) {
+            fieldSave(id, textarea.value);
+        } else {
+            fieldSave(id, nl2br(textarea.value));
+        }
     });
 
     span.textContent = '';
@@ -80,7 +82,21 @@ function plainTextEdit(span: HTMLElement): void {
     autosize(textarea);
 }
 
+function richTextHook(span: HTMLElement): void {
+    plainTextEdit(span);
+}
+
+function renderMarkdownContent(): void {
+    document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
+        const raw = el.dataset.raw || el.textContent || '';
+        el.innerHTML = markdownToHtml(raw);
+    });
+}
+
 function initEditInplace(): void {
+    // Render markdown content for visitors
+    renderMarkdownContent();
+
     // Editable text spans
     document.querySelectorAll<HTMLElement>('span.editText').forEach(span => {
         span.addEventListener('click', () => {

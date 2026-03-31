@@ -212,15 +212,17 @@ final class App
             $this->config['page'] = $this->requestPage;
         }
         $this->config['page'] = self::getSlug($this->config['page']);
+        $this->config['pageFormat'] = 'html';
 
         if (isset($_REQUEST['login'])) {
             return;
         }
 
-        $content = $this->storage->readPage($this->config['page']);
+        $pageData = $this->storage->readPageData($this->config['page']);
 
-        if ($content !== false) {
-            $this->config['content'] = $content;
+        if ($pageData !== false) {
+            $this->config['content'] = $pageData['content'];
+            $this->config['pageFormat'] = $pageData['format'] ?? 'html';
             return;
         }
 
@@ -351,7 +353,10 @@ final class App
         }
         $token = csrf_token();
         $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-        echo "\t<script>var csrfToken={$safeToken};</script>\n";
+        $safeLang = json_encode($this->language);
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'html');
+        echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
+        echo "\t<script>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
             echo "\t{$tag}\n";
         }
@@ -359,12 +364,20 @@ final class App
 
     public function content(string $id, string $content): void
     {
+        $format = $this->config['pageFormat'] ?? 'html';
+        $isMarkdown = ($format === 'markdown' && $id === $this->config['page']);
+
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
             $safeTitle = esc($this->defaults['content']);
-            echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
+            $formatAttr = $isMarkdown ? " data-format='markdown'" : '';
+            echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
         } else {
-            echo $content;
+            if ($isMarkdown) {
+                echo "<div class='markdown-content' data-raw='" . esc($content) . "'>{$content}</div>";
+            } else {
+                echo $content;
+            }
         }
     }
 
