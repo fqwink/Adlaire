@@ -1,5 +1,8 @@
 # Adlaire Platform - 開発規約
 
+> 詳細仕様は `RULEBOOK.md`（ルールブック / 仕様書）を参照。
+> すべての実装は RULEBOOK.md に基づいて行うこと。
+
 ## PHP ファイル構成
 
 - `index.php` — エントリーポイント。セッション初期化と require のみ。
