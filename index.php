@@ -542,7 +542,7 @@ final class App
 
     private function handlePassword(string|false $fval, string $val): void
     {
-        if ($fval === false) {
+        if ($fval === false || $fval === '') {
             $this->config['password'] = $this->savePassword($val);
         }
     }
