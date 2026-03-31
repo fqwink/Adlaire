@@ -79,7 +79,8 @@ function richTextHook(span) {
 }
 function renderMarkdownContent() {
     document.querySelectorAll('.markdown-content').forEach(el => {
-        const raw = el.dataset.raw || el.textContent || '';
+        const b64 = el.dataset.rawB64;
+        const raw = b64 ? atob(b64) : (el.textContent || '');
         el.innerHTML = markdownToHtml(raw);
     });
 }

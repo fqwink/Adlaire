@@ -374,7 +374,8 @@ final class App
             echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
         } else {
             if ($isMarkdown) {
-                echo "<div class='markdown-content' data-raw='" . esc($content) . "'>{$content}</div>";
+                $encoded = esc(base64_encode($content));
+                echo "<div class='markdown-content' data-raw-b64='{$encoded}'>{$content}</div>";
             } else {
                 echo $content;
             }
