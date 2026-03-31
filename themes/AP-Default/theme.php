@@ -2,21 +2,22 @@
 <html lang="ja">
 <head>
 <?php
+	$esc = function($s){ return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); };
 	echo "	<meta charset='utf-8'>
-	<title>".$c['title']." - ".$c['page']."</title>
-	<base href='$host'>
+	<title>".$esc($c['title'])." - ".$esc($c['page'])."</title>
+	<base href='".$esc($host)."'>
 	<meta name='viewport' content='width=device-width, initial-scale=1'>
-	<link rel='stylesheet' href='themes/".$c['themeSelect']."/style.css'>
-	<meta name='description' content='".$c['description']."'>
-	<meta name='keywords' content='".$c['keywords']."'>
-	<script src='//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'></script>";
+	<link rel='stylesheet' href='themes/".$esc($c['themeSelect'])."/style.css'>
+	<meta name='description' content='".$esc($c['description'])."'>
+	<meta name='keywords' content='".$esc($c['keywords'])."'>
+	<script src='//ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js'></script>";
 	editTags();
 ?>
 
 </head>
 <body>
 	<nav id="nav">
-		<h1><a href='./'><?php echo $c['title'];?></a></h1>
+		<h1><a href='./'><?php echo htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8');?></a></h1>
 		<?php menu(); ?>
 		<div class="clear"></div>
 	</nav>

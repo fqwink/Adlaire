@@ -8,7 +8,15 @@ $(document).ready(function($){
 		title=(a.attr('title'))?title="\""+a.attr('title')+"\" ":"";
 
 		if(a.hasClass('richText')){
-			<?php if(isset($_REQUEST['hook']))include($_REQUEST['hook']); ?>
+			<?php
+			$allowed_hooks = ['rte.php'];
+			if (isset($_REQUEST['hook'])) {
+				$hook_file = basename($_REQUEST['hook']);
+				if (in_array($hook_file, $allowed_hooks, true)) {
+					include __DIR__ . '/' . $hook_file;
+				}
+			}
+			?>
 		}
 		else{
 			a.html("<textarea "+title+"name=\"textarea\" id=\""+ a.attr('id') +"_field\" onblur=\"fieldSave(a.attr('id'),nl2br(this.value));\">" + a.html().replace(/<br>/gi, "") + "</textarea>");
@@ -27,7 +35,7 @@ function nl2br(s){
 }
 
 function fieldSave(key,val){
-	$.post('index.php', {fieldname: key, content: val}).done(function(data){
+	$.post('index.php', {fieldname: key, content: val, csrf: csrfToken}).done(function(data){
 		if(key == 'themeSelect'){location.reload(true);}
 		else if(val==''){$('#'+key).html($('#'+key).attr('title'));}
 		else {$("#"+key).html(data);}

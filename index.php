@@ -10,6 +10,20 @@
 ob_start();
 ini_set('session.cookie_httponly', 1);
 session_start();
+
+function csrf_token() {
+	if (empty($_SESSION['csrf'])) {
+		$_SESSION['csrf'] = bin2hex(random_bytes(32));
+	}
+	return $_SESSION['csrf'];
+}
+function csrf_verify() {
+	if (empty($_POST['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'])) {
+		header('HTTP/1.1 403 Forbidden');
+		exit;
+	}
+}
+
 host();
 edit();
 
@@ -18,8 +32,8 @@ $c['loggedin'] = false;
 $c['page'] = 'home';
 $d['page']['home'] = "<h3>Your website is now powered by Adlaire Platform.</h3><br />\nLogin with the 'Login' link below. The password is admin.<br />\nChange the password as soon as possible.<br /><br />\n\nClick on the content to edit and click outside to save it.<br />";
 $d['page']['example'] = "This is an example page.<br /><br />\n\nTo add a new one, click on the existing pages (in the admin panel) and enter a new one below the others.";
-$d['new_page']['admin'] = "Page <sb>".$rp."</b> created.<br /><br />\n\nClick here to start editing!";
-$d['new_page']['visitor'] = "Sorry, but <b>".$rp."</b> doesn't exist. :(";
+$d['new_page']['admin'] = "Page <b>".htmlspecialchars($rp ?? '', ENT_QUOTES, 'UTF-8')."</b> created.<br /><br />\n\nClick here to start editing!";
+$d['new_page']['visitor'] = "Sorry, but <b>".htmlspecialchars($rp ?? '', ENT_QUOTES, 'UTF-8')."</b> doesn't exist. :(";
 $d['default']['content'] = 'Click to edit!';
 $c['themeSelect'] = 'AP-Default';
 $c['menu'] = "Home<br />\nExample";
@@ -38,7 +52,8 @@ if(!file_exists('files')){
 
 foreach($c as $key => $val){
 	if($key == 'content') continue;
-	$fval = @file_get_contents('files/'.$key);
+	$fpath = 'files/'.$key;
+	$fval = file_exists($fpath) ? file_get_contents($fpath) : false;
 	$d['default'][$key] = $c[$key];
 	if($fval)
 		$c[$key] = $fval;
@@ -48,7 +63,7 @@ foreach($c as $key => $val){
 				$c[$key] = savePassword($val);
 			break;
 		case 'loggedin':
-			if(isset($_SESSION['l']) and $_SESSION['l'] == $c['password'])
+			if(isset($_SESSION['l']) and $_SESSION['l'] === $c['password'])
 				$c[$key] = true;
 			if(isset($_REQUEST['logout'])){
 				session_destroy();
@@ -61,7 +76,9 @@ foreach($c as $key => $val){
 				$msg = '';
 				if(isset($_POST['sub']))
 					login();
+				$csrf = csrf_token();
 				$c['content'] = "<form action='' method='POST'>
+				<input type='hidden' name='csrf' value='".$csrf."'>
 				<input type='password' name='password'>
 				<input type='submit' name='login' value='Login'> $msg
 				<p class='toggle'>Change password</p>
@@ -79,7 +96,8 @@ foreach($c as $key => $val){
 				$c[$key] = $rp;
 			$c[$key] = getSlug($c[$key]);
 			if(isset($_REQUEST['login'])) continue;
-			$c['content'] = @file_get_contents("files/".$c[$key]);
+			$pagefile = "files/".$c[$key];
+			$c['content'] = file_exists($pagefile) ? file_get_contents($pagefile) : false;
 			if(!$c['content']){
 				if(!isset($d['page'][$c[$key]])){
 					header('HTTP/1.1 404 Not Found');
@@ -124,6 +142,7 @@ function editTags(){
 	global $hook;
 	if(!is_loggedin() && !isset($_REQUEST['login']))
 		return;
+	echo "\t<script>var csrfToken='".csrf_token()."';</script>\n";
 	foreach($hook['admin-head'] as $o){
 		echo "\t".$o."\n";
 	}
@@ -131,18 +150,26 @@ function editTags(){
 
 function content($id, $content){
 	global $d;
-	echo (is_loggedin()) ? "<span title='".$d['default']['content']."' id='".$id."' class='editText richText'>".$content."</span>" : $content;
+	$safe_id = htmlspecialchars($id, ENT_QUOTES, 'UTF-8');
+	$safe_title = htmlspecialchars($d['default']['content'], ENT_QUOTES, 'UTF-8');
+	echo (is_loggedin()) ? "<span title='".$safe_title."' id='".$safe_id."' class='editText richText'>".$content."</span>" : $content;
 }
 
 function edit(){
 	if(isset($_REQUEST['fieldname'], $_REQUEST['content'])){
-		$fieldname = $_REQUEST['fieldname'];
-		$content = trim(rtrim(stripslashes($_REQUEST['content'])));
+		$fieldname = basename($_REQUEST['fieldname']);
+		if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $fieldname)) {
+			header('HTTP/1.1 400 Bad Request');
+			exit;
+		}
+		$content = trim($_REQUEST['content']);
 		if(!isset($_SESSION['l'])){
 			header('HTTP/1.1 401 Unauthorized');
 			exit;
 		}
-		$file = @fopen("files/$fieldname", "w");
+		csrf_verify();
+		$filepath = __DIR__ . '/files/' . $fieldname;
+		$file = @fopen($filepath, "w");
 		if(!$file){
 			echo 'Set 755 permission to the files folder.';
 			exit;
@@ -159,8 +186,12 @@ function menu(){
 	$mlist = explode("<br />\n", $c['menu']);
 	?><ul>
 	<?php
-	foreach ($mlist as $cp){?>
-			<li<?php if($c['page'] == getSlug($cp)) echo ' id="active" '; ?>><a href='<?php echo getSlug($cp); ?>'><?php echo $cp; ?></a></li>
+	foreach ($mlist as $cp){
+		$slug = getSlug($cp);
+		$safe_cp = htmlspecialchars($cp, ENT_QUOTES, 'UTF-8');
+		$safe_slug = htmlspecialchars($slug, ENT_QUOTES, 'UTF-8');
+	?>
+			<li<?php if($c['page'] == $slug) echo ' id="active" '; ?>><a href='<?php echo $safe_slug; ?>'><?php echo $safe_cp; ?></a></li>
 	<?php } ?>
 	</ul>
 <?php
@@ -168,29 +199,47 @@ function menu(){
 
 function login(){
 	global $c, $msg;
-	if(md5($_POST['password']) <> $c['password']){
+	csrf_verify();
+	$stored = $c['password'];
+	$input = $_POST['password'];
+
+	// Detect legacy MD5 hash (32 hex chars) vs bcrypt
+	if (strlen($stored) === 32 && ctype_xdigit($stored)) {
+		$valid = (md5($input) === $stored);
+		// Auto-migrate to bcrypt on successful login
+		if ($valid) {
+			savePassword($input);
+			$c['password'] = file_get_contents('files/password');
+		}
+	} else {
+		$valid = password_verify($input, $stored);
+	}
+
+	if (!$valid) {
 		$msg = 'wrong password';
 		return;
 	}
-	if($_POST['new']){
+	if (!empty($_POST['new'])) {
 		savePassword($_POST['new']);
 		$msg = 'password changed';
 		return;
 	}
+	session_regenerate_id(true);
 	$_SESSION['l'] = $c['password'];
 	header('Location: ./');
 	exit;
 }
 
 function savePassword($p){
+	$hash = password_hash($p, PASSWORD_DEFAULT);
 	$file = @fopen('files/password', 'w');
 	if(!$file){
 		echo 'Set 644 permission to the password file.';
 		exit;
 	}
-	fwrite($file, md5($p));
+	fwrite($file, $hash);
 	fclose($file);
-	return md5($p);
+	return $hash;
 }
 
 function host(){
@@ -215,14 +264,17 @@ function settings(){
 	if(chdir("./themes/")){
 		$dirs = glob('*', GLOB_ONLYDIR);
 		foreach($dirs as $val){
+			$safe_val = htmlspecialchars($val, ENT_QUOTES, 'UTF-8');
 			$select = ($val == $c['themeSelect']) ? ' selected' : '';
-			echo '<option value="'.$val.'"'.$select.'>'.$val."</option>\n";
+			echo '<option value="'.$safe_val.'"'.$select.'>'.$safe_val."</option>\n";
 		}
 	}
 	echo "</select></span></div>
 	<div class='change border'><b>Menu <small>(add a page below and <a href='javascript:location.reload(true);'>refresh</a>)</small></b><span id='menu' title='Home' class='editText'>".$c['menu']."</span></div>";
 	foreach(array('title','description','keywords','copyright') as $key){
-		echo "<div class='change border'><span title='".$d['default'][$key]."' id='".$key."' class='editText'>".$c[$key]."</span></div>";
+		$safe_default = htmlspecialchars($d['default'][$key], ENT_QUOTES, 'UTF-8');
+		$safe_value = htmlspecialchars($c[$key], ENT_QUOTES, 'UTF-8');
+		echo "<div class='change border'><span title='".$safe_default."' id='".$key."' class='editText'>".$safe_value."</span></div>";
 	}
 	echo "</div></div>";
 }
