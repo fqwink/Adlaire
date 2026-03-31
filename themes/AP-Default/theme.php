@@ -4,7 +4,7 @@ $c = $app->config;
 $host = $app->host;
 ?>
 <!doctype html>
-<html lang="ja">
+<html lang="<?= esc($app->language) ?>">
 <head>
 	<meta charset="utf-8">
 	<title><?= esc($c['title']) ?> - <?= esc($c['page']) ?></title>

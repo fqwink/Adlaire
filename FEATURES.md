@@ -1,6 +1,6 @@
 # Adlaire Platform - 実装機能等一覧
 
-**バージョン**: Ver.1.1-10
+**バージョン**: Ver.1.2-11
 **最終更新**: 2026-03-31
 
 ---
@@ -15,11 +15,12 @@ Adlaire/
 │   ├── autosize.ts            #   textarea自動リサイズ
 │   └── editInplace.ts         #   インプレース編集・AJAX保存
 ├── js/
-│   ├── dist/                  # コンパイル済み JavaScript（自動生成）
-│   │   ├── autosize.js
-│   │   └── editInplace.js
-│   ├── editInplace.php        # [レガシー] 旧jQuery版（未使用）
-│   └── rte.php                # [レガシー] リッチテキストフック（未使用）
+│   └── dist/                  # コンパイル済み JavaScript（自動生成）
+│       ├── autosize.js
+│       └── editInplace.js
+├── lang/                      # 翻訳ファイル
+│   ├── ja.php                 #   日本語
+│   └── en.php                 #   英語
 ├── themes/                    # テーマディレクトリ
 │   ├── AP-Default/
 │   │   ├── theme.php          #   HTMLテンプレート
@@ -229,6 +230,20 @@ Adlaire/
 | クリーンURL | `.htaccess` RewriteRule によるクリーンURL |
 | スラッグ変換 | ページ名を小文字化・スペース→ハイフン変換 |
 | 404ハンドリング | 未存在ページで管理者には作成UI、訪問者には404表示 |
+
+---
+
+### 4.8 多言語化（i18n）
+
+| 機能 | 説明 |
+|------|------|
+| 対応言語 | 日本語（ja）、英語（en） |
+| 翻訳ファイル | `lang/ja.php`, `lang/en.php`（PHPアレイ形式） |
+| 言語切替 | 管理パネルの設定→言語セレクターで切替 |
+| 翻訳ヘルパー | `App::t(key, params)` - `:name` パラメータ置換対応 |
+| 言語設定保存 | `config.json` の `language` キーに保存（FileStorage経由） |
+| HTML lang属性 | テーマテンプレートで `<html lang="">` を動的出力 |
+| デフォルト言語 | 日本語（ja） |
 
 ---
 

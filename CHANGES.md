@@ -1,5 +1,17 @@
 # CHANGES - 変更履歴
 
+## Ver.1.2-11 (2026-03-31)
+
+### 多言語化（i18n）・レガシーコード削除
+* 日本語（ja）・英語（en）の2言語対応を実装
+* 翻訳ファイル: lang/ja.php, lang/en.php（PHPアレイ形式）
+* App::t() 翻訳ヘルパーメソッド（:name パラメータ置換対応）
+* 管理パネルに言語切替セレクターを追加（設定→言語）
+* 全ユーザー向け文字列を翻訳キーに置換
+* テーマの `<html lang="">` 属性を動的化
+* FileStorage CONFIG_KEYS に `language` を追加
+* レガシーファイル削除: js/editInplace.php, js/rte.php
+
 ## Ver.1.1-10 (2026-03-31)
 
 ### jQuery廃止・TypeScript採用

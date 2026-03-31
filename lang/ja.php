@@ -1,0 +1,38 @@
+<?php
+
+return [
+    // 認証
+    'login'                  => 'ログイン',
+    'logout'                 => 'ログアウト',
+    'login_submit'           => 'ログイン',
+    'wrong_password'         => 'パスワードが違います',
+    'password_changed'       => 'パスワードを変更しました',
+    'change_password_label'  => 'パスワード変更',
+    'change_password_hint'   => '上に現在のパスワード、下に新しいパスワードを入力してください。',
+    'change_password_submit' => '変更',
+
+    // 設定パネル
+    'settings'               => '設定',
+    'settings_theme'         => 'テーマ',
+    'settings_menu'          => 'メニュー',
+    'settings_menu_hint'     => '下にページ名を追加して<a href="javascript:location.reload(true);">更新</a>',
+    'settings_language'      => '言語',
+
+    // デフォルトコンテンツ
+    'default_title'          => 'ウェブサイトタイトル',
+    'default_subside'        => "<h3>このウェブサイトについて</h3><br />\n\nこのコンテンツは全ページに表示される固定コンテンツです。",
+    'default_description'    => 'ウェブサイトの説明文。',
+    'default_keywords'       => 'キーワード, ウェブサイト, を入力',
+    'default_copyright'      => '&copy;:year あなたのウェブサイト',
+    'default_home'           => "<h3>Adlaire Platformへようこそ。</h3><br />\n下の「ログイン」リンクからログインしてください。パスワードはadminです。<br />\nできるだけ早くパスワードを変更してください。<br /><br />\n\nコンテンツをクリックすると編集でき、外側をクリックすると保存されます。<br />",
+    'default_example'        => "これはサンプルページです。<br /><br />\n\n新しいページを追加するには、管理パネルのメニューで既存のページの下に新しいページ名を入力してください。",
+
+    // 新規ページ
+    'new_page_admin'         => 'ページ <b>:page</b> を作成しました。<br /><br />\n\nここをクリックして編集を開始してください！',
+    'new_page_visitor'       => '<b>:page</b> は存在しません。',
+
+    // UI
+    'click_to_edit'          => 'クリックして編集！',
+    'credit'                 => 'Powered by <a href="">Adlaire Platform</a>',
+    'permission_error'       => 'filesフォルダに755のパーミッションを設定してください。',
+];

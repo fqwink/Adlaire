@@ -36,6 +36,7 @@ final class FileStorage
     private const CONFIG_KEYS = [
         'password', 'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
+        'language',
     ];
 
     /** Maximum number of config backup generations to retain */
@@ -394,9 +395,9 @@ final class FileStorage
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 1;
-    public const VERSION_BUILD = 10;
-    public const VERSION = 'Ver.1.1-10';
+    public const VERSION_MINOR = 2;
+    public const VERSION_BUILD = 11;
+    public const VERSION = 'Ver.1.2-11';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -410,8 +411,12 @@ final class App
     public readonly string $host;
     public readonly string $requestPage;
     public string $credit;
+    public readonly string $language;
 
     public readonly FileStorage $storage;
+
+    /** @var array<string, string> */
+    private array $translations = [];
 
     private static ?self $instance = null;
 
@@ -429,6 +434,10 @@ final class App
         $this->storage->ensureDirectories();
         $this->storage->migrate();
         $this->loadConfig();
+        $this->loadLanguage();
+        $this->initTranslatableDefaults();
+        $this->handleAuth();
+        $this->handlePage();
         $this->loadPlugins();
     }
 
@@ -457,35 +466,56 @@ final class App
 
     private function initDefaults(): void
     {
-        $rp = $this->requestPage;
-
         $this->config = [
             'password'    => 'admin',
             'loggedin'    => false,
             'page'        => 'home',
             'themeSelect' => 'AP-Default',
+            'language'    => 'ja',
             'menu'        => "Home<br />\nExample",
-            'title'       => 'Website title',
-            'subside'     => "<h3>ABOUT YOUR WEBSITE</h3><br />\n\n This content is static and is visible on all pages.",
-            'description' => 'Your website description.',
-            'keywords'    => 'enter, your website, keywords',
-            'copyright'   => '&copy;' . date('Y') . ' Your website',
+            'title'       => '',
+            'subside'     => '',
+            'description' => '',
+            'keywords'    => '',
+            'copyright'   => '',
         ];
+    }
 
+    /**
+     * Initialize translatable defaults. Called after loadLanguage().
+     */
+    private function initTranslatableDefaults(): void
+    {
+        $rp = $this->requestPage;
         $esc_rp = esc($rp);
-        $this->defaults = [
-            'page' => [
-                'home'    => "<h3>Your website is now powered by Adlaire Platform.</h3><br />\nLogin with the 'Login' link below. The password is admin.<br />\nChange the password as soon as possible.<br /><br />\n\nClick on the content to edit and click outside to save it.<br />",
-                'example' => "This is an example page.<br /><br />\n\nTo add a new one, click on the existing pages (in the admin panel) and enter a new one below the others.",
-            ],
-            'new_page' => [
-                'admin'   => "Page <b>{$esc_rp}</b> created.<br /><br />\n\nClick here to start editing!",
-                'visitor' => "Sorry, but <b>{$esc_rp}</b> doesn't exist. :(",
-            ],
-            'content' => 'Click to edit!',
+        $year = date('Y');
+
+        // Set defaults for config values that haven't been saved yet
+        $translatableDefaults = [
+            'title'       => $this->t('default_title'),
+            'subside'     => $this->t('default_subside'),
+            'description' => $this->t('default_description'),
+            'keywords'    => $this->t('default_keywords'),
+            'copyright'   => $this->t('default_copyright', ['year' => $year]),
         ];
 
-        $this->credit = "Powered by <a href=''>Adlaire Platform</a>";
+        foreach ($translatableDefaults as $key => $val) {
+            $this->defaults[$key] = $val;
+            if ($this->config[$key] === '') {
+                $this->config[$key] = $val;
+            }
+        }
+
+        $this->defaults['page'] = [
+            'home'    => $this->t('default_home'),
+            'example' => $this->t('default_example'),
+        ];
+        $this->defaults['new_page'] = [
+            'admin'   => $this->t('new_page_admin', ['page' => $esc_rp]),
+            'visitor' => $this->t('new_page_visitor', ['page' => $esc_rp]),
+        ];
+        $this->defaults['content'] = $this->t('click_to_edit');
+        $this->credit = $this->t('credit');
     }
 
     private function loadConfig(): void
@@ -508,9 +538,6 @@ final class App
                 default    => null,
             };
         }
-
-        $this->handleAuth();
-        $this->handlePage();
     }
 
     private function handlePassword(string|false $fval, string $val): void
@@ -544,15 +571,19 @@ final class App
             }
 
             $csrf = csrf_token();
+            $loginLabel = esc($this->t('login_submit'));
+            $changePwLabel = esc($this->t('change_password_label'));
+            $changePwHint = $this->t('change_password_hint');
+            $changePwSubmit = esc($this->t('change_password_submit'));
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'>
                 <input type='hidden' name='csrf' value='{$csrf}'>
                 <input type='password' name='password'>
-                <input type='submit' name='login' value='Login'> {$msg}
-                <p class='toggle'>Change password</p>
-                <div class='hide'>Type your old password above and your new one below.<br />
+                <input type='submit' name='login' value='{$loginLabel}'> {$msg}
+                <p class='toggle'>{$changePwLabel}</p>
+                <div class='hide'>{$changePwHint}<br />
                 <input type='password' name='new'>
-                <input type='submit' name='login' value='Change'>
+                <input type='submit' name='login' value='{$changePwSubmit}'>
                 <input type='hidden' name='sub' value='sub'>
                 </div>
                 </form>
@@ -606,6 +637,33 @@ final class App
         }
     }
 
+    private function loadLanguage(): void
+    {
+        $lang = $this->config['language'] ?? 'ja';
+        if (!in_array($lang, ['en', 'ja'], true)) {
+            $lang = 'ja';
+        }
+        $this->language = $lang;
+        $file = __DIR__ . '/lang/' . $lang . '.php';
+        if (is_file($file)) {
+            $this->translations = require $file;
+        }
+    }
+
+    /**
+     * Translate a key with optional parameter substitution.
+     * Parameters use :name syntax (e.g. ':page', ':year').
+     * @param array<string, string> $params
+     */
+    public function t(string $key, array $params = []): string
+    {
+        $str = $this->translations[$key] ?? $key;
+        foreach ($params as $k => $v) {
+            $str = str_replace(':' . $k, $v, $str);
+        }
+        return $str;
+    }
+
     public function isLoggedIn(): bool
     {
         return $this->config['loggedin'] === true;
@@ -615,8 +673,8 @@ final class App
     {
         $host = $this->host;
         return $this->isLoggedIn()
-            ? "<a href='{$host}?logout'>Logout</a>"
-            : "<a href='{$host}?login'>Login</a>";
+            ? "<a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>"
+            : "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
     }
 
     public static function getSlug(string $page): string
@@ -641,7 +699,7 @@ final class App
         }
 
         if (!$valid) {
-            return 'wrong password';
+            return $this->t('wrong_password');
         }
 
         $newPass = $_POST['new'] ?? '';
@@ -650,7 +708,7 @@ final class App
             $this->config['password'] = $newHash;
             session_regenerate_id(true);
             $_SESSION['l'] = $newHash;
-            return 'password changed';
+            return $this->t('password_changed');
         }
 
         session_regenerate_id(true);
@@ -664,7 +722,7 @@ final class App
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $result = $this->storage->writeConfigValue('password', $hash);
         if (!$result) {
-            echo 'Set 755 permission to the files folder.';
+            echo $this->t('permission_error');
             exit;
         }
         return $hash;
@@ -709,10 +767,16 @@ final class App
 
     public function settings(): void
     {
+        $settingsLabel = esc($this->t('settings'));
+        $themeLabel = esc($this->t('settings_theme'));
+        $menuLabel = esc($this->t('settings_menu'));
+        $menuHint = $this->t('settings_menu_hint');
+        $langLabel = esc($this->t('settings_language'));
+
         echo "<div class='settings'>
-        <h3 class='toggle'>↕ Settings ↕</h3>
+        <h3 class='toggle'>↕ {$settingsLabel} ↕</h3>
         <div class='hide'>
-        <div class='change border'><b>Theme</b>&nbsp;<span id='themeSelect'><select name='themeSelect' onchange='fieldSave(\"themeSelect\",this.value);'>";
+        <div class='change border'><b>{$themeLabel}</b>&nbsp;<span id='themeSelect'><select name='themeSelect' onchange='fieldSave(\"themeSelect\",this.value);'>";
 
         $cwd = getcwd();
         if (is_dir('./themes/') && chdir('./themes/')) {
@@ -725,8 +789,17 @@ final class App
             chdir($cwd);
         }
 
-        echo "</select></span></div>
-        <div class='change border'><b>Menu <small>(add a page below and <a href='javascript:location.reload(true);'>refresh</a>)</small></b><span id='menu' title='Home' class='editText'>{$this->config['menu']}</span></div>";
+        echo "</select></span></div>";
+
+        // Language selector
+        echo "<div class='change border'><b>{$langLabel}</b>&nbsp;<select onchange='fieldSave(\"language\",this.value);'>";
+        foreach (['ja' => '日本語', 'en' => 'English'] as $code => $label) {
+            $selected = ($code === $this->language) ? ' selected' : '';
+            echo "<option value=\"{$code}\"{$selected}>{$label}</option>";
+        }
+        echo "</select></div>";
+
+        echo "<div class='change border'><b>{$menuLabel} <small>({$menuHint})</small></b><span id='menu' title='Home' class='editText'>{$this->config['menu']}</span></div>";
 
         foreach (['title', 'description', 'keywords', 'copyright'] as $key) {
             $safeDefault = esc((string) ($this->defaults[$key] ?? ''));
@@ -795,7 +868,7 @@ function handleEdit(): void
     }
 
     if (!$result) {
-        echo 'Set 755 permission to the files folder.';
+        echo 'permission_error';
         exit;
     }
 
