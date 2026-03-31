@@ -91,7 +91,9 @@ final class FileStorage
         }
 
         // Migrate page files to JSON format in pages/ subdirectory
-        $skipFiles = array_merge(self::CONFIG_KEYS, ['config.json']);
+        $skipFiles = array_merge(self::CONFIG_KEYS, [
+            'config.json', 'pages.meta.json', '.htaccess',
+        ]);
         $files = glob($this->basePath . '/*');
         if (is_array($files)) {
             foreach ($files as $file) {
