@@ -1,0 +1,476 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Adlaire Platform - Admin
+ *
+ * Application class and admin editing handler.
+ *
+ * @copyright Copyright (c) 2014 - 2015 IEAS Group
+ * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @license Adlaire License
+ */
+
+final class App
+{
+    public const VERSION_MAJOR = 1;
+    public const VERSION_MINOR = 2;
+    public const VERSION_BUILD = 13;
+    public const VERSION = 'Ver.1.2-13';
+
+    /** @var array<string, mixed> */
+    public array $config = [];
+
+    /** @var array<string, mixed> */
+    public array $defaults = [];
+
+    /** @var array<string, mixed> */
+    public array $hooks = [];
+
+    public readonly string $host;
+    public readonly string $requestPage;
+    public string $credit;
+    public readonly string $language;
+
+    public readonly FileStorage $storage;
+
+    /** @var array<string, string> */
+    private array $translations = [];
+
+    private static ?self $instance = null;
+
+    public static function getInstance(): self
+    {
+        return self::$instance ??= new self();
+    }
+
+    private function __construct()
+    {
+        [$this->host, $this->requestPage] = $this->parseHost();
+
+        $this->storage = new FileStorage('files');
+        $this->initDefaults();
+        $this->storage->ensureDirectories();
+        $this->storage->migrate();
+        $this->loadConfig();
+        $this->loadLanguage();
+        $this->initTranslatableDefaults();
+        $this->handleAuth();
+        $this->handlePage();
+        $this->loadPlugins();
+    }
+
+    private function parseHost(): array
+    {
+        $rp = isset($_REQUEST['page'])
+            ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
+            : '';
+
+        $host = $_SERVER['HTTP_HOST'];
+        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'])) ?? '';
+
+        $host = ($rp !== '' && str_contains($uri, $rp))
+            ? $host . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
+            : $host . '/' . $uri;
+
+        $host = explode('?', $host)[0];
+        $host = '//' . str_replace('//', '/', $host);
+
+        $strip = ['index.php', '?', '"', "'", '>', '<', '=', '(', ')', '\\'];
+        $rp = strip_tags(str_replace($strip, '', $rp));
+        $host = strip_tags(str_replace($strip, '', $host));
+
+        return [$host, $rp];
+    }
+
+    private function initDefaults(): void
+    {
+        $this->config = [
+            'password'    => 'admin',
+            'loggedin'    => false,
+            'page'        => 'home',
+            'themeSelect' => 'AP-Default',
+            'language'    => 'ja',
+            'menu'        => "Home<br />\nExample",
+            'title'       => '',
+            'subside'     => '',
+            'description' => '',
+            'keywords'    => '',
+            'copyright'   => '',
+        ];
+    }
+
+    private function initTranslatableDefaults(): void
+    {
+        $rp = $this->requestPage;
+        $esc_rp = esc($rp);
+        $year = date('Y');
+
+        $translatableDefaults = [
+            'title'       => $this->t('default_title'),
+            'subside'     => $this->t('default_subside'),
+            'description' => $this->t('default_description'),
+            'keywords'    => $this->t('default_keywords'),
+            'copyright'   => $this->t('default_copyright', ['year' => $year]),
+        ];
+
+        foreach ($translatableDefaults as $key => $val) {
+            $this->defaults[$key] = $val;
+            if ($this->config[$key] === '') {
+                $this->config[$key] = $val;
+            }
+        }
+
+        $this->defaults['page'] = [
+            'home'    => $this->t('default_home'),
+            'example' => $this->t('default_example'),
+        ];
+        $this->defaults['new_page'] = [
+            'admin'   => $this->t('new_page_admin', ['page' => $esc_rp]),
+            'visitor' => $this->t('new_page_visitor', ['page' => $esc_rp]),
+        ];
+        $this->defaults['content'] = $this->t('click_to_edit');
+        $this->credit = $this->t('credit');
+    }
+
+    private function loadConfig(): void
+    {
+        $stored = $this->storage->readConfig();
+
+        foreach ($this->config as $key => $val) {
+            if ($key === 'content' || $key === 'loggedin') {
+                continue;
+            }
+
+            $this->defaults[$key] ??= $val;
+
+            if (isset($stored[$key])) {
+                $this->config[$key] = $stored[$key];
+            }
+
+            match ($key) {
+                'password' => $this->handlePassword($stored[$key] ?? false, $val),
+                default    => null,
+            };
+        }
+    }
+
+    private function handlePassword(string|false $fval, string $val): void
+    {
+        if ($fval === false || $fval === '') {
+            $this->config['password'] = $this->savePassword($val);
+        }
+    }
+
+    private function handleAuth(): void
+    {
+        if (isset($_SESSION['l']) && $_SESSION['l'] === $this->config['password']) {
+            $this->config['loggedin'] = true;
+        }
+
+        if (isset($_REQUEST['logout'])) {
+            session_destroy();
+            header('Location: ./');
+            exit;
+        }
+
+        if (isset($_REQUEST['login'])) {
+            if ($this->isLoggedIn()) {
+                header('Location: ./');
+                exit;
+            }
+
+            $msg = '';
+            if (isset($_POST['sub'])) {
+                $msg = $this->login();
+            }
+
+            $csrf = csrf_token();
+            $loginLabel = esc($this->t('login_submit'));
+            $changePwLabel = esc($this->t('change_password_label'));
+            $changePwHint = $this->t('change_password_hint');
+            $changePwSubmit = esc($this->t('change_password_submit'));
+            $this->config['content'] = <<<HTML
+                <form action='' method='POST'>
+                <input type='hidden' name='csrf' value='{$csrf}'>
+                <input type='password' name='password'>
+                <input type='submit' name='login' value='{$loginLabel}'> {$msg}
+                <p class='toggle'>{$changePwLabel}</p>
+                <div class='hide'>{$changePwHint}<br />
+                <input type='password' name='new'>
+                <input type='submit' name='login' value='{$changePwSubmit}'>
+                <input type='hidden' name='sub' value='sub'>
+                </div>
+                </form>
+                HTML;
+        }
+    }
+
+    private function handlePage(): void
+    {
+        if ($this->requestPage !== '') {
+            $this->config['page'] = $this->requestPage;
+        }
+        $this->config['page'] = self::getSlug($this->config['page']);
+
+        if (isset($_REQUEST['login'])) {
+            return;
+        }
+
+        $content = $this->storage->readPage($this->config['page']);
+
+        if ($content !== false) {
+            $this->config['content'] = $content;
+            return;
+        }
+
+        if (isset($this->defaults['page'][$this->config['page']])) {
+            $this->config['content'] = $this->defaults['page'][$this->config['page']];
+            return;
+        }
+
+        header('HTTP/1.1 404 Not Found');
+        $this->config['content'] = $this->isLoggedIn()
+            ? $this->defaults['new_page']['admin']
+            : $this->defaults['new_page']['visitor'];
+    }
+
+    private function loadPlugins(): void
+    {
+        $cwd = getcwd();
+        if ($cwd === false) {
+            $cwd = __DIR__;
+        }
+        $pluginsDir = $cwd . '/plugins';
+        if (is_dir($pluginsDir)) {
+            $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
+            if (is_array($dirs)) {
+                foreach ($dirs as $dir) {
+                    require_once $dir . '/index.php';
+                }
+            }
+        }
+    }
+
+    private function loadLanguage(): void
+    {
+        $lang = $this->config['language'] ?? 'ja';
+        if (!in_array($lang, ['en', 'ja'], true)) {
+            $lang = 'ja';
+        }
+        $this->language = $lang;
+        $file = __DIR__ . '/data/lang/' . $lang . '.json';
+        if (is_file($file)) {
+            $json = file_get_contents($file);
+            if ($json !== false) {
+                $this->translations = json_decode($json, true) ?: [];
+            }
+        }
+    }
+
+    /**
+     * @param array<string, string> $params
+     */
+    public function t(string $key, array $params = []): string
+    {
+        $str = $this->translations[$key] ?? $key;
+        foreach ($params as $k => $v) {
+            $str = str_replace(':' . $k, $v, $str);
+        }
+        return $str;
+    }
+
+    public function isLoggedIn(): bool
+    {
+        return $this->config['loggedin'] === true;
+    }
+
+    public function getLoginStatus(): string
+    {
+        $host = $this->host;
+        return $this->isLoggedIn()
+            ? "<a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>"
+            : "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
+    }
+
+    public static function getSlug(string $page): string
+    {
+        return mb_convert_case(str_replace(' ', '-', $page), MB_CASE_LOWER, 'UTF-8');
+    }
+
+    public function login(): string
+    {
+        csrf_verify();
+
+        $stored = $this->config['password'];
+        $input = $_POST['password'] ?? '';
+
+        if (strlen($stored) === 32 && ctype_xdigit($stored)) {
+            $valid = hash_equals($stored, md5($input));
+            if ($valid) {
+                $this->config['password'] = $this->savePassword($input);
+            }
+        } else {
+            $valid = password_verify($input, $stored);
+        }
+
+        if (!$valid) {
+            return $this->t('wrong_password');
+        }
+
+        $newPass = $_POST['new'] ?? '';
+        if ($newPass !== '') {
+            $newHash = $this->savePassword($newPass);
+            $this->config['password'] = $newHash;
+            session_regenerate_id(true);
+            $_SESSION['l'] = $newHash;
+            return $this->t('password_changed');
+        }
+
+        session_regenerate_id(true);
+        $_SESSION['l'] = $this->config['password'];
+        header('Location: ./');
+        exit;
+    }
+
+    public function savePassword(string $password): string
+    {
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $result = $this->storage->writeConfigValue('password', $hash);
+        if (!$result) {
+            echo $this->t('permission_error');
+            exit;
+        }
+        return $hash;
+    }
+
+    public function editTags(): void
+    {
+        if (!$this->isLoggedIn() && !isset($_REQUEST['login'])) {
+            return;
+        }
+        $token = csrf_token();
+        $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+        echo "\t<script>var csrfToken={$safeToken};</script>\n";
+        foreach ($this->hooks['admin-head'] ?? [] as $tag) {
+            echo "\t{$tag}\n";
+        }
+    }
+
+    public function content(string $id, string $content): void
+    {
+        if ($this->isLoggedIn()) {
+            $safeId = esc($id);
+            $safeTitle = esc($this->defaults['content']);
+            echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
+        } else {
+            echo $content;
+        }
+    }
+
+    public function menu(): void
+    {
+        $items = explode("<br />\n", $this->config['menu']);
+        echo '<ul>';
+        foreach ($items as $item) {
+            $item = trim($item);
+            if ($item === '') {
+                continue;
+            }
+            $slug = self::getSlug($item);
+            $safeItem = esc($item);
+            $safeSlug = esc($slug);
+            $active = ($this->config['page'] === $slug) ? ' id="active"' : '';
+            echo "<li{$active}><a href='{$safeSlug}'>{$safeItem}</a></li>";
+        }
+        echo '</ul>';
+    }
+
+    public function settings(): void
+    {
+        $settingsLabel = esc($this->t('settings'));
+        $themeLabel = esc($this->t('settings_theme'));
+        $menuLabel = esc($this->t('settings_menu'));
+        $menuHint = $this->t('settings_menu_hint');
+        $langLabel = esc($this->t('settings_language'));
+
+        echo "<div class='settings'>
+        <h3 class='toggle'>↕ {$settingsLabel} ↕</h3>
+        <div class='hide'>
+        <div class='change border'><b>{$themeLabel}</b>&nbsp;<span id='themeSelect'><select name='themeSelect' onchange='fieldSave(\"themeSelect\",this.value);'>";
+
+        $themesDir = __DIR__ . '/themes';
+        if (is_dir($themesDir)) {
+            $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
+            if (is_array($dirs)) {
+                foreach ($dirs as $dir) {
+                    $val = basename($dir);
+                    $safeVal = esc($val);
+                    $selected = ($val === $this->config['themeSelect']) ? ' selected' : '';
+                    echo "<option value=\"{$safeVal}\"{$selected}>{$safeVal}</option>\n";
+                }
+            }
+        }
+
+        echo "</select></span></div>";
+
+        echo "<div class='change border'><b>{$langLabel}</b>&nbsp;<select onchange='fieldSave(\"language\",this.value);'>";
+        foreach (['ja' => '日本語', 'en' => 'English'] as $code => $label) {
+            $selected = ($code === $this->language) ? ' selected' : '';
+            echo "<option value=\"{$code}\"{$selected}>{$label}</option>";
+        }
+        echo "</select></div>";
+
+        echo "<div class='change border'><b>{$menuLabel} <small>({$menuHint})</small></b><span id='menu' title='Home' class='editText'>{$this->config['menu']}</span></div>";
+
+        foreach (['title', 'description', 'keywords', 'copyright'] as $key) {
+            $safeDefault = esc((string) ($this->defaults[$key] ?? ''));
+            $safeValue = esc($this->config[$key]);
+            echo "<div class='change border'><span title='{$safeDefault}' id='{$key}' class='editText'>{$safeValue}</span></div>";
+        }
+        echo '</div></div>';
+    }
+}
+
+// --- Admin edit handler ---
+
+function handleEdit(): void
+{
+    $fieldname = $_REQUEST['fieldname'] ?? null;
+    $content = $_REQUEST['content'] ?? null;
+
+    if ($fieldname === null || $content === null) {
+        return;
+    }
+
+    $fieldname = basename($fieldname);
+    if (!FileStorage::validateSlug($fieldname)) {
+        header('HTTP/1.1 400 Bad Request');
+        exit;
+    }
+
+    $content = trim($content);
+
+    if (!isset($_SESSION['l'])) {
+        header('HTTP/1.1 401 Unauthorized');
+        exit;
+    }
+
+    csrf_verify();
+
+    $storage = new FileStorage('files');
+
+    if ($storage->isConfigKey($fieldname)) {
+        $result = $storage->writeConfigValue($fieldname, $content);
+    } else {
+        $result = $storage->writePage($fieldname, $content);
+    }
+
+    if (!$result) {
+        header('HTTP/1.1 500 Internal Server Error');
+        exit;
+    }
+
+    echo $content;
+    exit;
+}
