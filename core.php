@@ -473,7 +473,7 @@ function csrf_token(): string
 
 function csrf_verify(): void
 {
-    $token = $_POST['csrf'] ?? '';
+    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
         header('HTTP/1.1 403 Forbidden');
