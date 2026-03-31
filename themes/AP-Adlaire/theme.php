@@ -17,6 +17,7 @@ $host = $app->host;
 	<script src="js/dist/markdown.js"></script>
 	<script src="js/dist/i18n.js"></script>
 	<script src="js/dist/api.js"></script>
+	<script src="js/dist/editor.js"></script>
 	<script src="js/dist/editInplace.js"></script>
 <?php $app->editTags(); ?>
 </head>
