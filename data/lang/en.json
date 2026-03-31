@@ -23,5 +23,8 @@
     "new_page_visitor": "Sorry, but <b>:page</b> doesn't exist. :(",
     "click_to_edit": "Click to edit!",
     "credit": "Powered by <a href=\"\">Adlaire Platform</a>",
-    "permission_error": "Set 755 permission to the files folder."
+    "permission_error": "Set 755 permission to the files folder.",
+    "settings_format": "Page format",
+    "format_html": "HTML",
+    "format_markdown": "Markdown"
 }

@@ -24,6 +24,7 @@ final class FileStorage
     private string $configLock;
     private string $pagesDir;
     private string $backupsDir;
+    private string $revisionsDir;
 
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
@@ -42,11 +43,15 @@ final class FileStorage
         $this->configLock = $basePath . '/.config.lock';
         $this->pagesDir = $basePath . '/pages';
         $this->backupsDir = $basePath . '/backups';
+        $this->revisionsDir = $basePath . '/revisions';
     }
+
+    /** Maximum number of page revisions to retain per page */
+    private const MAX_REVISIONS = 10;
 
     public function ensureDirectories(): void
     {
-        foreach ([$this->basePath, $this->pagesDir, $this->backupsDir] as $dir) {
+        foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
@@ -230,10 +235,14 @@ final class FileStorage
         return is_array($data) && isset($data['content']) ? $data : false;
     }
 
-    public function writePage(string $slug, string $content): bool
+    public function writePage(string $slug, string $content, string $format = 'html'): bool
     {
         if (!self::validateSlug($slug)) {
             return false;
+        }
+
+        if (!in_array($format, ['html', 'markdown'], true)) {
+            $format = 'html';
         }
 
         $path = $this->pagesDir . '/' . $slug . '.json';
@@ -241,9 +250,19 @@ final class FileStorage
 
         $existing = $this->readPageData($slug);
         $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
+        // Preserve format if not explicitly changed
+        if ($format === 'html' && $existing !== false && isset($existing['format'])) {
+            $format = $existing['format'];
+        }
+
+        // Save revision before overwriting
+        if ($existing !== false) {
+            $this->saveRevision($slug, $existing);
+        }
 
         $data = [
             'content'    => $content,
+            'format'     => $format,
             'created_at' => $createdAt,
             'updated_at' => $now,
         ];
@@ -347,6 +366,95 @@ final class FileStorage
         foreach ($toRemove as $old) {
             unlink($old);
         }
+    }
+    // --- Revision management ---
+
+    /**
+     * Save a revision of a page before overwriting.
+     * @param array<string, mixed> $pageData
+     */
+    private function saveRevision(string $slug, array $pageData): void
+    {
+        $dir = $this->revisionsDir . '/' . $slug;
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $revFile = $dir . '/' . date('Ymd_His') . '.json';
+        $this->atomicWrite($revFile, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        // Rotate old revisions
+        $files = glob($dir . '/*.json');
+        if (is_array($files) && count($files) > self::MAX_REVISIONS) {
+            sort($files);
+            $toRemove = array_slice($files, 0, count($files) - self::MAX_REVISIONS);
+            foreach ($toRemove as $old) {
+                unlink($old);
+            }
+        }
+    }
+
+    /**
+     * List revisions for a page, newest first.
+     * @return array<int, array{timestamp: string, file: string}>
+     */
+    public function listRevisions(string $slug): array
+    {
+        if (!self::validateSlug($slug)) {
+            return [];
+        }
+
+        $dir = $this->revisionsDir . '/' . $slug;
+        if (!is_dir($dir)) {
+            return [];
+        }
+
+        $files = glob($dir . '/*.json');
+        if (!is_array($files)) {
+            return [];
+        }
+
+        rsort($files);
+        $revisions = [];
+        foreach ($files as $file) {
+            $name = basename($file, '.json');
+            $revisions[] = [
+                'timestamp' => $name,
+                'file'      => $file,
+            ];
+        }
+        return $revisions;
+    }
+
+    /**
+     * Restore a page from a specific revision.
+     */
+    public function restoreRevision(string $slug, string $timestamp): bool
+    {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+        if (!preg_match('/^\d{8}_\d{6}$/', $timestamp)) {
+            return false;
+        }
+
+        $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
+        if (!file_exists($revFile)) {
+            return false;
+        }
+
+        $json = $this->lockedRead($revFile);
+        if ($json === false) {
+            return false;
+        }
+
+        $data = json_decode($json, true);
+        if (!is_array($data) || !isset($data['content'])) {
+            return false;
+        }
+
+        $format = $data['format'] ?? 'html';
+        return $this->writePage($slug, $data['content'], $format);
     }
 }
 

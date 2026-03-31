@@ -1,5 +1,12 @@
 # RELEASE-NOTES - リリースノート
 
+### Ver.1.3-14 (2026-03-31)
+
+* Markdown ページサポート（format フィールド + TS パーサー）
+* ページバージョン履歴（最大10世代、リビジョン復元対応）
+* REST API エンドポイント（ページ CRUD + リビジョン管理）
+* TypeScript API クライアント（ts/api.ts）
+
 ### Ver.1.2-13 (2026-03-31)
 
 * index.php を core.php / admin.php / index.php の3ファイルに分割

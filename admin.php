@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 2;
-    public const VERSION_BUILD = 13;
-    public const VERSION = 'Ver.1.2-13';
+    public const VERSION_MINOR = 3;
+    public const VERSION_BUILD = 14;
+    public const VERSION = 'Ver.1.3-14';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -473,4 +473,163 @@ function handleEdit(): void
 
     echo $content;
     exit;
+}
+
+// --- REST API handler ---
+
+function handleApi(): void
+{
+    $endpoint = $_REQUEST['api'] ?? null;
+    if ($endpoint === null) {
+        return;
+    }
+
+    header('Content-Type: application/json; charset=UTF-8');
+
+    // Authentication required for all API calls
+    if (!isset($_SESSION['l'])) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+
+    $storage = new FileStorage('files');
+    $method = $_SERVER['REQUEST_METHOD'];
+
+    match ($endpoint) {
+        'pages'     => handleApiPages($storage, $method),
+        'revisions' => handleApiRevisions($storage, $method),
+        default     => apiError(404, 'Unknown endpoint'),
+    };
+    exit;
+}
+
+function handleApiPages(FileStorage $storage, string $method): void
+{
+    $slug = $_REQUEST['slug'] ?? null;
+
+    match ($method) {
+        'GET' => $slug !== null
+            ? apiPageGet($storage, $slug)
+            : apiPageList($storage),
+        'POST'   => apiPageSave($storage),
+        'DELETE' => apiPageDelete($storage, $slug),
+        default  => apiError(405, 'Method not allowed'),
+    };
+}
+
+function apiPageList(FileStorage $storage): void
+{
+    $pages = $storage->listPages();
+    // Strip content from listing for efficiency
+    $summary = [];
+    foreach ($pages as $slug => $data) {
+        $summary[$slug] = [
+            'format'     => $data['format'] ?? 'html',
+            'created_at' => $data['created_at'],
+            'updated_at' => $data['updated_at'],
+        ];
+    }
+    echo json_encode(['pages' => $summary], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+function apiPageGet(FileStorage $storage, string $slug): void
+{
+    $data = $storage->readPageData($slug);
+    if ($data === false) {
+        apiError(404, 'Page not found');
+        return;
+    }
+    echo json_encode(['page' => $slug, 'data' => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+function apiPageSave(FileStorage $storage): void
+{
+    csrf_verify();
+
+    $slug = $_POST['slug'] ?? null;
+    $content = $_POST['content'] ?? null;
+    $format = $_POST['format'] ?? 'html';
+
+    if ($slug === null || $content === null) {
+        apiError(400, 'Missing slug or content');
+        return;
+    }
+
+    if (!FileStorage::validateSlug($slug)) {
+        apiError(400, 'Invalid slug');
+        return;
+    }
+
+    $result = $storage->writePage($slug, $content, $format);
+    if (!$result) {
+        apiError(500, 'Write failed');
+        return;
+    }
+
+    echo json_encode(['status' => 'ok', 'slug' => $slug]);
+}
+
+function apiPageDelete(FileStorage $storage, ?string $slug): void
+{
+    if ($slug === null || !FileStorage::validateSlug($slug)) {
+        apiError(400, 'Invalid slug');
+        return;
+    }
+
+    csrf_verify();
+
+    $result = $storage->deletePage($slug);
+    if (!$result) {
+        apiError(404, 'Page not found');
+        return;
+    }
+
+    echo json_encode(['status' => 'ok', 'deleted' => $slug]);
+}
+
+function handleApiRevisions(FileStorage $storage, string $method): void
+{
+    $slug = $_REQUEST['slug'] ?? null;
+    if ($slug === null || !FileStorage::validateSlug($slug)) {
+        apiError(400, 'Invalid slug');
+        return;
+    }
+
+    match ($method) {
+        'GET'  => apiRevisionList($storage, $slug),
+        'POST' => apiRevisionRestore($storage, $slug),
+        default => apiError(405, 'Method not allowed'),
+    };
+}
+
+function apiRevisionList(FileStorage $storage, string $slug): void
+{
+    $revisions = $storage->listRevisions($slug);
+    echo json_encode(['slug' => $slug, 'revisions' => $revisions], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+function apiRevisionRestore(FileStorage $storage, string $slug): void
+{
+    csrf_verify();
+
+    $timestamp = $_POST['timestamp'] ?? null;
+    if ($timestamp === null) {
+        apiError(400, 'Missing timestamp');
+        return;
+    }
+
+    $result = $storage->restoreRevision($slug, $timestamp);
+    if (!$result) {
+        apiError(404, 'Revision not found');
+        return;
+    }
+
+    echo json_encode(['status' => 'ok', 'restored' => $slug, 'timestamp' => $timestamp]);
+}
+
+function apiError(int $code, string $message): void
+{
+    http_response_code($code);
+    echo json_encode(['error' => $message]);
 }

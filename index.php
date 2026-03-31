@@ -24,6 +24,7 @@ require __DIR__ . '/admin.php';
 
 // --- Bootstrap ---
 
+handleApi();
 handleEdit();
 
 $app = App::getInstance();

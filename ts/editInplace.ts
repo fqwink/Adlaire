@@ -6,9 +6,6 @@
  * Expects: global `csrfToken` variable set by PHP.
  */
 
-declare function autosize(textarea: HTMLTextAreaElement): void;
-declare const csrfToken: string;
-
 let changing = false;
 
 function nl2br(s: string): string {
