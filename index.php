@@ -22,7 +22,7 @@ final class App
     /** @var array<string, mixed> */
     public array $defaults = [];
 
-    /** @var array<string, array<string>> */
+    /** @var array<string, mixed> */
     public array $hooks = [];
 
     public readonly string $host;
@@ -49,13 +49,13 @@ final class App
     private function parseHost(): array
     {
         $rp = isset($_REQUEST['page'])
-            ? preg_replace('#/+#', '/', urldecode($_REQUEST['page']))
+            ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
             : '';
 
         $host = $_SERVER['HTTP_HOST'];
-        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI']));
+        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'])) ?? '';
 
-        $host = str_contains($uri, $rp)
+        $host = ($rp !== '' && str_contains($uri, $rp))
             ? $host . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
             : $host . '/' . $uri;
 
@@ -113,10 +113,8 @@ final class App
 
     private function loadConfig(): void
     {
-        $configDefaults = $this->config;
-
         foreach ($this->config as $key => $val) {
-            if ($key === 'content') {
+            if ($key === 'content' || $key === 'loggedin') {
                 continue;
             }
 
@@ -130,11 +128,12 @@ final class App
 
             match ($key) {
                 'password' => $this->handlePassword($fval, $val),
-                'loggedin' => $this->handleAuth(),
-                'page'     => $this->handlePage(),
                 default    => null,
             };
         }
+
+        $this->handleAuth();
+        $this->handlePage();
     }
 
     private function handlePassword(string|false $fval, string $val): void
@@ -159,6 +158,7 @@ final class App
         if (isset($_REQUEST['login'])) {
             if ($this->isLoggedIn()) {
                 header('Location: ./');
+                exit;
             }
 
             $msg = '';
@@ -271,7 +271,10 @@ final class App
 
         $newPass = $_POST['new'] ?? '';
         if ($newPass !== '') {
-            $this->savePassword($newPass);
+            $newHash = $this->savePassword($newPass);
+            $this->config['password'] = $newHash;
+            session_regenerate_id(true);
+            $_SESSION['l'] = $newHash;
             return 'password changed';
         }
 
