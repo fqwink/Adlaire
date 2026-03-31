@@ -4,7 +4,7 @@
  * Loads translation strings from JSON files and provides a t() helper.
  *
  * Supported languages: 'ja', 'en'
- * Translation files: lang/ja.json, lang/en.json
+ * Translation files: data/lang/ja.json, data/lang/en.json
  */
 const i18n = {
     lang: 'ja',
