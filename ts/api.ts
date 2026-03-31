@@ -67,13 +67,8 @@ const api = {
      * Delete a page.
      */
     async deletePage(slug: string): Promise<void> {
-        const body = new URLSearchParams();
-        body.append('csrf', csrfToken);
-
-        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`, {
+        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}&csrf=${encodeURIComponent(csrfToken)}`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
         });
         const json = await res.json();
         if (!res.ok) { throw new Error(json.error); }
