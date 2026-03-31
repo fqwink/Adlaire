@@ -396,8 +396,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 2;
-    public const VERSION_BUILD = 11;
-    public const VERSION = 'Ver.1.2-11';
+    public const VERSION_BUILD = 12;
+    public const VERSION = 'Ver.1.2-12';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -644,9 +644,12 @@ final class App
             $lang = 'ja';
         }
         $this->language = $lang;
-        $file = __DIR__ . '/lang/' . $lang . '.php';
+        $file = __DIR__ . '/lang/' . $lang . '.json';
         if (is_file($file)) {
-            $this->translations = require $file;
+            $json = file_get_contents($file);
+            if ($json !== false) {
+                $this->translations = json_decode($json, true) ?: [];
+            }
         }
     }
 
