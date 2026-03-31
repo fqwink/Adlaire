@@ -24,8 +24,10 @@ final class FileStorage
 {
     private string $basePath;
     private string $configFile;
+    private string $configLock;
     private string $pagesDir;
     private string $backupsDir;
+    private string $pageMetaFile;
 
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
@@ -33,12 +35,17 @@ final class FileStorage
         'subside', 'description', 'keywords', 'copyright',
     ];
 
+    /** Maximum number of config backup generations to retain */
+    private const MAX_BACKUPS = 5;
+
     public function __construct(string $basePath = 'files')
     {
         $this->basePath = $basePath;
         $this->configFile = $basePath . '/config.json';
+        $this->configLock = $basePath . '/.config.lock';
         $this->pagesDir = $basePath . '/pages';
         $this->backupsDir = $basePath . '/backups';
+        $this->pageMetaFile = $basePath . '/pages.meta.json';
     }
 
     public function ensureDirectories(): void
@@ -51,6 +58,17 @@ final class FileStorage
         if (!is_dir('plugins')) {
             mkdir('plugins', 0755, true);
         }
+    }
+
+    /**
+     * Validate a page slug. Returns true only for safe, non-traversal names.
+     */
+    public static function validateSlug(string $slug): bool
+    {
+        if ($slug === '' || $slug !== basename($slug)) {
+            return false;
+        }
+        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', $slug);
     }
 
     /**
@@ -77,6 +95,8 @@ final class FileStorage
 
         // Move page files to pages/ subdirectory
         $skipFiles = array_merge(self::CONFIG_KEYS, ['config.json']);
+        $now = date('c');
+        $meta = [];
         $files = glob($this->basePath . '/*');
         if (is_array($files)) {
             foreach ($files as $file) {
@@ -89,9 +109,18 @@ final class FileStorage
                 }
                 $dest = $this->pagesDir . '/' . $name;
                 if (!file_exists($dest)) {
+                    $mtime = date('c', filemtime($file) ?: time());
                     rename($file, $dest);
+                    $meta[$name] = [
+                        'created_at' => $mtime,
+                        'updated_at' => $mtime,
+                    ];
                 }
             }
+        }
+
+        if ($meta !== []) {
+            $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
 
         // Clean up legacy config files (pages already moved)
@@ -123,22 +152,50 @@ final class FileStorage
     }
 
     /**
-     * Write config values to config.json with backup and atomic write.
+     * Write config values to config.json with exclusive lock, backup, and atomic write.
+     * Uses a dedicated lock file to serialize the entire read-merge-write cycle,
+     * preventing lost updates from concurrent requests.
+     *
      * @param array<string, string> $config
      */
     public function writeConfig(array $config): bool
     {
-        // Merge with existing config
-        $existing = $this->readConfig();
-        $merged = array_merge($existing, $config);
-
-        // Backup existing config
-        if (file_exists($this->configFile)) {
-            copy($this->configFile, $this->backupsDir . '/config.json.bak');
+        $lockFp = fopen($this->configLock, 'c');
+        if ($lockFp === false) {
+            return false;
         }
 
-        $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        return $this->atomicWrite($this->configFile, $json);
+        if (!flock($lockFp, LOCK_EX)) {
+            fclose($lockFp);
+            return false;
+        }
+
+        try {
+            // Read existing under lock
+            $existing = [];
+            if (file_exists($this->configFile)) {
+                $fp = fopen($this->configFile, 'r');
+                if ($fp !== false) {
+                    $raw = stream_get_contents($fp);
+                    fclose($fp);
+                    $existing = json_decode($raw ?: '{}', true) ?: [];
+                }
+            }
+
+            $merged = array_merge($existing, $config);
+
+            // Rotate backups before overwriting
+            if (file_exists($this->configFile)) {
+                $this->rotateBackups();
+                copy($this->configFile, $this->backupsDir . '/config.' . date('Ymd_His') . '.json');
+            }
+
+            $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            return $this->atomicWrite($this->configFile, $json);
+        } finally {
+            flock($lockFp, LOCK_UN);
+            fclose($lockFp);
+        }
     }
 
     /**
@@ -154,6 +211,9 @@ final class FileStorage
      */
     public function readPage(string $slug): string|false
     {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
         $path = $this->pagesDir . '/' . $slug;
         if (!file_exists($path)) {
             return false;
@@ -162,12 +222,72 @@ final class FileStorage
     }
 
     /**
-     * Write a page content file with atomic write.
+     * Write a page content file with atomic write and metadata tracking.
      */
     public function writePage(string $slug, string $content): bool
     {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+
         $path = $this->pagesDir . '/' . $slug;
-        return $this->atomicWrite($path, $content);
+        $isNew = !file_exists($path);
+
+        if (!$this->atomicWrite($path, $content)) {
+            return false;
+        }
+
+        $this->updatePageMeta($slug, $isNew);
+        return true;
+    }
+
+    /**
+     * Delete a page with backup.
+     */
+    public function deletePage(string $slug): bool
+    {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+
+        $path = $this->pagesDir . '/' . $slug;
+        if (!file_exists($path)) {
+            return false;
+        }
+
+        // Backup before deletion
+        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '.bak';
+        copy($path, $backupPath);
+
+        unlink($path);
+        $this->removePageMeta($slug);
+        return true;
+    }
+
+    /**
+     * List all pages with optional metadata.
+     * @return array<string, array{created_at: string, updated_at: string}>
+     */
+    public function listPages(): array
+    {
+        $meta = $this->readPageMeta();
+        $files = glob($this->pagesDir . '/*');
+        $pages = [];
+
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                if (is_dir($file)) {
+                    continue;
+                }
+                $slug = basename($file);
+                $pages[$slug] = $meta[$slug] ?? [
+                    'created_at' => date('c', filemtime($file) ?: time()),
+                    'updated_at' => date('c', filemtime($file) ?: time()),
+                ];
+            }
+        }
+
+        return $pages;
     }
 
     /**
@@ -219,6 +339,58 @@ final class FileStorage
         flock($fp, LOCK_UN);
         fclose($fp);
         return $content;
+    }
+
+    /**
+     * Keep only the most recent MAX_BACKUPS config backup files.
+     */
+    private function rotateBackups(): void
+    {
+        $pattern = $this->backupsDir . '/config.*.json';
+        $files = glob($pattern);
+        if (!is_array($files) || count($files) < self::MAX_BACKUPS) {
+            return;
+        }
+        sort($files);
+        $toRemove = array_slice($files, 0, count($files) - self::MAX_BACKUPS + 1);
+        foreach ($toRemove as $old) {
+            unlink($old);
+        }
+    }
+
+    // --- Page metadata ---
+
+    private function readPageMeta(): array
+    {
+        if (!file_exists($this->pageMetaFile)) {
+            return [];
+        }
+        $json = $this->lockedRead($this->pageMetaFile);
+        if ($json === false) {
+            return [];
+        }
+        return json_decode($json, true) ?: [];
+    }
+
+    private function updatePageMeta(string $slug, bool $isNew): void
+    {
+        $meta = $this->readPageMeta();
+        $now = date('c');
+
+        if ($isNew || !isset($meta[$slug])) {
+            $meta[$slug] = ['created_at' => $now, 'updated_at' => $now];
+        } else {
+            $meta[$slug]['updated_at'] = $now;
+        }
+
+        $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function removePageMeta(string $slug): void
+    {
+        $meta = $this->readPageMeta();
+        unset($meta[$slug]);
+        $this->atomicWrite($this->pageMetaFile, json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 }
 
@@ -599,7 +771,7 @@ function handleEdit(): void
     }
 
     $fieldname = basename($fieldname);
-    if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $fieldname)) {
+    if (!FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
         exit;
     }
