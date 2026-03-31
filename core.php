@@ -114,6 +114,7 @@ final class FileStorage
                     $content = file_get_contents($file);
                     $pageData = [
                         'content'    => $content !== false ? $content : '',
+                        'format'     => 'html',
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
