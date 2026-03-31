@@ -26,6 +26,7 @@
 - コンパイル済み JavaScript は `js/dist/` に出力される。
 - `npm run build`（`tsc`）でコンパイルを実行する。
 - `js/dist/` 内のファイルを手動で編集してはならない。
+- TypeScript バージョン: **5.x**（メジャーバージョン5固定）。
 - ターゲット: ES2021。ライブラリ: ES2021, DOM, DOM.Iterable。
 
 ### 1.3 ビルド手順
@@ -56,7 +57,7 @@ Adlaire/
 ├── ts/                        # TypeScript ソース
 │   ├── globals.d.ts           #   グローバル型定義
 │   ├── autosize.ts            #   textarea自動リサイズ
-│   ├── editor.ts              #   [計画] ブロックエディタ
+│   ├── editor.ts              #   実装済 ブロックエディタ
 │   ├── editInplace.ts         #   インプレース編集・AJAX保存
 │   ├── i18n.ts                #   多言語化モジュール
 │   ├── markdown.ts            #   Markdown→HTMLコンバーター
@@ -191,11 +192,34 @@ Adlaire/
 | `autosize.ts` | textarea自動リサイズ |
 | `editInplace.ts` | インプレース編集・Markdown対応・AJAX保存 |
 | `i18n.ts` | 多言語化（JSON翻訳ファイル読み込み） |
-| `markdown.ts` | Markdown→HTML変換 |
+| `markdown.ts` | Markdown→HTML変換（拡張構文対応） |
 | `api.ts` | REST APIクライアント |
 | `globals.d.ts` | グローバル型定義 |
+| `editor.ts` | ブロックエディタ（Editor.js ライク） |
 
-### 6.2 editor.ts — ブロックエディタ仕様 [計画]
+### 6.2 markdown.ts — Markdown 対応構文
+
+| 構文 | 記法 | HTML出力 |
+|------|-----|---------|
+| 見出し | `# / ## / ###` | `<h1>` / `<h2>` / `<h3>` |
+| 太字 | `**text**` | `<strong>` |
+| 斜体 | `*text*` | `<em>` |
+| 太字斜体 | `***text***` | `<strong><em>` |
+| インラインコード | `` `code` `` | `<code>` |
+| コードブロック（言語指定） | ` ```lang ... ``` ` | `<pre><code class="language-xxx">` |
+| リンク | `[text](url)` | `<a href>` |
+| 画像 | `![alt](url)` | `<img src alt>` |
+| 非順序リスト | `- item` | `<ul><li>` |
+| 順序リスト | `1. item` | `<ol><li>` |
+| タスクリスト | `- [x]` / `- [ ]` | `<li><input type="checkbox">` |
+| テーブル | `\| h \| h \|` + `\|---\|` | `<table><thead><tbody>` |
+| 引用 | `> text` | `<blockquote>` |
+| 水平線 | `---` | `<hr>` |
+| 脚注定義 | `[^id]: text` | `<section class="footnotes">` |
+| 脚注参照 | `[^id]` | `<sup><a href="#fn-id">` |
+| 段落 | 通常テキスト | `<p>` |
+
+### 6.3 editor.ts — ブロックエディタ仕様
 
 Editor.js ライクなブロックエディタを TypeScript で独自実装する。
 外部ライブラリ（Editor.js 本体）は使用しない。
