@@ -1,5 +1,12 @@
 # RELEASE-NOTES - リリースノート
 
+### Ver.1.1-10 (2026-03-31)
+
+* jQuery完全廃止、TypeScript全面採用
+* autosize, editInplace, fieldSave を vanilla TypeScript で再実装
+* fetch API によるAJAX通信、DOM API によるUI操作
+* TypeScriptコンパイル→JavaScript生成の開発フロー確立
+
 ### Ver.1.0-9 (2026-03-31)
 
 * バージョン規則 `Ver.{Major}.{Minor}-{Build}` を導入
