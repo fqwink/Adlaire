@@ -583,15 +583,18 @@ final class App
     private function loadPlugins(): void
     {
         $cwd = getcwd();
-        if (is_dir('./plugins/') && chdir('./plugins/')) {
-            $dirs = glob('*', GLOB_ONLYDIR);
+        if ($cwd === false) {
+            $cwd = __DIR__;
+        }
+        $pluginsDir = $cwd . '/plugins';
+        if (is_dir($pluginsDir)) {
+            $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
                 foreach ($dirs as $dir) {
-                    require_once $cwd . '/plugins/' . $dir . '/index.php';
+                    require_once $dir . '/index.php';
                 }
             }
         }
-        chdir($cwd);
 
         $hookFile = $this->hooks['admin-richText'];
         $this->hooks['admin-head'][] = "\n\t<script type='text/javascript' src='./js/editInplace.php?hook={$hookFile}'></script>";
