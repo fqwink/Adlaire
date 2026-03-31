@@ -23,5 +23,8 @@
     "new_page_visitor": "<b>:page</b> は存在しません。",
     "click_to_edit": "クリックして編集！",
     "credit": "Powered by <a href=\"\">Adlaire Platform</a>",
-    "permission_error": "filesフォルダに755のパーミッションを設定してください。"
+    "permission_error": "filesフォルダに755のパーミッションを設定してください。",
+    "settings_format": "ページ形式",
+    "format_html": "HTML",
+    "format_markdown": "Markdown"
 }

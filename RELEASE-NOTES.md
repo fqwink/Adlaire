@@ -1,5 +1,18 @@
 # RELEASE-NOTES - リリースノート
 
+### Ver.1.3-14 (2026-03-31)
+
+* Markdown ページサポート（format フィールド + TS パーサー）
+* ページバージョン履歴（最大10世代、リビジョン復元対応）
+* REST API エンドポイント（ページ CRUD + リビジョン管理）
+* TypeScript API クライアント（ts/api.ts）
+
+### Ver.1.2-13 (2026-03-31)
+
+* index.php を core.php / admin.php / index.php の3ファイルに分割
+* i18n を TypeScript + JSON で再実装、data/lang/ に移動
+* バグ修正7件（cwd破損、二重保存、XSS対策強化 等）
+
 ### Ver.1.2-11 (2026-03-31)
 
 * 多言語化（日本語・英語）を実装

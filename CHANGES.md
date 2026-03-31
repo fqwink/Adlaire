@@ -1,5 +1,58 @@
 # CHANGES - 変更履歴
 
+## Ver.1.3-14 (2026-03-31)
+
+### 新機能3件追加
+
+#### Markdown ページサポート
+* ページコンテンツを Markdown 形式で記述可能に
+* ページ JSON に `format` フィールド（`html` / `markdown`）を追加
+* ts/markdown.ts: 軽量 Markdown→HTML コンバーター実装
+* 見出し、太字、斜体、コード、リンク、リスト、引用、水平線、段落に対応
+
+#### ページバージョン履歴（リビジョン管理）
+* ページ保存時に旧バージョンを files/revisions/{slug}/ に自動保存
+* 最大10世代のリビジョンローテーション
+* listRevisions(): リビジョン一覧取得（新しい順）
+* restoreRevision(): 指定タイムスタンプのリビジョンに復元
+
+#### REST API エンドポイント
+* GET index.php?api=pages: ページ一覧（メタデータのみ）
+* GET index.php?api=pages&slug={slug}: ページ詳細取得
+* POST index.php?api=pages: ページ作成・更新（slug, content, format, csrf）
+* DELETE index.php?api=pages&slug={slug}: ページ削除（csrf）
+* GET index.php?api=revisions&slug={slug}: リビジョン一覧
+* POST index.php?api=revisions&slug={slug}: リビジョン復元（timestamp, csrf）
+* ts/api.ts: TypeScript API クライアント（型付きメソッド）
+* セッション認証 + CSRF保護付き
+
+### その他
+* ts/globals.d.ts: グローバル型定義ファイル追加
+* 翻訳ファイルに Markdown 関連キーを追加
+
+## Ver.1.2-13 (2026-03-31)
+
+### 3ファイル分割
+* index.php を core.php（コア）、admin.php（管理ツール）、index.php（エントリーポイント）に分割
+* core.php: FileStorage クラス、ヘルパー関数（esc, csrf_token, csrf_verify）
+* admin.php: App クラス、handleEdit 関数
+* index.php: セッション初期化、require、ブートストラップのみ
+* .htaccess で core.php, admin.php, data/ への直接アクセスをブロック
+
+### i18n TypeScript 再実装・JSONデータ移動
+* 翻訳ファイルを PHP アレイから JSON に変換
+* ts/i18n.ts TypeScript モジュール追加（fetch + t() ヘルパー）
+* 翻訳ファイルを data/lang/ に移動
+
+### バグ修正（7件）
+* settings() の chdir による cwd 破損を修正
+* handleEdit() のエラーメッセージを HTTP 500 に修正
+* plainTextEdit の blur 二重発火を防止
+* i18n.ts のコメント旧パス参照を修正
+* 空文字パスワードハッシュを未初期化として処理
+* メニュー項目の空白・空エントリをスキップ
+* CSRF トークンを json_encode でエスケープ
+
 ## Ver.1.2-11 (2026-03-31)
 
 ### 多言語化（i18n）・レガシーコード削除
