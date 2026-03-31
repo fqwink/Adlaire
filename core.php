@@ -396,7 +396,7 @@ final class FileStorage
 
     /**
      * List revisions for a page, newest first.
-     * @return array<int, array{timestamp: string, file: string}>
+     * @return array<int, array{timestamp: string}>
      */
     public function listRevisions(string $slug): array
     {
@@ -417,10 +417,8 @@ final class FileStorage
         rsort($files);
         $revisions = [];
         foreach ($files as $file) {
-            $name = basename($file, '.json');
             $revisions[] = [
-                'timestamp' => $name,
-                'file'      => $file,
+                'timestamp' => basename($file, '.json'),
             ];
         }
         return $revisions;
