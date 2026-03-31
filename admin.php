@@ -477,7 +477,10 @@ function handleEdit(): void
     if ($storage->isConfigKey($fieldname)) {
         $result = $storage->writeConfigValue($fieldname, $content);
     } else {
-        $result = $storage->writePage($fieldname, $content);
+        // Preserve existing page format when editing inline
+        $existing = $storage->readPageData($fieldname);
+        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'html';
+        $result = $storage->writePage($fieldname, $content, $format);
     }
 
     if (!$result) {

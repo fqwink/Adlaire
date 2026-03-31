@@ -250,10 +250,6 @@ final class FileStorage
 
         $existing = $this->readPageData($slug);
         $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
-        // Preserve format if not explicitly changed
-        if ($format === 'html' && $existing !== false && isset($existing['format'])) {
-            $format = $existing['format'];
-        }
 
         // Save revision before overwriting
         if ($existing !== false) {
