@@ -1,6 +1,6 @@
 # Adlaire Platform - 実装機能等一覧
 
-**バージョン**: Ver.1.2-11
+**バージョン**: Ver.1.2-13
 **最終更新**: 2026-03-31
 
 ---
@@ -9,10 +9,13 @@
 
 ```
 Adlaire/
-├── index.php                  # アプリケーション本体（PHP 8.3+）
+├── index.php                  # エントリーポイント（セッション初期化・ブートストラップ）
+├── core.php                   # コア（FileStorage クラス・ヘルパー関数）
+├── admin.php                  # 管理ツール（App クラス・handleEdit 関数）
 ├── .htaccess                  # Apache URL書き換え・アクセス制御
 ├── ts/                        # TypeScript ソース
 │   ├── autosize.ts            #   textarea自動リサイズ
+│   ├── i18n.ts                #   多言語化モジュール
 │   └── editInplace.ts         #   インプレース編集・AJAX保存
 ├── js/
 │   └── dist/                  # コンパイル済み JavaScript（自動生成）
@@ -53,7 +56,7 @@ Adlaire/
 
 ## 2. PHP クラス・関数一覧
 
-### 2.1 FileStorage クラス (`index.php:28-392`)
+### 2.1 FileStorage クラス (`core.php`)
 
 フラットファイルデータ管理レイヤー。
 
@@ -82,7 +85,7 @@ Adlaire/
 
 ---
 
-### 2.2 App クラス (`index.php:394-738`)
+### 2.2 App クラス (`admin.php`)
 
 アプリケーションコア。シングルトンパターン。
 
@@ -124,7 +127,7 @@ Adlaire/
 
 ---
 
-### 2.3 グローバル関数 (`index.php:740-804`)
+### 2.3 グローバル関数 (`core.php`, `admin.php`)
 
 | 関数 | 説明 |
 |------|------|
