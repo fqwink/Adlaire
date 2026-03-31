@@ -1,5 +1,17 @@
 # CHANGES - 変更履歴
 
+## Ver.1.1-10 (2026-03-31)
+
+### jQuery廃止・TypeScript採用
+* jQuery依存を完全廃止、vanilla JavaScriptに移行
+* TypeScriptを全面採用、コンパイル済みJSのみを配信
+* autosize: jQuery プラグインを vanilla TS で書き直し（ts/autosize.ts）
+* editInplace: jQuery ベースのインプレース編集を vanilla TS で書き直し（ts/editInplace.ts）
+* fieldSave: $.post を fetch API に置換
+* テーマテンプレートからjQuery CDN読み込みを削除
+* tsconfig.json / package.json によるビルド環境整備
+* コンパイル出力: js/dist/autosize.js, js/dist/editInplace.js
+
 ## Ver.1.0-9 (2026-03-31)
 
 * バージョン規則 `Ver.{Major}.{Minor}-{Build}` を導入

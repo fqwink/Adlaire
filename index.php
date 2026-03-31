@@ -394,9 +394,9 @@ final class FileStorage
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 0;
-    public const VERSION_BUILD = 9;
-    public const VERSION = 'Ver.1.0-9';
+    public const VERSION_MINOR = 1;
+    public const VERSION_BUILD = 10;
+    public const VERSION = 'Ver.1.1-10';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -486,7 +486,6 @@ final class App
         ];
 
         $this->credit = "Powered by <a href=''>Adlaire Platform</a>";
-        $this->hooks['admin-richText'] = 'rte.php';
     }
 
     private function loadConfig(): void
@@ -605,9 +604,6 @@ final class App
                 }
             }
         }
-
-        $hookFile = $this->hooks['admin-richText'];
-        $this->hooks['admin-head'][] = "\n\t<script type='text/javascript' src='./js/editInplace.php?hook={$hookFile}'></script>";
     }
 
     public function isLoggedIn(): bool
