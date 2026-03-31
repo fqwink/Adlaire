@@ -1,42 +1,80 @@
-#AdlairePlatforms（略：AP , 翻訳：アドレイル・プラットホーム）
+# Adlaire Platform（略：AP , 翻訳：アドレイル・プラットホーム）
 
-APは、デザイン性に優れたデザインテンプレートエンジンを搭載したCMSフレームワークです。又、各機能を小さなモジュール単位として設計する事で、完成したシステムにモジュールを追加する事で、必要に応じて計画的にシステム拡張を行う事が可能になります。
+**現在のバージョン: Ver.2.0-9**
 
-APは、以下のプログラムを提供（LICENSEに基づく。）しております。提供プログラムは、予告なく変更・LICENSE変更・提供終了等を行う場合があります。予めご了承下さい。
-- Core modules（略：CM , 翻訳：コアモジュール） - 未実装
-- SubCore modules（略：SCM , 翻訳：サブコアモジュール） - 未実装
-- Adlaire account authentication system（略：A3S , 翻訳：アドレイルアカウント認証システム） - 未実装
+APは、デザイン性に優れたデザインテンプレートエンジンを搭載した、フラットファイルベースのCMSフレームワークです。データベース不要で、シンプルなWEBサイトを素早く構築できます。
 
-上記されたプログラムの詳細は、後日改めて、[docs]()にて、アナウンスしたいと思います。
+各機能を小さなモジュール単位として設計する事で、完成したシステムにモジュールを追加し、必要に応じて計画的にシステム拡張を行う事が可能です。
 
-APは、現在、デザインテンプレートエンジンのみ実装しています。尚、フラットファイルベース仕様の為、WEBサイト構築は可能です。
+## 主な機能
 
-#Adlaire Developer Connection（略：ADC , 翻訳：アドレイル・デベロッパー・コネクション）
+- **フラットファイルCMS** - データベース不要、JSONベースのデータ管理
+- **インプレース編集** - ブラウザ上でコンテンツを直接クリック＆編集
+- **テーマシステム** - 複数テーマの切り替えに対応
+- **プラグインシステム** - モジュール追加による機能拡張
+- **パスワード認証** - bcryptハッシュによるセキュアな管理者認証
+- **CSRF保護** - トークンベースのCSRF対策
 
-詳細については、未定とさせて頂きます。
+## データ管理
 
-#Demo
+APはフラットファイルシステムにより、すべてのデータをファイルベースで管理します。
 
-[Demo-AP](http://adlaire.org/Demo-AP/)
+```
+files/
+├── config.json          # サイト設定（JSON統合ファイル）
+├── pages/               # ページコンテンツ（JSON形式）
+│   ├── home.json        #   { content, created_at, updated_at }
+│   └── example.json
+└── backups/             # 自動バックアップ（最大9世代）
+    └── config.{timestamp}.json
+```
 
-#AP開発共有サイト
+### データ管理の特徴
 
-AP開発共有サイトは、開発元であるIEAS Group & AIZMの関係者且つ、APのプロジェクトマネージャー向けです。
-[AP開発共有サイト](https://sites.google.com/site/adlaireplatform/)
+- **原子的書き込み** - 一時ファイル→rename()による安全な書き込み
+- **ファイルロック** - flock()による同時アクセス制御
+- **JSON統合設定** - サイト設定を1ファイルに集約
+- **ページメタデータ** - 各ページにcreated_at/updated_atを記録
+- **自動バックアップ** - タイムスタンプ付き最大9世代のローテーション
+- **自動マイグレーション** - 旧形式からの自動移行
 
-#Requirements
+## Requirements
 
-- PHP 5.3
-- jQuery
+- PHP 8.3+
+- jQuery 3.7+
+- Apache（mod_rewrite）
 
-#LICENSE
+## インストール
 
-Licensed under Adlaire License, see[LICENSE](https://github.com/win-k/AdlairePlatform/blob/master/Licenses/LICENSE_Ver.1.0)
+1. ファイルをWebサーバーにアップロード
+2. `files/` ディレクトリに書き込み権限(755)を設定
+3. ブラウザでアクセスし、Loginリンクからログイン（初期パスワード: `admin`）
+4. パスワードを速やかに変更してください
 
-#Copyright
+## バージョン規則
+
+`Ver.{Major}.{Minor}-{Build}` 形式を採用しています。
+
+| セグメント | 意味 | ルール |
+|-----------|------|-------|
+| **Major** | メジャーバージョン | 後方互換性のない変更時にインクリメント。Minor を `0` にリセット |
+| **Minor** | マイナーバージョン | 後方互換性のある機能追加・改善時にインクリメント |
+| **Build** | ビルド/リビジョン | 累積番号。バグ修正・軽微な変更を含むすべてのリリースで単調増加。**リセット禁止** |
+
+### 例
+
+```
+Ver.2.0-8  → バグ修正       → Ver.2.0-9
+Ver.2.0-9  → 機能追加       → Ver.2.1-10
+Ver.2.1-10 → 破壊的変更     → Ver.3.0-11
+```
+
+> Build 番号はプロジェクト全体のリリース累積回数を表し、Major/Minor が変わっても継続して増加します。
+
+## LICENSE
+
+Licensed under Adlaire License, see [LICENSE](Licenses/LICENSE_Ver.1.0)
+
+## Copyright
 
 Copyright (c) 2014 - 2015 IEAS Group & AIZM All Rights Reserved.
-
-
-
-
