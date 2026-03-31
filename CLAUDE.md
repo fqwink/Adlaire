@@ -13,6 +13,7 @@
 ## JavaScript 開発規約
 
 - **TypeScript を全面的に採用する**。JavaScript の直接記述は禁止。
+- **TypeScript バージョンは 5 系に固定**（`~5.8`）。メジャーバージョン 6 以降への更新は別途検討。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 - TypeScript ソースは `ts/` ディレクトリに配置する。
 - コンパイル済み JavaScript は `js/dist/` に出力される。
