@@ -798,6 +798,12 @@ handleEdit();
 
 $app = App::getInstance();
 
-require 'themes/' . $app->config['themeSelect'] . '/theme.php';
+$theme = basename($app->config['themeSelect']);
+$themePath = 'themes/' . $theme . '/theme.php';
+if (!is_file($themePath)) {
+    $theme = 'AP-Default';
+    $themePath = 'themes/' . $theme . '/theme.php';
+}
+require $themePath;
 
 ob_end_flush();
