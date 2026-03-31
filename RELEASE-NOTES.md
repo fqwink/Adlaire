@@ -1,9 +1,15 @@
-#RELEASE-NOTES - リリースノート
+# RELEASE-NOTES - リリースノート
 
-###AdlairePlatform Ver.β (2014-10-10)
+### Adlaire Platform (2026-03-31)
 
-    * Initial release 初期リリース
+* FileStorageクラスによるフラットファイルデータ管理レイヤーを導入
+* ページデータをJSON形式で保存（コンテンツ＋メタデータ統合）
+* サイト設定をconfig.jsonに統合
+* 原子的書き込み・ファイルロック・バックアップローテーション（最大9世代）を実装
+* ページ一覧・削除・スラッグ検証機能を追加
+* 旧形式からの自動マイグレーション対応
+* PHP 8.3+対応、セキュリティ強化
 
+### AdlairePlatform Ver.β (2014-10-10)
 
-
-
+* Initial release 初期リリース

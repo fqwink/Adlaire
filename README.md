@@ -1,42 +1,58 @@
-#AdlairePlatforms（略：AP , 翻訳：アドレイル・プラットホーム）
+# Adlaire Platform（略：AP , 翻訳：アドレイル・プラットホーム）
 
-APは、デザイン性に優れたデザインテンプレートエンジンを搭載したCMSフレームワークです。又、各機能を小さなモジュール単位として設計する事で、完成したシステムにモジュールを追加する事で、必要に応じて計画的にシステム拡張を行う事が可能になります。
+APは、デザイン性に優れたデザインテンプレートエンジンを搭載した、フラットファイルベースのCMSフレームワークです。データベース不要で、シンプルなWEBサイトを素早く構築できます。
 
-APは、以下のプログラムを提供（LICENSEに基づく。）しております。提供プログラムは、予告なく変更・LICENSE変更・提供終了等を行う場合があります。予めご了承下さい。
-- Core modules（略：CM , 翻訳：コアモジュール） - 未実装
-- SubCore modules（略：SCM , 翻訳：サブコアモジュール） - 未実装
-- Adlaire account authentication system（略：A3S , 翻訳：アドレイルアカウント認証システム） - 未実装
+各機能を小さなモジュール単位として設計する事で、完成したシステムにモジュールを追加し、必要に応じて計画的にシステム拡張を行う事が可能です。
 
-上記されたプログラムの詳細は、後日改めて、[docs]()にて、アナウンスしたいと思います。
+## 主な機能
 
-APは、現在、デザインテンプレートエンジンのみ実装しています。尚、フラットファイルベース仕様の為、WEBサイト構築は可能です。
+- **フラットファイルCMS** - データベース不要、JSONベースのデータ管理
+- **インプレース編集** - ブラウザ上でコンテンツを直接クリック＆編集
+- **テーマシステム** - 複数テーマの切り替えに対応
+- **プラグインシステム** - モジュール追加による機能拡張
+- **パスワード認証** - bcryptハッシュによるセキュアな管理者認証
+- **CSRF保護** - トークンベースのCSRF対策
 
-#Adlaire Developer Connection（略：ADC , 翻訳：アドレイル・デベロッパー・コネクション）
+## データ管理
 
-詳細については、未定とさせて頂きます。
+APはフラットファイルシステムにより、すべてのデータをファイルベースで管理します。
 
-#Demo
+```
+files/
+├── config.json          # サイト設定（JSON統合ファイル）
+├── pages/               # ページコンテンツ（JSON形式）
+│   ├── home.json        #   { content, created_at, updated_at }
+│   └── example.json
+└── backups/             # 自動バックアップ（最大9世代）
+    └── config.{timestamp}.json
+```
 
-[Demo-AP](http://adlaire.org/Demo-AP/)
+### データ管理の特徴
 
-#AP開発共有サイト
+- **原子的書き込み** - 一時ファイル→rename()による安全な書き込み
+- **ファイルロック** - flock()による同時アクセス制御
+- **JSON統合設定** - サイト設定を1ファイルに集約
+- **ページメタデータ** - 各ページにcreated_at/updated_atを記録
+- **自動バックアップ** - タイムスタンプ付き最大9世代のローテーション
+- **自動マイグレーション** - 旧形式からの自動移行
 
-AP開発共有サイトは、開発元であるIEAS Group & AIZMの関係者且つ、APのプロジェクトマネージャー向けです。
-[AP開発共有サイト](https://sites.google.com/site/adlaireplatform/)
+## Requirements
 
-#Requirements
+- PHP 8.3+
+- jQuery 3.7+
+- Apache（mod_rewrite）
 
-- PHP 5.3
-- jQuery
+## インストール
 
-#LICENSE
+1. ファイルをWebサーバーにアップロード
+2. `files/` ディレクトリに書き込み権限(755)を設定
+3. ブラウザでアクセスし、Loginリンクからログイン（初期パスワード: `admin`）
+4. パスワードを速やかに変更してください
 
-Licensed under Adlaire License, see[LICENSE](https://github.com/win-k/AdlairePlatform/blob/master/Licenses/LICENSE_Ver.1.0)
+## LICENSE
 
-#Copyright
+Licensed under Adlaire License, see [LICENSE](Licenses/LICENSE_Ver.1.0)
+
+## Copyright
 
 Copyright (c) 2014 - 2015 IEAS Group & AIZM All Rights Reserved.
-
-
-
-
