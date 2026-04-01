@@ -115,6 +115,7 @@ final class FileStorage
                     $pageData = [
                         'content'    => $content !== false ? $content : '',
                         'format'     => 'html',
+                        'status'     => 'published',
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
