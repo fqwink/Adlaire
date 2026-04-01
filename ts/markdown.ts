@@ -56,7 +56,7 @@ function markdownToHtml(md: string): string {
 
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
-        const rows = tableBlock.trim().split('\n');
+        const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
         if (rows.length < 2) return tableBlock;
 
         const parseRow = (row: string): string[] =>
