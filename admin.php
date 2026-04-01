@@ -781,10 +781,13 @@ function handleApiSitemap(FileStorage $storage): void
 
 function handleApiExport(FileStorage $storage): void
 {
+    $config = $storage->readConfig();
+    unset($config['password']);
+
     $export = [
         'version'   => App::VERSION,
         'exported_at' => date('c'),
-        'config'    => $storage->readConfig(),
+        'config'    => $config,
         'pages'     => $storage->listPages(),
     ];
 
