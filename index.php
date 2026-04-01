@@ -16,7 +16,6 @@ declare(strict_types=1);
 
 ob_start();
 
-// Ensure output buffer is flushed even on fatal errors
 register_shutdown_function(function (): void {
     if (ob_get_level() > 0) {
         ob_end_flush();
@@ -37,6 +36,18 @@ handleEdit();
 
 $app = App::getInstance();
 
+// --- Admin UI routing ---
+if (isset($_REQUEST['admin'])) {
+    if (!$app->isLoggedIn()) {
+        header('Location: ?login');
+        exit;
+    }
+    require __DIR__ . '/admin-ui.php';
+    ob_end_flush();
+    exit;
+}
+
+// --- Public page rendering ---
 $theme = basename($app->config['themeSelect']);
 $themePath = 'themes/' . $theme . '/theme.php';
 if (!is_file($themePath)) {

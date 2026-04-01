@@ -13,10 +13,10 @@ declare(strict_types=1);
 
 final class App
 {
-    public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 5;
-    public const VERSION_BUILD = 24;
-    public const VERSION = 'Ver.1.5-24';
+    public const VERSION_MAJOR = 2;
+    public const VERSION_MINOR = 0;
+    public const VERSION_BUILD = 25;
+    public const VERSION = 'Ver.2.0-25';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -302,9 +302,10 @@ final class App
     public function getLoginStatus(): string
     {
         $host = $this->host;
-        return $this->isLoggedIn()
-            ? "<a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>"
-            : "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
+        if ($this->isLoggedIn()) {
+            return "<a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
+        }
+        return "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
     }
 
     public static function getSlug(string $page): string
@@ -390,55 +391,28 @@ final class App
         }
     }
 
+    /**
+     * Render page content for public view.
+     * Admin editing is handled by admin-ui.php.
+     */
     public function content(string $id, string $content): void
     {
         $format = $this->config['pageFormat'] ?? 'blocks';
         $isPage = ($id === $this->config['page']);
-        $isMarkdown = ($format === 'markdown' && $isPage);
         $isBlocks = ($format === 'blocks' && $isPage);
+        $isMarkdown = ($format === 'markdown' && $isPage);
 
-        if ($this->isLoggedIn()) {
-            $safeId = esc($id);
-
-            // Format switcher toolbar (page content only)
-            if ($isPage) {
-                $formats = ['blocks' => 'Blocks', 'markdown' => 'Markdown'];
-                echo "<div class='ce-format-bar' data-slug='{$safeId}'>";
-                foreach ($formats as $fmt => $label) {
-                    $active = ($fmt === $format) ? ' class="active"' : '';
-                    $safeFmt = esc($fmt);
-                    echo "<button{$active} data-format='{$safeFmt}'>{$label}</button>";
-                }
-                echo "</div>";
+        if ($isBlocks) {
+            $blocksJson = '';
+            if (isset($this->config['pageBlocks'])) {
+                $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
             }
-
-            if ($isBlocks) {
-                $blocksJson = '';
-                if (isset($this->config['pageBlocks'])) {
-                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
-                }
-                echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
-            } elseif ($isMarkdown) {
-                $safeTitle = esc($this->defaults['content'] ?? '');
-                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText' data-format='markdown'>{$content}</span>";
-            } else {
-                // Non-page content (sidebar etc.)
-                $safeTitle = esc($this->defaults['content'] ?? '');
-                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
-            }
+            echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
+        } elseif ($isMarkdown) {
+            $encoded = esc(base64_encode($content));
+            echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
         } else {
-            if ($isBlocks) {
-                $blocksJson = '';
-                if (isset($this->config['pageBlocks'])) {
-                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
-                }
-                echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
-            } elseif ($isMarkdown) {
-                $encoded = esc(base64_encode($content));
-                echo "<div class='markdown-content' data-raw-b64='{$encoded}'>{$content}</div>";
-            } else {
-                echo $content;
-            }
+            echo $content;
         }
     }
 
