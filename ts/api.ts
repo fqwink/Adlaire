@@ -64,11 +64,13 @@ const api = {
     async savePage(slug: string, content: string, format: string = 'blocks'): Promise<void> {
         const body = new URLSearchParams();
         body.append('slug', slug);
-        body.append('content', content);
         body.append('format', format);
         body.append('csrf', csrfToken);
         if (format === 'blocks') {
             body.append('blocks', content);
+            body.append('content', '');
+        } else {
+            body.append('content', content);
         }
 
         const res = await fetch('index.php?api=pages', {
