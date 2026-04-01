@@ -90,4 +90,40 @@ const api = {
             throw new Error(json.error);
         }
     },
+    /**
+     * Search pages by query string.
+     */
+    async search(query) {
+        const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.error);
+        }
+        return json.results;
+    },
+    /**
+     * Export all site data as JSON.
+     */
+    async exportSite() {
+        const res = await fetch('index.php?api=export');
+        if (!res.ok) {
+            throw new Error('Export failed');
+        }
+        return res.text();
+    },
+    /**
+     * Import site data from JSON.
+     */
+    async importSite(data) {
+        const res = await fetch(`index.php?api=import&csrf=${encodeURIComponent(csrfToken)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: data,
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.error);
+        }
+        return json.imported;
+    },
 };

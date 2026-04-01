@@ -239,7 +239,7 @@ final class FileStorage
     /**
      * @param array<int, array{type: string, data: array<string, mixed>}>|null $blocks
      */
-    public function writePage(string $slug, string $content, string $format = 'html', ?array $blocks = null): bool
+    public function writePage(string $slug, string $content, string $format = 'html', ?array $blocks = null, string $status = 'published'): bool
     {
         if (!self::validateSlug($slug)) {
             return false;
@@ -248,12 +248,19 @@ final class FileStorage
         if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
             $format = 'html';
         }
+        if (!in_array($status, ['draft', 'published'], true)) {
+            $status = 'published';
+        }
 
         $path = $this->pagesDir . '/' . $slug . '.json';
         $now = date('c');
 
         $existing = $this->readPageData($slug);
         $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
+        // Preserve status if not explicitly changed
+        if ($existing !== false && isset($existing['status'])) {
+            $status = $existing['status'];
+        }
 
         // Save revision before overwriting
         if ($existing !== false) {
@@ -263,6 +270,7 @@ final class FileStorage
         $data = [
             'content'    => $content,
             'format'     => $format,
+            'status'     => $status,
             'created_at' => $createdAt,
             'updated_at' => $now,
         ];
@@ -315,6 +323,38 @@ final class FileStorage
         }
 
         return $pages;
+    }
+
+    /**
+     * Update only the status of a page (draft/published).
+     */
+    public function updatePageStatus(string $slug, string $status): bool
+    {
+        if (!self::validateSlug($slug) || !in_array($status, ['draft', 'published'], true)) {
+            return false;
+        }
+
+        $data = $this->readPageData($slug);
+        if ($data === false) {
+            return false;
+        }
+
+        $data['status'] = $status;
+        $data['updated_at'] = date('c');
+
+        $path = $this->pagesDir . '/' . $slug . '.json';
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return $this->atomicWrite($path, $json);
+    }
+
+    /**
+     * List published pages only (for visitor-facing use).
+     * @return array<string, array<string, mixed>>
+     */
+    public function listPublishedPages(): array
+    {
+        $all = $this->listPages();
+        return array_filter($all, fn(array $data) => ($data['status'] ?? 'published') === 'published');
     }
 
     public function isConfigKey(string $key): bool
