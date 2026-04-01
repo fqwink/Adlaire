@@ -1,5 +1,48 @@
 # CHANGES - 変更履歴
 
+## Ver.1.9-29 (2026-04-01) — 1.0系最終版
+
+### バグ修正（32件）
+* セキュリティ: renderBlocksToHtml XSS修正、CORS Origin検証、静的生成エスケープ
+* データ: format デフォルト html→blocks 統一、import/export 整合性修正
+* フロント: format切替 i18n化、blockquoteタグ衝突修正、api.ts blocks/content分離
+* コード: listPages PHPDoc修正、export GET制限、.htaccess mod_rewrite化
+* ドキュメント: RULEBOOK全面更新（Ver.1.7/1.8実装済み反映、admin.css記載）
+
+## Ver.1.8-28 (2026-04-01)
+
+### 機能拡張・フロントエンド強化
+* admin CSS 外部ファイル化（themes/admin.css）
+* ダークモード対応（@media prefers-color-scheme）
+* 静的生成 Markdown サーバーサイド HTML変換（renderMarkdownToHtml）
+* heading レベル選択UI（1-3 prompt）
+* list 順序/非順序切替UI（confirm dialog）
+* 公開ページから管理用JS除外（scriptTags adminMode）
+* 管理UI ラベル翻訳対応（16キー追加）
+
+## Ver.1.7-27 (2026-04-01)
+
+### 品質・安全性・管理UI強化
+* バグ修正6件: ステータス保存、View Siteリンク、CSRF、静的生成リンク、heading簡素化
+* セキュリティ: ブロックデータ base64エンコーディング
+* 管理UI: ページ削除ボタン、一覧ソート、インポートUI、設定保存フィードバック
+* コード品質: CSRF統一（X-CSRF-Token）、死コード削除
+
+## Ver.1.6-26 (2026-04-01)
+
+### 管理ツール専用UI・静的サイト生成
+* 管理UI分離（admin-ui.php）: ダッシュボード、ページエディタ、新規作成
+* 静的サイトジェネレーター（POST ?api=generate → dist/）
+* バージョン情報表示
+
+## Ver.1.5-24 (2026-04-01)
+
+### エディタ改良・セキュリティ強化・レガシー廃止
+* HTML format 完全廃止、blocks をデフォルトに
+* ブロックエディタ: Backspace削除、▲▼移動、インラインツールバー、image URL入力
+* セキュリティ: CSRFワンタイム化、ログインレートリミット、parseHost強化
+* 保存インジケーター、format切替確認ダイアログ、レスポンシブCSS
+
 ## Ver.1.4-19 (2026-04-01)
 
 ### 新機能4件追加

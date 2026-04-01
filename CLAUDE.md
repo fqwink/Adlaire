@@ -11,7 +11,8 @@
 - `index.php` — エントリーポイント。セッション初期化と require のみ。
 - `core.php` — コア基盤。FileStorage クラス、ヘルパー関数。
 - `admin.php` — 管理ツール。App クラス、handleEdit 関数。
-- `core.php` / `admin.php` への直接HTTPアクセスは `.htaccess` で禁止。
+- `admin-ui.php` — 管理 UI テンプレート。
+- `core.php` / `admin.php` / `admin-ui.php` への直接HTTPアクセスは `.htaccess` で禁止。
 
 ## JavaScript 開発規約
 
