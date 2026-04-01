@@ -36,6 +36,9 @@ final class FileStorage
     /** Maximum number of config backup generations to retain */
     private const MAX_BACKUPS = 9;
 
+    /** Maximum number of page revisions to retain per page */
+    private const MAX_REVISIONS = 30;
+
     public function __construct(string $basePath = 'files')
     {
         $this->basePath = $basePath;
@@ -45,9 +48,6 @@ final class FileStorage
         $this->backupsDir = $basePath . '/backups';
         $this->revisionsDir = $basePath . '/revisions';
     }
-
-    /** Maximum number of page revisions to retain per page */
-    private const MAX_REVISIONS = 30;
 
     public function ensureDirectories(): void
     {
@@ -537,10 +537,10 @@ function login_rate_check(): bool
 
     $_SESSION['login_attempts'] ??= [];
     // Prune old attempts
-    $_SESSION['login_attempts'] = array_filter(
+    $_SESSION['login_attempts'] = array_values(array_filter(
         $_SESSION['login_attempts'],
         fn(int $t) => ($now - $t) < $windowSeconds
-    );
+    ));
 
     if (count($_SESSION['login_attempts']) >= $maxAttempts) {
         return false;
