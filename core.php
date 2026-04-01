@@ -296,6 +296,19 @@ final class FileStorage
         copy($path, $backupPath);
 
         unlink($path);
+
+        // Clean up revisions for deleted page
+        $revDir = $this->revisionsDir . '/' . $slug;
+        if (is_dir($revDir)) {
+            $revFiles = glob($revDir . '/*.json');
+            if (is_array($revFiles)) {
+                foreach ($revFiles as $rf) {
+                    unlink($rf);
+                }
+            }
+            rmdir($revDir);
+        }
+
         return true;
     }
 
