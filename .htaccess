@@ -7,6 +7,9 @@ RedirectMatch 403 ^.*/data/(?!lang/)
 <Files "admin.php">
     Require all denied
 </Files>
+<Files "admin-ui.php">
+    Require all denied
+</Files>
 ErrorDocument 403 &nbsp;
 RewriteEngine on
 Options -Indexes

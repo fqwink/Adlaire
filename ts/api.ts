@@ -32,6 +32,11 @@ interface SearchResult {
     updated_at: string;
 }
 
+function updateCsrfFromResponse(res: Response): void {
+    const newToken = res.headers.get('X-CSRF-Token');
+    if (newToken) { (window as any).csrfToken = newToken; }
+}
+
 const api = {
     /**
      * List all pages (metadata only, no content).
@@ -56,7 +61,7 @@ const api = {
     /**
      * Create or update a page.
      */
-    async savePage(slug: string, content: string, format: string = 'html'): Promise<void> {
+    async savePage(slug: string, content: string, format: string = 'blocks'): Promise<void> {
         const body = new URLSearchParams();
         body.append('slug', slug);
         body.append('content', content);
@@ -71,8 +76,8 @@ const api = {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
         });
-        const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
+        updateCsrfFromResponse(res);
+        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
     },
 
     /**
@@ -82,8 +87,8 @@ const api = {
         const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}&csrf=${encodeURIComponent(csrfToken)}`, {
             method: 'DELETE',
         });
-        const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
+        updateCsrfFromResponse(res);
+        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
     },
 
     /**

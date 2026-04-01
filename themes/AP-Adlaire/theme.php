@@ -14,7 +14,6 @@ $host = $app->host;
 	<meta name="description" content="<?= esc($c['description']) ?>">
 	<meta name="keywords" content="<?= esc($c['keywords']) ?>">
 <?php $app->scriptTags(); ?>
-<?php $app->editTags(); ?>
 </head>
 <body>
 	<nav id="nav">
@@ -22,7 +21,6 @@ $host = $app->host;
 		<?php $app->menu(); ?>
 		<div class="clear"></div>
 	</nav>
-	<?php if ($app->isLoggedIn()) { $app->settings(); } ?>
 
 	<div id="wrapper" class="border">
 		<div class="pad">
