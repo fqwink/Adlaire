@@ -357,6 +357,10 @@ class Editor {
 
 // --- Render blocks to HTML (for visitor view) ---
 
+function escHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function renderBlocks(blocks: BlockData[]): string {
     return blocks.map(block => {
         const d = block.data;
@@ -373,14 +377,15 @@ function renderBlocks(blocks: BlockData[]): string {
                 return `<${tag}>${items.map(i => `<li>${i}</li>`).join('')}</${tag}>`;
             }
             case 'code':
-                return `<pre><code>${d.code || ''}</code></pre>`;
+                return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
             case 'quote':
                 return `<blockquote>${d.text || ''}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
             case 'image': {
-                const cap = d.caption ? `<figcaption>${d.caption}</figcaption>` : '';
-                return `<figure><img src="${d.url || ''}"/>${cap}</figure>`;
+                const url = escHtml(String(d.url || ''));
+                const cap = d.caption ? `<figcaption>${escHtml(String(d.caption))}</figcaption>` : '';
+                return `<figure><img src="${url}" alt=""/>${cap}</figure>`;
             }
             default:
                 return '';
