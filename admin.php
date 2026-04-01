@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 6;
-    public const VERSION_BUILD = 25;
-    public const VERSION = 'Ver.1.6-25';
+    public const VERSION_BUILD = 26;
+    public const VERSION = 'Ver.1.6-26';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -570,6 +570,7 @@ function handleApi(): void
         'revisions' => handleApiRevisions($storage, $method),
         'export'    => handleApiExport($storage),
         'import'    => handleApiImport($storage),
+        'generate'  => handleApiGenerate($storage),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -871,6 +872,218 @@ function handleApiImport(FileStorage $storage): void
     }
 
     echo json_encode(['status' => 'ok', 'imported' => $imported]);
+}
+
+// --- Static Site Generator ---
+
+function handleApiGenerate(FileStorage $storage): void
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
+    csrf_verify();
+
+    $app = App::getInstance();
+    $distDir = __DIR__ . '/dist';
+
+    // Clean and recreate dist directory
+    if (is_dir($distDir)) {
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($distDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($files as $file) {
+            if ($file->isDir()) {
+                rmdir($file->getRealPath());
+            } else {
+                unlink($file->getRealPath());
+            }
+        }
+    }
+    if (!is_dir($distDir)) {
+        mkdir($distDir, 0755, true);
+    }
+
+    $pages = $storage->listPublishedPages();
+    $theme = basename($app->config['themeSelect']);
+    $themePath = __DIR__ . '/themes/' . $theme;
+    $count = 0;
+
+    // Copy theme CSS
+    $cssDir = $distDir . '/themes/' . $theme;
+    if (!is_dir($cssDir)) {
+        mkdir($cssDir, 0755, true);
+    }
+    if (is_file($themePath . '/style.css')) {
+        copy($themePath . '/style.css', $cssDir . '/style.css');
+    }
+
+    // Copy JS
+    $jsSrc = __DIR__ . '/js/dist';
+    $jsDst = $distDir . '/js/dist';
+    if (is_dir($jsSrc)) {
+        if (!is_dir($jsDst)) {
+            mkdir($jsDst, 0755, true);
+        }
+        $jsFiles = glob($jsSrc . '/*.js');
+        if (is_array($jsFiles)) {
+            foreach ($jsFiles as $jsFile) {
+                copy($jsFile, $jsDst . '/' . basename($jsFile));
+            }
+        }
+    }
+
+    // Copy translation files
+    $langSrc = __DIR__ . '/data/lang';
+    $langDst = $distDir . '/data/lang';
+    if (is_dir($langSrc)) {
+        if (!is_dir($langDst)) {
+            mkdir($langDst, 0755, true);
+        }
+        $langFiles = glob($langSrc . '/*.json');
+        if (is_array($langFiles)) {
+            foreach ($langFiles as $langFile) {
+                copy($langFile, $langDst . '/' . basename($langFile));
+            }
+        }
+    }
+
+    // Generate each page
+    foreach ($pages as $slug => $data) {
+        $format = $data['format'] ?? 'blocks';
+        $contentHtml = '';
+
+        if ($format === 'blocks' && isset($data['blocks'])) {
+            // Server-side block rendering
+            $contentHtml = renderBlocksToHtml($data['blocks']);
+        } elseif ($format === 'markdown') {
+            // Markdown will be rendered client-side via JS
+            $contentHtml = '<div class="markdown-content" data-raw-b64="' . esc(base64_encode($data['content'])) . '"></div>';
+        } else {
+            $contentHtml = $data['content'] ?? '';
+        }
+
+        $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
+
+        // Write to dist
+        if ($slug === 'home') {
+            file_put_contents($distDir . '/index.html', $pageHtml);
+        }
+        $pageDir = $distDir . '/' . $slug;
+        if (!is_dir($pageDir)) {
+            mkdir($pageDir, 0755, true);
+        }
+        file_put_contents($pageDir . '/index.html', $pageHtml);
+        $count++;
+    }
+
+    // Generate sitemap.xml
+    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+    foreach ($pages as $slug => $data) {
+        $loc = htmlspecialchars("{$host}/{$slug}", ENT_XML1, 'UTF-8');
+        $lastmod = substr($data['updated_at'] ?? '', 0, 10);
+        $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
+    }
+    $xml .= '</urlset>';
+    file_put_contents($distDir . '/sitemap.xml', $xml);
+
+    echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
+}
+
+/**
+ * Render blocks array to static HTML string (server-side).
+ * @param array<int, array{type: string, data: array<string, mixed>}> $blocks
+ */
+function renderBlocksToHtml(array $blocks): string
+{
+    $html = '';
+    foreach ($blocks as $block) {
+        $d = $block['data'] ?? [];
+        $html .= match ($block['type'] ?? '') {
+            'paragraph' => '<p>' . ($d['text'] ?? '') . '</p>',
+            'heading'   => '<h' . max(1, min(3, (int) ($d['level'] ?? 2))) . '>' . ($d['text'] ?? '') . '</h' . max(1, min(3, (int) ($d['level'] ?? 2))) . '>',
+            'list'      => '<' . (($d['style'] ?? '') === 'ordered' ? 'ol' : 'ul') . '>' . implode('', array_map(fn($i) => '<li>' . $i . '</li>', $d['items'] ?? [])) . '</' . (($d['style'] ?? '') === 'ordered' ? 'ol' : 'ul') . '>',
+            'code'      => '<pre><code>' . htmlspecialchars((string) ($d['code'] ?? ''), ENT_QUOTES, 'UTF-8') . '</code></pre>',
+            'quote'     => '<blockquote>' . ($d['text'] ?? '') . '</blockquote>',
+            'delimiter' => '<hr>',
+            'image'     => '<figure><img src="' . htmlspecialchars((string) ($d['url'] ?? ''), ENT_QUOTES, 'UTF-8') . '" alt="">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . htmlspecialchars((string) $d['caption'], ENT_QUOTES, 'UTF-8') . '</figcaption>' : '') . '</figure>',
+            default     => '',
+        };
+        $html .= "\n";
+    }
+    return $html;
+}
+
+/**
+ * Generate a full HTML page using the theme structure.
+ */
+function generatePageHtml(App $app, string $slug, string $contentHtml, string $theme): string
+{
+    $c = $app->config;
+    $title = esc($c['title']);
+    $pageTitle = esc($slug);
+    $desc = esc($c['description']);
+    $keywords = esc($c['keywords']);
+    $lang = esc($app->language);
+    $copyright = $c['copyright'];
+    $credit = $app->credit;
+
+    // Build menu
+    $menuHtml = '<ul>';
+    $items = explode("<br />\n", $c['menu']);
+    foreach ($items as $item) {
+        $item = trim($item);
+        if ($item === '') continue;
+        $itemSlug = App::getSlug($item);
+        $active = ($slug === $itemSlug) ? ' id="active"' : '';
+        $menuHtml .= "<li{$active}><a href='{$itemSlug}/'>" . esc($item) . "</a></li>";
+    }
+    $menuHtml .= '</ul>';
+
+    $sideContent = $c['subside'] ?? '';
+
+    return <<<HTML
+    <!doctype html>
+    <html lang="{$lang}">
+    <head>
+        <meta charset="utf-8">
+        <title>{$title} - {$pageTitle}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="themes/{$theme}/style.css">
+        <meta name="description" content="{$desc}">
+        <meta name="keywords" content="{$keywords}">
+        <script src="js/dist/markdown.js"></script>
+        <script src="js/dist/editor.js"></script>
+        <script src="js/dist/editInplace.js"></script>
+    </head>
+    <body>
+        <nav id="nav">
+            <h1><a href="./">{$title}</a></h1>
+            {$menuHtml}
+            <div class="clear"></div>
+        </nav>
+        <div id="wrapper" class="border">
+            <div class="pad">
+                {$contentHtml}
+            </div>
+        </div>
+        <div id="side" class="border">
+            <div class="pad">
+                {$sideContent}
+            </div>
+        </div>
+        <div class="clear"></div>
+        <footer>
+            <p>{$copyright} | {$credit}</p>
+        </footer>
+    </body>
+    </html>
+    HTML;
 }
 
 function apiError(int $code, string $message): void

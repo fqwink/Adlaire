@@ -168,10 +168,23 @@ function renderAdminDashboard(App $app): void
 
     echo '</div>';
 
-    // Export/Import
-    echo '<div style="margin-top:20px;">';
-    echo '<a class="admin-btn admin-btn--outline" href="?api=export">Export</a> ';
+    // Export/Import/Generate
+    echo '<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">';
+    echo '<a class="admin-btn admin-btn--outline" href="?api=export">Export</a>';
+    echo '<button class="admin-btn" onclick="generateSite()">Generate Static Site</button>';
     echo '</div>';
+    echo '<div id="generate-result" style="margin-top:8px;font-size:13px;"></div>';
+    echo '<script>';
+    echo 'function generateSite(){';
+    echo 'var el=document.getElementById("generate-result");';
+    echo 'el.textContent="Generating...";el.style.color="#f90";';
+    echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=generate",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();})';
+    echo '.then(function(d){if(d.status==="ok"){el.textContent="Generated "+d.pages+" pages to "+d.output;el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
+    echo '.catch(function(e){el.textContent="Error: "+e.message;el.style.color="#c00";});';
+    echo '}';
+    echo '</script>';
 
     echo '</section>';
 }
