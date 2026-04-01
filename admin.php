@@ -709,13 +709,13 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 function handleApiSearch(FileStorage $storage): void
 {
-    $query = $_REQUEST['q'] ?? '';
-    if ($query === '') {
+    $rawQuery = $_REQUEST['q'] ?? '';
+    if ($rawQuery === '') {
         echo json_encode(['results' => []]);
         return;
     }
 
-    $query = mb_strtolower($query, 'UTF-8');
+    $query = mb_strtolower($rawQuery, 'UTF-8');
     $pages = $storage->listPublishedPages();
     $results = [];
 
@@ -742,7 +742,7 @@ function handleApiSearch(FileStorage $storage): void
         ];
     }
 
-    echo json_encode(['query' => $_REQUEST['q'], 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    echo json_encode(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 // --- Sitemap API ---
