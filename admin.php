@@ -746,7 +746,8 @@ function handleApiSitemap(FileStorage $storage): void
 {
     header('Content-Type: application/xml; charset=UTF-8');
 
-    $host = ($_SERVER['HTTPS'] ?? '' === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
     $basePath = dirname($_SERVER['SCRIPT_NAME']);
     if ($basePath === '/') {
         $basePath = '';
