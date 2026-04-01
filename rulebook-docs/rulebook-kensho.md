@@ -16,7 +16,7 @@
 
 | ファイル | 内容 |
 |---------|------|
-| `rulebook-docs/rulebook-charter.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
+| `rulebook-docs/rulebook-kensho.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
 | `rulebook-docs/rulebook-v1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-29） |
 | `rulebook-docs/rulebook-v2.md` | ルールブック Ver.2.x 系（現行策定中） |
 
