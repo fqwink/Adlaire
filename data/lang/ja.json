@@ -48,5 +48,6 @@
     "admin_restore": "復元",
     "admin_generate": "静的サイト生成",
     "admin_export": "エクスポート",
-    "admin_import": "インポート"
+    "admin_import": "インポート",
+    "confirm_format_switch": "Format を :format に変更しますか？\nコンテンツが変換されます。"
 }

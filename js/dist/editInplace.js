@@ -204,7 +204,7 @@ function initFormatSwitcher() {
                 const newFormat = btn.dataset.format;
                 if (!newFormat || btn.classList.contains('active'))
                     return;
-                if (!confirm(`Format を ${newFormat} に変更しますか？\nコンテンツが変換されます。`))
+                if (!confirm(i18n.t('confirm_format_switch', { format: newFormat })))
                     return;
                 switchFormat(slug, newFormat);
             });

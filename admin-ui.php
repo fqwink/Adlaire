@@ -182,6 +182,10 @@ function renderAdminEditor(App $app): void
     }
 
     $pageData = $app->storage->readPageData($slug);
+    if ($pageData === false) {
+        echo '<p>Page not found. <a href="?admin">Back to dashboard</a></p>';
+        return;
+    }
     $format = $pageData['format'] ?? 'blocks';
     $status = $pageData['status'] ?? 'published';
     $content = $pageData['content'] ?? '';
@@ -271,7 +275,7 @@ function renderAdminNewPage(App $app): void
     echo "var slug=document.getElementById('new-slug').value.toLowerCase().replace(/\\s+/g,'-');";
     echo "var fmt=document.getElementById('new-format').value;";
     echo "if(!slug){alert('Slug is required');return;}";
-    echo "var content=fmt==='blocks'?'[]':'';";
+    echo "var content=fmt==='blocks'?JSON.stringify([{type:'paragraph',data:{text:''}}]):'';";
     echo "api.savePage(slug,content,fmt).then(function(){";
     echo "location.href='?admin=edit&page='+encodeURIComponent(slug);";
     echo "}).catch(function(e){alert('Error: '+e.message);});";

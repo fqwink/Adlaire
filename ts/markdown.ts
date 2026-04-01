@@ -111,9 +111,9 @@ function markdownToHtml(md: string): string {
     });
 
     // Blockquotes — merge consecutive lines into single block
-    html = html.replace(/^&gt; (.+)$/gm, '<bq>$1</bq>');
-    html = html.replace(/((?:<bq>.*<\/bq>\n?)+)/g, (m) => {
-        const content = m.replace(/<\/?bq>/g, '').trim().replace(/\n/g, '<br>');
+    html = html.replace(/^&gt; (.+)$/gm, '%%BQ%%$1%%/BQ%%');
+    html = html.replace(/((?:%%BQ%%.*%%\/BQ%%\n?)+)/g, (m) => {
+        const content = m.replace(/%%\/?BQ%%/g, '').trim().replace(/\n/g, '<br>');
         return `<blockquote>${content}</blockquote>`;
     });
 
@@ -125,7 +125,7 @@ function markdownToHtml(md: string): string {
     if (fnIds.length > 0) {
         html += '\n<section class="footnotes"><hr><ol>';
         fnIds.forEach(id => {
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}">↩</a></li>`;
+            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">↩</a></li>`;
         });
         html += '</ol></section>';
     }

@@ -48,5 +48,6 @@
     "admin_restore": "Restore",
     "admin_generate": "Generate Static Site",
     "admin_export": "Export",
-    "admin_import": "Import"
+    "admin_import": "Import",
+    "confirm_format_switch": "Switch format to :format?\nContent will be converted."
 }

@@ -300,7 +300,7 @@ final class FileStorage
     }
 
     /**
-     * @return array<string, array{content: string, created_at: string, updated_at: string}>
+     * @return array<string, array{content: string, format: string, status: string, created_at: string, updated_at: string, blocks?: array}>
      */
     public function listPages(): array
     {

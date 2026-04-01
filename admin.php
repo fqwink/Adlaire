@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 8;
-    public const VERSION_BUILD = 28;
-    public const VERSION = 'Ver.1.8-28';
+    public const VERSION_MINOR = 9;
+    public const VERSION_BUILD = 29;
+    public const VERSION = 'Ver.1.9-29';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -513,7 +513,11 @@ function handleApi(): void
     }
 
     header('Content-Type: application/json; charset=UTF-8');
-    header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_HOST'] ?? 'null'));
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
+    if ($origin !== '' && str_contains($origin, $allowedHost)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    }
     header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
 
     // Public endpoints (no authentication)
@@ -561,7 +565,7 @@ function apiPageList(FileStorage $storage): void
     $summary = [];
     foreach ($pages as $slug => $data) {
         $summary[$slug] = [
-            'format'     => $data['format'] ?? 'html',
+            'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
             'created_at' => $data['created_at'],
             'updated_at' => $data['updated_at'],
@@ -715,7 +719,7 @@ function handleApiSearch(FileStorage $storage): void
         $results[] = [
             'slug'       => $slug,
             'snippet'    => strip_tags($snippet),
-            'format'     => $data['format'] ?? 'html',
+            'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
             'updated_at' => $data['updated_at'],
         ];
@@ -766,6 +770,11 @@ function handleApiSitemap(FileStorage $storage): void
 
 function handleApiExport(FileStorage $storage): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
     $config = $storage->readConfig();
     unset($config['password']);
 
@@ -790,7 +799,6 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
-    // CSRF token must be in URL query for JSON body requests
     csrf_verify();
 
     $input = file_get_contents('php://input');
@@ -827,7 +835,7 @@ function handleApiImport(FileStorage $storage): void
             if (!FileStorage::validateSlug($slug) || !isset($pageData['content'])) {
                 continue;
             }
-            $format = $pageData['format'] ?? 'html';
+            $format = $pageData['format'] ?? 'blocks';
             $blocks = $pageData['blocks'] ?? null;
             $status = $pageData['status'] ?? 'published';
             $storage->writePage($slug, $pageData['content'], $format, $blocks, $status);
@@ -945,10 +953,12 @@ function handleApiGenerate(FileStorage $storage): void
     // Generate sitemap.xml
     $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
     $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+    $basePath = dirname($_SERVER['SCRIPT_NAME']);
+    if ($basePath === '/') { $basePath = ''; }
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
-        $loc = htmlspecialchars("{$host}/{$slug}", ENT_XML1, 'UTF-8');
+        $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
         $lastmod = substr($data['updated_at'] ?? '', 0, 10);
         $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
     }
@@ -968,13 +978,13 @@ function renderBlocksToHtml(array $blocks): string
     foreach ($blocks as $block) {
         $d = $block['data'] ?? [];
         $html .= match ($block['type'] ?? '') {
-            'paragraph' => '<p>' . ($d['text'] ?? '') . '</p>',
-            'heading'   => (function() use ($d) { $l = max(1, min(3, (int) ($d['level'] ?? 2))); return "<h{$l}>" . ($d['text'] ?? '') . "</h{$l}>"; })(),
-            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . $i . '</li>', $d['items'] ?? [])) . "</{$t}>"; })(),
-            'code'      => '<pre><code>' . htmlspecialchars((string) ($d['code'] ?? ''), ENT_QUOTES, 'UTF-8') . '</code></pre>',
-            'quote'     => '<blockquote>' . ($d['text'] ?? '') . '</blockquote>',
+            'paragraph' => '<p>' . esc((string) ($d['text'] ?? '')) . '</p>',
+            'heading'   => (function() use ($d) { $l = max(1, min(3, (int) ($d['level'] ?? 2))); return "<h{$l}>" . esc((string) ($d['text'] ?? '')) . "</h{$l}>"; })(),
+            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . esc((string) $i) . '</li>', $d['items'] ?? [])) . "</{$t}>"; })(),
+            'code'      => '<pre><code>' . esc((string) ($d['code'] ?? '')) . '</code></pre>',
+            'quote'     => '<blockquote>' . esc((string) ($d['text'] ?? '')) . '</blockquote>',
             'delimiter' => '<hr>',
-            'image'     => '<figure><img src="' . htmlspecialchars((string) ($d['url'] ?? ''), ENT_QUOTES, 'UTF-8') . '" alt="">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . htmlspecialchars((string) $d['caption'], ENT_QUOTES, 'UTF-8') . '</figcaption>' : '') . '</figure>',
+            'image'     => '<figure><img src="' . esc((string) ($d['url'] ?? '')) . '" alt="">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . esc((string) $d['caption']) . '</figcaption>' : '') . '</figure>',
             default     => '',
         };
         $html .= "\n";
@@ -1024,8 +1034,8 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     $desc = esc($c['description']);
     $keywords = esc($c['keywords']);
     $lang = esc($app->language);
-    $copyright = $c['copyright'];
-    $credit = $app->credit;
+    $copyright = esc((string) ($c['copyright'] ?? ''));
+    $credit = esc($app->credit);
 
     // Build menu
     $menuHtml = '<ul>';
@@ -1036,7 +1046,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';
         $safeItemSlug = esc($itemSlug);
-        $menuHtml .= "<li{$active}><a href='/{$safeItemSlug}/'>" . esc($item) . "</a></li>";
+        $menuHtml .= "<li{$active}><a href='{$safeItemSlug}/'>" . esc($item) . "</a></li>";
     }
     $menuHtml .= '</ul>';
 

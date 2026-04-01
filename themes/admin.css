@@ -49,6 +49,14 @@
     .admin-btn--outline{border-color:#555;color:#aaa;}
     .admin-btn--outline:hover{background:#2a2a3e;}
     .admin-nav a{background:#2a2a3e;}
+    .ce-block__content [contenteditable]:focus{border-left-color:#1ab;}
+    .ce-code{background:#0d1117;color:#e6e6e6;}
+    .ce-toolbox{background:#2a2a3e;border-color:#444;}
+    .ce-toolbox__btn{border-color:#555;color:#ccc;}
+    .ce-toolbox__btn:hover{background:#3a3a4e;}
+    .ce-inline-toolbar{background:#2a2a3e;}
+    .ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
+    .ce-quote{border-left-color:#1ab;color:#aaa;}
 }
 
 /* Responsive */
