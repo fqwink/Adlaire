@@ -33,5 +33,20 @@
     "block_list": "リスト",
     "block_code": "コード",
     "block_quote": "引用",
-    "block_image": "画像"
+    "block_image": "画像",
+    "admin_dashboard": "ダッシュボード",
+    "admin_new_page": "+ 新規ページ",
+    "admin_pages": "ページ",
+    "admin_edit": "編集",
+    "admin_delete": "削除",
+    "admin_view": "表示",
+    "admin_view_site": "サイト表示",
+    "admin_new_page_title": "新規ページ作成",
+    "admin_slug": "スラッグ",
+    "admin_create": "作成",
+    "admin_revisions": "リビジョン",
+    "admin_restore": "復元",
+    "admin_generate": "静的サイト生成",
+    "admin_export": "エクスポート",
+    "admin_import": "インポート"
 }

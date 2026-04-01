@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 7;
-    public const VERSION_BUILD = 27;
-    public const VERSION = 'Ver.1.7-27';
+    public const VERSION_MINOR = 8;
+    public const VERSION_BUILD = 28;
+    public const VERSION = 'Ver.1.8-28';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -380,12 +380,17 @@ final class App
     }
 
     /**
-     * Output script tags for all compiled JS modules.
-     * Centralizes JS loading so themes don't need to list scripts manually.
+     * Output script tags for compiled JS modules.
+     * @param bool $adminMode true for admin UI (all scripts), false for public (render only)
      */
-    public function scriptTags(): void
+    public function scriptTags(bool $adminMode = false): void
     {
-        $scripts = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
+        if ($adminMode) {
+            $scripts = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
+        } else {
+            // Public pages only need rendering scripts (no editor, no API)
+            $scripts = ['markdown', 'editInplace'];
+        }
         foreach ($scripts as $name) {
             echo "\t<script src=\"js/dist/{$name}.js\"></script>\n";
         }
@@ -918,8 +923,7 @@ function handleApiGenerate(FileStorage $storage): void
             // Server-side block rendering
             $contentHtml = renderBlocksToHtml($data['blocks']);
         } elseif ($format === 'markdown') {
-            // Markdown will be rendered client-side via JS
-            $contentHtml = '<div class="markdown-content" data-raw-b64="' . esc(base64_encode($data['content'])) . '"></div>';
+            $contentHtml = renderMarkdownToHtml($data['content']);
         } else {
             $contentHtml = $data['content'] ?? '';
         }
@@ -975,6 +979,37 @@ function renderBlocksToHtml(array $blocks): string
         };
         $html .= "\n";
     }
+    return $html;
+}
+
+/**
+ * Server-side Markdown to HTML conversion for static generation.
+ */
+function renderMarkdownToHtml(string $md): string
+{
+    $html = htmlspecialchars($md, ENT_QUOTES, 'UTF-8');
+
+    // Code blocks
+    $html = preg_replace_callback('/```(\w+)?\n([\s\S]*?)```/', function ($m) {
+        $cls = $m[1] ? ' class="language-' . $m[1] . '"' : '';
+        return '<pre><code' . $cls . '>' . trim($m[2]) . '</code></pre>';
+    }, $html) ?? $html;
+
+    $html = preg_replace('/`([^`]+)`/', '<code>$1</code>', $html) ?? $html;
+    $html = preg_replace('/^### (.+)$/m', '<h3>$1</h3>', $html) ?? $html;
+    $html = preg_replace('/^## (.+)$/m', '<h2>$1</h2>', $html) ?? $html;
+    $html = preg_replace('/^# (.+)$/m', '<h1>$1</h1>', $html) ?? $html;
+    $html = preg_replace('/^---$/m', '<hr>', $html) ?? $html;
+    $html = preg_replace('/\*\*\*(.+?)\*\*\*/', '<strong><em>$1</em></strong>', $html) ?? $html;
+    $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html) ?? $html;
+    $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html) ?? $html;
+    $html = preg_replace('/!\[([^\]]*)\]\(([^)]+)\)/', '<img src="$2" alt="$1">', $html) ?? $html;
+    $html = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2">$1</a>', $html) ?? $html;
+    $html = preg_replace('/^\- (.+)$/m', '<li>$1</li>', $html) ?? $html;
+    $html = preg_replace('/((?:<li>.*<\/li>\n?)+)/', '<ul>$1</ul>', $html) ?? $html;
+    $html = preg_replace('/^&gt; (.+)$/m', '<blockquote>$1</blockquote>', $html) ?? $html;
+    $html = preg_replace('/^(?!<[a-z\/])(.*\S.*)$/m', '<p>$1</p>', $html) ?? $html;
+
     return $html;
 }
 

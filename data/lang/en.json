@@ -33,5 +33,20 @@
     "block_list": "List",
     "block_code": "Code",
     "block_quote": "Quote",
-    "block_image": "Image"
+    "block_image": "Image",
+    "admin_dashboard": "Dashboard",
+    "admin_new_page": "+ New Page",
+    "admin_pages": "Pages",
+    "admin_edit": "Edit",
+    "admin_delete": "Delete",
+    "admin_view": "View",
+    "admin_view_site": "View Site",
+    "admin_new_page_title": "New Page",
+    "admin_slug": "Slug",
+    "admin_create": "Create",
+    "admin_revisions": "Revisions",
+    "admin_restore": "Restore",
+    "admin_generate": "Generate Static Site",
+    "admin_export": "Export",
+    "admin_import": "Import"
 }

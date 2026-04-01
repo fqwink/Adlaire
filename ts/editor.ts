@@ -493,7 +493,14 @@ class Editor {
             btn.textContent = label;
             btn.addEventListener('click', () => {
                 const idx = this.getBlockIndex(refBlock);
-                const defaultData = type === 'heading' ? { level: 2 } : {};
+                let defaultData: Record<string, unknown> = {};
+                if (type === 'heading') {
+                    const level = prompt('Heading level (1-3):', '2');
+                    defaultData = { level: Math.max(1, Math.min(3, parseInt(level || '2', 10))) };
+                } else if (type === 'list') {
+                    const style = confirm('Ordered list? (OK=ordered, Cancel=unordered)') ? 'ordered' : 'unordered';
+                    defaultData = { style, items: [''] };
+                }
                 this.insertBlock(type, defaultData, idx + 1);
                 toolbox.remove();
             });

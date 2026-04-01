@@ -21,44 +21,8 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="themes/<?= esc($c['themeSelect']) ?>/style.css">
-    <style>
-        .admin-wrap{max-width:960px;margin:20px auto;padding:0 20px;color:#333;font-family:Verdana,sans-serif;}
-        .admin-header{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:2px solid #1ab;}
-        .admin-header h1{margin:0;font-size:20px;color:#1f2b33;}
-        .admin-header a{color:#1ab;text-decoration:none;border:none;margin-left:16px;}
-        .admin-header a:hover{text-decoration:underline;}
-        .admin-nav{display:flex;gap:8px;margin:16px 0;}
-        .admin-nav a{padding:6px 16px;background:#1f2b33;color:#fff;border-radius:4px;text-decoration:none;border:none;font-size:13px;}
-        .admin-nav a.active,.admin-nav a:hover{background:#1ab;}
-        .admin-section{margin:20px 0;}
-        .admin-section h2{font-size:16px;color:#1f2b33;border-bottom:1px solid #ddd;padding-bottom:6px;}
-        .admin-table{width:100%;border-collapse:collapse;font-size:14px;}
-        .admin-table th,.admin-table td{text-align:left;padding:8px 12px;border-bottom:1px solid #eee;}
-        .admin-table th{background:#f5f5f5;color:#666;font-weight:normal;text-transform:uppercase;font-size:12px;}
-        .admin-table tr:hover{background:#f9f9f9;}
-        .admin-table .actions a{margin-right:8px;color:#1ab;text-decoration:none;border:none;}
-        .admin-table .status-draft{color:#f90;font-weight:bold;}
-        .admin-table .status-published{color:#0a0;}
-        .admin-form{max-width:480px;}
-        .admin-form label{display:block;margin:12px 0 4px;font-size:13px;color:#666;}
-        .admin-form input,.admin-form select,.admin-form textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box;}
-        .admin-form textarea{min-height:80px;resize:vertical;}
-        .admin-form button,.admin-btn{padding:8px 20px;background:#1ab;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;}
-        .admin-form button:hover,.admin-btn:hover{background:#099;}
-        .admin-btn--danger{background:#c33;}
-        .admin-btn--danger:hover{background:#a00;}
-        .admin-btn--outline{background:none;border:1px solid #ddd;color:#666;}
-        .admin-btn--outline:hover{background:#f5f5f5;}
-        .admin-editor-area{margin:16px 0;background:#fff;border:1px solid #ddd;border-radius:4px;padding:16px;min-height:300px;}
-        .admin-sidebar{margin:20px 0;padding:16px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;}
-        .admin-sidebar h3{margin:0 0 8px;font-size:14px;}
-        .admin-sidebar ul{list-style:none;padding:0;margin:0;}
-        .admin-sidebar li{padding:4px 0;font-size:13px;display:flex;justify-content:space-between;}
-        .admin-sidebar li a{color:#1ab;text-decoration:none;border:none;}
-        .admin-meta{display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap;}
-        .admin-meta select,.admin-meta button{font-size:13px;}
-    </style>
-<?php $app->scriptTags(); ?>
+    <link rel="stylesheet" href="themes/admin.css">
+<?php $app->scriptTags(true); ?>
 <?php $app->editTags(); ?>
 </head>
 <body>
@@ -66,14 +30,14 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
     <header class="admin-header">
         <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= App::VERSION ?></small></h1>
         <div>
-            <a href="./">← <?= $app->language === 'en' ? 'View Site' : 'サイト表示' ?></a>
+            <a href="./">← <?= esc($app->t('admin_view_site')) ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>
         </div>
     </header>
 
     <nav class="admin-nav">
-        <a href="?admin" class="<?= $adminAction === 'dashboard' || $adminAction === '' ? 'active' : '' ?>">Dashboard</a>
-        <a href="?admin=new">+ New Page</a>
+        <a href="?admin" class="<?= $adminAction === 'dashboard' || $adminAction === '' ? 'active' : '' ?>"><?= esc($app->t('admin_dashboard')) ?></a>
+        <a href="?admin=new"><?= esc($app->t('admin_new_page')) ?></a>
     </nav>
 
 <?php
