@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 9;
-    public const VERSION_BUILD = 29;
-    public const VERSION = 'Ver.1.9-29';
+    public const VERSION_BUILD = 30;
+    public const VERSION = 'Ver.1.9-30';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -68,7 +68,7 @@ final class App
 
         $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
         // Whitelist: host must be valid hostname/IP with optional port
-        if (!preg_match('/^[a-zA-Z0-9.\-:]+(:\d+)?$/', $httpHost)) {
+        if (!preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost)) {
             $httpHost = 'localhost';
         }
 
@@ -392,7 +392,7 @@ final class App
             $scripts = ['markdown', 'editInplace'];
         }
         foreach ($scripts as $name) {
-            echo "\t<script src=\"js/dist/{$name}.js\"></script>\n";
+            echo "\t<script src=\"js/{$name}.js\"></script>\n";
         }
     }
 
@@ -408,11 +408,11 @@ final class App
         $isMarkdown = ($format === 'markdown' && $isPage);
 
         if ($isBlocks) {
-            $blocksJson = '';
+            $blocksB64 = '';
             if (isset($this->config['pageBlocks'])) {
-                $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
+                $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
             }
-            echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
+            echo "<div class='blocks-content' data-blocks-b64='{$blocksB64}'></div>";
         } elseif ($isMarkdown) {
             $encoded = esc(base64_encode($content));
             echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
@@ -1062,9 +1062,8 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <link rel="stylesheet" href="themes/{$theme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
-        <script src="js/dist/markdown.js"></script>
-        <script src="js/dist/editor.js"></script>
-        <script src="js/dist/editInplace.js"></script>
+        <script src="js/markdown.js"></script>
+        <script src="js/editInplace.js"></script>
     </head>
     <body>
         <nav id="nav">

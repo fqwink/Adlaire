@@ -1,6 +1,16 @@
 # CHANGES - 変更履歴
 
-## Ver.1.9-29 (2026-04-01) — 1.0系最終版
+## Ver.1.9-30 (2026-04-01) — 1.0系最終版
+
+### 最終バグ修正（6件）
+* parseHost: ホスト名正規表現から重複コロンを除去
+* content(): blocks-content のデータ属性を base64 エンコーディングに変更
+* renderBlocksContent(): base64 対応（data-blocks-b64）
+* 静的生成: 不要な editor.js を生成 HTML から除去
+* login_rate_check: array_filter 後に array_values で再インデックス
+* 定数配置: MAX_REVISIONS を MAX_BACKUPS の隣に移動
+
+## Ver.1.9-29 (2026-04-01)
 
 ### バグ修正（32件）
 * セキュリティ: renderBlocksToHtml XSS修正、CORS Origin検証、静的生成エスケープ

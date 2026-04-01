@@ -116,11 +116,18 @@ function renderMarkdownContent() {
 }
 function renderBlocksContent() {
     document.querySelectorAll('.blocks-content').forEach(el => {
-        const blocksJson = el.dataset.blocks;
-        if (!blocksJson)
+        let raw = el.dataset.blocks || '';
+        const b64 = el.dataset.blocksB64;
+        if (b64) {
+            try {
+                raw = atob(b64);
+            }
+            catch { /* empty */ }
+        }
+        if (!raw)
             return;
         try {
-            const blocks = JSON.parse(blocksJson);
+            const blocks = JSON.parse(raw);
             el.innerHTML = renderBlocks(blocks);
         }
         catch {

@@ -1,11 +1,11 @@
 # Adlaire Platform - ルールブック Ver.1.x 系
 
-**最終バージョン**: Ver.1.9-29
+**最終バージョン**: Ver.1.9-30
 **最終更新**: 2026-04-01
 **状態**: **凍結** — 本ファイルは変更しない。
 
-> Ver.1.x 系の仕様書。Ver.1.9-29 をもって 1.0 系は完了。
-> 上位原則は `CHARTER.md`（憲章）を参照。
+> Ver.1.x 系の仕様書。Ver.1.9-30 をもって 1.0 系は完了。
+> 上位原則は `CHARTER.md`（ルールブック憲章）を参照。
 
 ---
 
@@ -13,23 +13,22 @@
 
 ### 1.1 PHP ファイル構成
 
-**PHP バージョン**: 8.3 以上必須（`declare(strict_types=1)` 使用）
+- **PHP バージョンは 8.3 以上を必須**とする（`declare(strict_types=1)` 使用）。
+- `index.php` — エントリーポイント。セッション初期化と require のみ。
+- `core.php` — コア基盤。FileStorage クラス、ヘルパー関数。
+- `admin.php` — 管理ツール。App クラス、handleEdit 関数。
+- `admin-ui.php` — 管理 UI テンプレート。
+- `core.php` / `admin.php` / `admin-ui.php` への直接HTTPアクセスは `.htaccess` で禁止。
 
-| ファイル | 役割 | 直接HTTPアクセス |
-|---------|------|:---:|
-| `index.php` | エントリーポイント。セッション初期化・require・ブートストラップ | 許可 |
-| `core.php` | コア基盤。FileStorage クラス、ヘルパー関数 | **禁止** |
-| `admin.php` | 管理ツール。App クラス、handleEdit、REST API | **禁止** |
-
-### 1.2 TypeScript 開発規約
+### 1.2 JavaScript 開発規約
 
 - **TypeScript を全面的に採用する**。JavaScript の直接記述は禁止。
-- **TypeScript バージョンは 5 系に固定**（`~5.8`）。
+- **TypeScript バージョンは 5 系に固定**（`~5.8`）。メジャーバージョン 6 以降への更新は別途検討。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 - TypeScript ソースは `ts/` ディレクトリに配置する。
-- コンパイル済み JavaScript は `js/dist/` に出力される。
-- `js/dist/` 内のファイルを手動で編集してはならない。
-- ターゲット: ES2021。ライブラリ: ES2021, DOM, DOM.Iterable。
+- コンパイル済み JavaScript は `js/` に出力される。
+- `npm run build`（`tsc`）でコンパイルを実行する。
+- `js/` 内のファイルを手動編集を禁止する。
 
 ### 1.3 ビルド手順
 
@@ -48,9 +47,16 @@ npm run build     # TypeScript → JavaScript コンパイル
 
 ### 1.5 廃止ポリシー
 
-- 機能・形式の廃止時、**レガシーコードの互換性維持は行わない**。
-- 廃止決定後は該当コードを即座に削除する。
+- 機能・形式の廃止に伴う変更時、**レガシーソースコードの互換性維持は行わない**。
+- 廃止決定後は該当コード（分岐・フォールバック・変換ロジック等）を即座に削除する。
 - 旧形式データのマイグレーションは廃止時に一度だけ実施し、以降は旧形式を認識しない。
+
+### 1.6 ドキュメント命名規則
+
+- ドキュメントファイル名は**正式名称を大文字**で記述する。
+- 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
+- バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`, `RULEBOOK_Ver1.md`
 
 ---
 
@@ -71,7 +77,7 @@ Adlaire/
 │   ├── i18n.ts                #   多言語化モジュール
 │   ├── markdown.ts            #   Markdown→HTML コンバーター
 │   └── api.ts                 #   REST API クライアント
-├── js/dist/                   # コンパイル済み JavaScript（自動生成）
+├── js/                   # コンパイル済み JavaScript（自動生成）
 ├── data/lang/                 # 翻訳ファイル（JSON）
 │   ├── ja.json
 │   └── en.json
@@ -89,10 +95,14 @@ Adlaire/
 ├── package.json / tsconfig.json
 ├── CLAUDE.md                  # 開発規約（ルート配置）
 ├── README.md                  # プロジェクト説明（ルート配置）
+├── rulebookdocs/              # ルールブックドキュメントフォルダ
+│   ├── CHARTER.md             #   ルールブック憲章
+│   ├── RULEBOOK_Ver1.md       #   本ファイル（Ver.1.x 系、凍結）
+│   └── RULEBOOK_Ver2.md       #   Ver.2.x 系
 ├── docs/                      # ドキュメントフォルダ
-│   ├── RULEBOOK.md            #   本ファイル（絶対原則）
 │   ├── CHANGES.md             #   変更履歴
-│   └── RELEASE-NOTES.md       #   リリースノート
+│   └── RELEASENOTES.md        #   リリースノート
+├── themes/admin.css           # 管理 UI スタイルシート
 └── Licenses/
 ```
 
@@ -502,9 +512,10 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | 29 | i18n | 管理 UI ラベル（Dashboard, Pages, Edit 等）の翻訳対応 | 実装済 |
 | 30 | ドキュメント | RULEBOOK を Ver.1.7/1.8 の実装結果で更新 | 実装済 |
 
-### 9.3 Ver.1.9 — 1.0系最終版（バグ修正32件）
+### 9.3 Ver.1.9 — 1.0系最終版（バグ修正38件）
 
-バグ修正32件を実施し、1.0系の品質を確定。詳細は `docs/CHANGES.md` を参照。
+バグ修正38件（Ver.1.9-29 で32件 + Ver.1.9-30 で6件）を実施し、1.0系の品質を確定。
+詳細は `docs/CHANGES.md` を参照。
 
 ---
 

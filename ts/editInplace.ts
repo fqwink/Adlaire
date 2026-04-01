@@ -125,10 +125,14 @@ function renderMarkdownContent(): void {
 
 function renderBlocksContent(): void {
     document.querySelectorAll<HTMLElement>('.blocks-content').forEach(el => {
-        const blocksJson = el.dataset.blocks;
-        if (!blocksJson) return;
+        let raw = el.dataset.blocks || '';
+        const b64 = el.dataset.blocksB64;
+        if (b64) {
+            try { raw = atob(b64); } catch { /* empty */ }
+        }
+        if (!raw) return;
         try {
-            const blocks = JSON.parse(blocksJson);
+            const blocks = JSON.parse(raw);
             el.innerHTML = renderBlocks(blocks);
         } catch {
             // Leave content as-is on parse failure
