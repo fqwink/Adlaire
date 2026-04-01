@@ -25,9 +25,11 @@ function markdownToHtml(md) {
         footnotes[id] = text;
         return '';
     });
-    // Footnote references: [^id] → superscript link
+    // Footnote references: [^id] → superscript link (unique IDs per occurrence)
+    let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
-        return `<sup><a href="#fn-${id}" id="fnref-${id}">${id}</a></sup>`;
+        fnRefCount++;
+        return `<sup><a href="#fn-${id}" id="fnref-${id}-${fnRefCount}">${id}</a></sup>`;
     });
     // Headings (### > ## > #)
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
