@@ -56,8 +56,9 @@ final class FileStorage
                 mkdir($dir, 0755, true);
             }
         }
-        if (!is_dir('plugins')) {
-            mkdir('plugins', 0755, true);
+        $pluginsDir = dirname($this->basePath) . '/plugins';
+        if (!is_dir($pluginsDir)) {
+            mkdir($pluginsDir, 0755, true);
         }
     }
 
