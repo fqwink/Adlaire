@@ -804,12 +804,17 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    // CSRF token must be in URL query for JSON body requests
     csrf_verify();
 
     $input = file_get_contents('php://input');
     if ($input === false || $input === '') {
-        // Try form data
         $input = $_POST['data'] ?? '';
+    }
+
+    if ($input === '') {
+        apiError(400, 'Empty request body');
+        return;
     }
 
     $data = json_decode($input, true);
