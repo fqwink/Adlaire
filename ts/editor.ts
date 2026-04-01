@@ -81,6 +81,15 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
                     li.innerHTML = item;
+                    li.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const newLi = document.createElement('li');
+                            newLi.contentEditable = 'true';
+                            li.after(newLi);
+                            newLi.focus();
+                        }
+                    });
                     el.appendChild(li);
                 });
                 return el;
