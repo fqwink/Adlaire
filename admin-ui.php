@@ -64,7 +64,7 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
 <body>
 <div class="admin-wrap">
     <header class="admin-header">
-        <h1><?= esc($c['title']) ?> — Admin</h1>
+        <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= App::VERSION ?></small></h1>
         <div>
             <a href="./">← <?= esc($app->t('login')) === 'Login' ? 'View Site' : 'サイト表示' ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>

@@ -354,6 +354,7 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 
 ### 7.3 ダッシュボード (`?admin`)
 
+- **バージョン情報表示**: ヘッダーに `App::VERSION` を表示
 - ページ一覧テーブル: slug, format, status, updated_at, 操作（編集 / 削除）
 - 新規ページ作成ボタン
 - サイト設定パネル: タイトル, 説明, キーワード, コピーライト, メニュー, テーマ, 言語
