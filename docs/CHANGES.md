@@ -154,7 +154,7 @@
 * fieldSave: $.post を fetch API に置換
 * テーマテンプレートからjQuery CDN読み込みを削除
 * tsconfig.json / package.json によるビルド環境整備
-* コンパイル出力: js/dist/autosize.js, js/dist/editInplace.js
+* コンパイル出力: js/autosize.js, js/editInplace.js
 
 ## Ver.1.0-9 (2026-03-31)
 

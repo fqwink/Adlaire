@@ -58,6 +58,27 @@ npm run build     # TypeScript → JavaScript コンパイル
 - バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
 - 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`, `RULEBOOK_Ver1.md`
 
+### 1.7 ドキュメント配置
+
+- `CLAUDE.md` — 開発規約（プロジェクトルート）
+- `README.md` — プロジェクト説明（プロジェクトルート）
+- `rulebookdocs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
+  - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
+  - `rulebookdocs/RULEBOOK_Ver1.md` — ルールブック Ver.1.x 系（凍結）
+  - `rulebookdocs/RULEBOOK_Ver2.md` — ルールブック Ver.2.x 系（現行）
+  - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
+- `docs/` — ドキュメントフォルダ
+  - `docs/CHANGES.md` — 変更履歴
+  - `docs/RELEASENOTES.md` — リリースノート
+
+### 1.8 ルールブック管理方針
+
+- ルールブックは**メジャーバージョンごとに独立ファイル**で管理する。
+- `rulebookdocs/` フォルダ（プロジェクトルート直下）にルールブックを集約する。
+- 旧バージョンのルールブックは**凍結保存**し、変更しない。
+- 新バージョンのルールブックは旧版を基盤として策定する。
+- **ルールブックの策定が完了するまで、実装に着手してはならない。**
+
 ---
 
 ## 2. プロジェクト構成
