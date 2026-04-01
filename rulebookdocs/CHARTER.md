@@ -53,7 +53,7 @@
 - **TypeScript を全面的に採用**。JavaScript の直接記述は禁止。
 - **TypeScript バージョンは 5 系に固定**（`~5.8`）。
 - すべての JavaScript は TypeScript からのコンパイル生成を義務化。
-- ソース: `ts/` → 出力: `js/dist/`。
+- ソース: `ts/` → 出力: `js/`。
 
 ### 6.3 ビルド
 

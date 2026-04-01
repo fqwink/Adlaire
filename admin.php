@@ -392,7 +392,7 @@ final class App
             $scripts = ['markdown', 'editInplace'];
         }
         foreach ($scripts as $name) {
-            echo "\t<script src=\"js/dist/{$name}.js\"></script>\n";
+            echo "\t<script src=\"js/{$name}.js\"></script>\n";
         }
     }
 
@@ -1062,8 +1062,8 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <link rel="stylesheet" href="themes/{$theme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
-        <script src="js/dist/markdown.js"></script>
-        <script src="js/dist/editInplace.js"></script>
+        <script src="js/markdown.js"></script>
+        <script src="js/editInplace.js"></script>
     </head>
     <body>
         <nav id="nav">

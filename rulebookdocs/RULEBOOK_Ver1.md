@@ -27,8 +27,8 @@
 - **TypeScript バージョンは 5 系に固定**（`~5.8`）。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 - TypeScript ソースは `ts/` ディレクトリに配置する。
-- コンパイル済み JavaScript は `js/dist/` に出力される。
-- `js/dist/` 内のファイルを手動で編集してはならない。
+- コンパイル済み JavaScript は `js/` に出力される。
+- `js/` 内のファイルを手動で編集してはならない。
 - ターゲット: ES2021。ライブラリ: ES2021, DOM, DOM.Iterable。
 
 ### 1.3 ビルド手順
@@ -71,7 +71,7 @@ Adlaire/
 │   ├── i18n.ts                #   多言語化モジュール
 │   ├── markdown.ts            #   Markdown→HTML コンバーター
 │   └── api.ts                 #   REST API クライアント
-├── js/dist/                   # コンパイル済み JavaScript（自動生成）
+├── js/                   # コンパイル済み JavaScript（自動生成）
 ├── data/lang/                 # 翻訳ファイル（JSON）
 │   ├── ja.json
 │   └── en.json
