@@ -24,6 +24,7 @@
     "click_to_edit": "Click to edit!",
     "credit": "Powered by <a href=\"\">Adlaire Platform</a>",
     "permission_error": "Set 755 permission to the files folder.",
+    "login_rate_limited": "Too many login attempts. Please wait a few minutes.",
     "settings_format": "Page format",
     "format_html": "HTML",
     "format_markdown": "Markdown"

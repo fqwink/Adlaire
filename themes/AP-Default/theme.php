@@ -13,12 +13,7 @@ $host = $app->host;
 	<link rel="stylesheet" href="themes/<?= esc($c['themeSelect']) ?>/style.css">
 	<meta name="description" content="<?= esc($c['description']) ?>">
 	<meta name="keywords" content="<?= esc($c['keywords']) ?>">
-	<script src="js/dist/autosize.js"></script>
-	<script src="js/dist/markdown.js"></script>
-	<script src="js/dist/i18n.js"></script>
-	<script src="js/dist/api.js"></script>
-	<script src="js/dist/editor.js"></script>
-	<script src="js/dist/editInplace.js"></script>
+<?php $app->scriptTags(); ?>
 <?php $app->editTags(); ?>
 </head>
 <body>

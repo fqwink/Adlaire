@@ -214,4 +214,9 @@ footer p{
 	#nav ul{margin:0;}
 	#wrapper{margin: 5%;}
 	#side{margin: 5%;}
+	.ce-block__toolbar{opacity:1;flex-direction:row;margin-right:0;margin-bottom:4px;}
+	.ce-block{flex-direction:column;}
+	.ce-toolbox{flex-wrap:wrap;margin-left:0;}
+	.ce-format-bar{flex-wrap:wrap;}
+	.ce-inline-toolbar{position:fixed;bottom:0;left:0;right:0;top:auto;justify-content:center;border-radius:0;}
 }

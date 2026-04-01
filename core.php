@@ -493,7 +493,7 @@ final class FileStorage
             return false;
         }
 
-        $format = $data['format'] ?? 'html';
+        $format = $data['format'] ?? 'blocks';
         $blocks = $data['blocks'] ?? null;
         $status = $data['status'] ?? 'published';
         return $this->writePage($slug, $data['content'], $format, $blocks, $status);
@@ -509,9 +509,7 @@ function esc(string $value): string
 
 function csrf_token(): string
 {
-    if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
     return $_SESSION['csrf'];
 }
 
@@ -523,4 +521,31 @@ function csrf_verify(): void
         header('HTTP/1.1 403 Forbidden');
         exit;
     }
+    // Regenerate token after successful verification (one-time use)
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+
+/**
+ * Rate limiting for login attempts.
+ * @return bool true if attempt is allowed, false if rate-limited
+ */
+function login_rate_check(): bool
+{
+    $maxAttempts = 5;
+    $windowSeconds = 300; // 5 minutes
+    $now = time();
+
+    $_SESSION['login_attempts'] ??= [];
+    // Prune old attempts
+    $_SESSION['login_attempts'] = array_filter(
+        $_SESSION['login_attempts'],
+        fn(int $t) => ($now - $t) < $windowSeconds
+    );
+
+    if (count($_SESSION['login_attempts']) >= $maxAttempts) {
+        return false;
+    }
+
+    $_SESSION['login_attempts'][] = $now;
+    return true;
 }

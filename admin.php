@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 5;
-    public const VERSION_BUILD = 23;
-    public const VERSION = 'Ver.1.5-23';
+    public const VERSION_BUILD = 24;
+    public const VERSION = 'Ver.1.5-24';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -66,19 +66,24 @@ final class App
             ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
             : '';
 
-        $host = $_SERVER['HTTP_HOST'];
-        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'])) ?? '';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        // Whitelist: host must be valid hostname/IP with optional port
+        if (!preg_match('/^[a-zA-Z0-9.\-:]+(:\d+)?$/', $httpHost)) {
+            $httpHost = 'localhost';
+        }
+
+        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'] ?? '/')) ?? '/';
 
         $host = ($rp !== '' && str_contains($uri, $rp))
-            ? $host . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
-            : $host . '/' . $uri;
+            ? $httpHost . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
+            : $httpHost . '/' . $uri;
 
         $host = explode('?', $host)[0];
-        $host = '//' . str_replace('//', '/', $host);
+        $host = '//' . preg_replace('#/+#', '/', $host);
 
-        $strip = ['index.php', '?', '"', "'", '>', '<', '=', '(', ')', '\\'];
-        $rp = strip_tags(str_replace($strip, '', $rp));
-        $host = strip_tags(str_replace($strip, '', $host));
+        // Sanitize request page: allow only slug-safe characters and slashes
+        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rp = trim($rp, '/');
 
         return [$host, $rp];
     }
@@ -311,6 +316,10 @@ final class App
     {
         csrf_verify();
 
+        if (!login_rate_check()) {
+            return $this->t('login_rate_limited');
+        }
+
         $stored = $this->config['password'];
         $input = $_POST['password'] ?? '';
 
@@ -361,11 +370,23 @@ final class App
         $token = csrf_token();
         $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
         $safeLang = json_encode($this->language);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'html');
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks');
         echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
             echo "\t{$tag}\n";
+        }
+    }
+
+    /**
+     * Output script tags for all compiled JS modules.
+     * Centralizes JS loading so themes don't need to list scripts manually.
+     */
+    public function scriptTags(): void
+    {
+        $scripts = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
+        foreach ($scripts as $name) {
+            echo "\t<script src=\"js/dist/{$name}.js\"></script>\n";
         }
     }
 
