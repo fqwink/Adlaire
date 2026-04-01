@@ -257,10 +257,6 @@ final class FileStorage
 
         $existing = $this->readPageData($slug);
         $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
-        // Preserve status if not explicitly changed
-        if ($existing !== false && isset($existing['status'])) {
-            $status = $existing['status'];
-        }
 
         // Save revision before overwriting
         if ($existing !== false) {

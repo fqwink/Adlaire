@@ -508,7 +508,9 @@ function handleEdit(): void
         // Preserve existing page format when editing inline
         $existing = $storage->readPageData($fieldname);
         $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'html';
-        $result = $storage->writePage($fieldname, $content, $format);
+        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
+        $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
+        $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
     }
 
     if (!$result) {
@@ -632,11 +634,6 @@ function apiPageSave(FileStorage $storage): void
     if (!$result) {
         apiError(500, 'Write failed');
         return;
-    }
-
-    // Update status if explicitly provided and page already exists
-    if (isset($_POST['status'])) {
-        $storage->updatePageStatus($slug, $status);
     }
 
     echo json_encode(['status' => 'ok', 'slug' => $slug]);
