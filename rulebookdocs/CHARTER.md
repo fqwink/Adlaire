@@ -19,7 +19,6 @@
 | `rulebookdocs/CHARTER.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
 | `rulebookdocs/RULEBOOK_Ver1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-30） |
 | `rulebookdocs/RULEBOOK_Ver2.md` | ルールブック Ver.2.x 系（現行策定中） |
-| `rulebookdocs/BUNDLE_INSTALLER_SPEC.md` | Ver.2.0 セットアップツール仕様書 |
 
 ## 3. バージョン管理方針
 

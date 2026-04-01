@@ -16,11 +16,11 @@ Ver.1.x のアーキテクチャ仕様（セクション1）を継承する。
 
 ---
 
-## 2. Ver.1.x からの変更点
+## 2. Ver.2.0 仕様
 
-### 2.1 ファイル構成（暫定 — Ver.2.0 確定後に更新）
+### 2.1 ファイル構成
 
-Ver.1.x からの継承:
+Ver.1.x からの継承 + Ver.2.0 追加ファイル:
 
 | ファイル | 役割 | 直接HTTPアクセス |
 |---------|------|:---:|
@@ -28,6 +28,87 @@ Ver.1.x からの継承:
 | `core.php` | FileStorage・ヘルパー関数 | **禁止** |
 | `admin.php` | App クラス・REST API | **禁止** |
 | `admin-ui.php` | 管理 UI テンプレート | **禁止** |
+| `bundle-installer.php` | **[Ver.2.0 新規]** セットアップツール（初期導入後に削除） | 許可（初回のみ） |
+| `release-manifest.json` | **[Ver.2.0 新規]** 配布バンドル整合性検証用マニフェスト | **禁止** |
+| `VERSION` | **[Ver.2.0 新規]** バージョン情報ファイル | **禁止** |
+
+### 2.2 セットアップツール（bundle-installer.php）
+
+> 詳細仕様は今後策定する。
+
+**概要**: 公式リリースZIP専用の検証付き初期セットアップツール。1ファイルで完結。
+
+**画面フロー**:
+1. Welcome / Release Check — バンドル検証、バージョン表示
+2. Environment Check — PHP 8.3+、`files/` 書き込み権限、必須ファイル確認
+3. Site Configuration — サイト名、言語、タイムゾーン、管理者アカウント作成
+4. Install Execution — 設定保存、管理者作成、install.lock 生成
+5. Finish / Security Notice — 完了通知、`?login` / `?admin` 導線、削除案内
+
+**セキュリティ要件**:
+- CSRF対策（全POSTステップ）
+- パスワードは bcrypt ハッシュ保存
+- HTML出力はエスケープ
+- install.lock による再実行防止
+- 完了後のインストーラー削除案内
+
+### 2.3 アップデートシステム
+
+> 詳細未定。Ver.2.0 MVP 後に策定予定。
+
+**方針**（暫定）:
+- 管理 UI (`?admin`) からバージョン確認・更新を実行
+- `VERSION` ファイルで現在のバージョンを管理
+- 更新は `release-manifest.json` で整合性検証
+- コアファイルの上書き + マイグレーション実行
+- 更新前に自動バックアップ
+
+**非スコープ（Ver.2.0 MVP）**:
+- 自動ダウンロード
+- 差分パッチ
+- ロールバック機能
+
+### 2.4 データ仕様（Ver.1.x からの差分）
+
+Ver.1.x のデータ仕様を継承し、以下を追加:
+
+#### install.lock (`files/system/install.lock`)
+
+```json
+{
+    "installed": true,
+    "product": "Adlaire",
+    "version": "2.0.0",
+    "installed_at": "ISO 8601",
+    "installer": "bundle-installer.php",
+    "installer_version": "1.0.0"
+}
+```
+
+#### release-manifest.json
+
+```json
+{
+    "product": "Adlaire",
+    "channel": "release",
+    "version": "2.0.0",
+    "bundle_format": 1,
+    "required_files": [
+        "index.php", "core.php", "admin.php", "admin-ui.php",
+        ".htaccess", "themes", "data/lang", "js"
+    ],
+    "checksums": {
+        "index.php": "sha256:...",
+        "core.php": "sha256:..."
+    }
+}
+```
+
+#### VERSION
+
+```
+2.0.0
+```
 
 ---
 
@@ -35,20 +116,14 @@ Ver.1.x からの継承:
 
 ### 3.1 Ver.2.0 — セットアップツール・アップデートシステム
 
-> セットアップツールの詳細仕様は `BUNDLE_INSTALLER_SPEC.md` を参照。
-
 | # | 新機能 | 状態 |
 |---|--------|:----:|
-| 1 | セットアップツール（`bundle-installer.php` — 初期設定ウィザード） | 仕様策定済 |
-| 2 | アップデートシステム（バージョン更新機能） | 詳細未定 |
+| 1 | セットアップツール（`bundle-installer.php`） | 詳細未定 |
+| 2 | アップデートシステム（バージョン更新機能） | 方針策定済（詳細はMVP後） |
 
 ### 3.2 Ver.2.1 — Ver.2.0 機能改良・バグ修正
 
-> Ver.2.0 リリース後に策定する。Ver.2.0 の機能改良とバグ修正を主体とする。
-
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| — | Ver.2.0 リリース後に策定 | 未策定 |
+> Ver.2.0 リリース後に策定する。
 
 ### 3.3 Ver.2.2 — セキュリティ・パフォーマンス
 
@@ -62,7 +137,7 @@ Ver.1.x からの継承:
 
 ### 3.4 Ver.2.3 — アーキテクチャ刷新
 
-> 検討中であり、再検討予定。Ver.2.2 リリース後に具体的な設計を決定する。
+> 検討中。Ver.2.2 リリース後に再検討。
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
@@ -108,7 +183,6 @@ Ver.1.x からの継承:
 Ver.2.x のベース仕様は Ver.1.x（`RULEBOOK_Ver1.md`）を継承する。
 以下のセクションは Ver.1.x と同一:
 
-- データ仕様（セクション3）
 - PHP API 仕様（セクション4）
 - REST API 仕様（セクション5）
 - TypeScript モジュール仕様（セクション6）
