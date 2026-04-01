@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 3;
-    public const VERSION_BUILD = 17;
-    public const VERSION = 'Ver.1.3-17';
+    public const VERSION_MINOR = 4;
+    public const VERSION_BUILD = 18;
+    public const VERSION = 'Ver.1.4-18';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -213,6 +213,7 @@ final class App
         }
         $this->config['page'] = self::getSlug($this->config['page']);
         $this->config['pageFormat'] = 'html';
+        $this->config['pageStatus'] = 'published';
 
         if (isset($_REQUEST['login'])) {
             return;
@@ -221,8 +222,18 @@ final class App
         $pageData = $this->storage->readPageData($this->config['page']);
 
         if ($pageData !== false) {
+            $isDraft = ($pageData['status'] ?? 'published') === 'draft';
+            if ($isDraft && !$this->isLoggedIn()) {
+                header('HTTP/1.1 404 Not Found');
+                $this->config['content'] = $this->defaults['new_page']['visitor'];
+                return;
+            }
             $this->config['content'] = $pageData['content'];
             $this->config['pageFormat'] = $pageData['format'] ?? 'html';
+            $this->config['pageStatus'] = $pageData['status'] ?? 'published';
+            if (isset($pageData['blocks'])) {
+                $this->config['pageBlocks'] = $pageData['blocks'];
+            }
             return;
         }
 
@@ -374,11 +385,9 @@ final class App
             $safeTitle = esc($this->defaults['content']);
 
             if ($isBlocks) {
-                // Block editor: render as container div with block data
                 $blocksJson = '';
-                $pageData = $this->storage->readPageData($this->config['page']);
-                if ($pageData !== false && isset($pageData['blocks'])) {
-                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                if (isset($this->config['pageBlocks'])) {
+                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
             } else {
@@ -387,11 +396,9 @@ final class App
             }
         } else {
             if ($isBlocks) {
-                // Visitor: render blocks via JS
-                $pageData = $this->storage->readPageData($this->config['page']);
                 $blocksJson = '';
-                if ($pageData !== false && isset($pageData['blocks'])) {
-                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                if (isset($this->config['pageBlocks'])) {
+                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
             } elseif ($isMarkdown) {
@@ -501,7 +508,9 @@ function handleEdit(): void
         // Preserve existing page format when editing inline
         $existing = $storage->readPageData($fieldname);
         $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'html';
-        $result = $storage->writePage($fieldname, $content, $format);
+        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
+        $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
+        $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
     }
 
     if (!$result) {
@@ -522,21 +531,35 @@ function handleApi(): void
         return;
     }
 
+    $storage = new FileStorage('files');
+    $method = $_SERVER['REQUEST_METHOD'];
+
+    // Sitemap uses XML content type — handle before JSON header
+    if ($endpoint === 'sitemap') {
+        handleApiSitemap($storage);
+        exit;
+    }
+
     header('Content-Type: application/json; charset=UTF-8');
 
-    // Authentication required for all API calls
+    // Public endpoints (no authentication)
+    if ($endpoint === 'search') {
+        handleApiSearch($storage);
+        exit;
+    }
+
+    // Authenticated endpoints
     if (!isset($_SESSION['l'])) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
     }
 
-    $storage = new FileStorage('files');
-    $method = $_SERVER['REQUEST_METHOD'];
-
     match ($endpoint) {
         'pages'     => handleApiPages($storage, $method),
         'revisions' => handleApiRevisions($storage, $method),
+        'export'    => handleApiExport($storage),
+        'import'    => handleApiImport($storage),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -564,6 +587,7 @@ function apiPageList(FileStorage $storage): void
     foreach ($pages as $slug => $data) {
         $summary[$slug] = [
             'format'     => $data['format'] ?? 'html',
+            'status'     => $data['status'] ?? 'published',
             'created_at' => $data['created_at'],
             'updated_at' => $data['updated_at'],
         ];
@@ -608,7 +632,8 @@ function apiPageSave(FileStorage $storage): void
         }
     }
 
-    $result = $storage->writePage($slug, $content, $format, $blocks);
+    $status = $_POST['status'] ?? 'published';
+    $result = $storage->writePage($slug, $content, $format, $blocks, $status);
     if (!$result) {
         apiError(500, 'Write failed');
         return;
@@ -673,6 +698,153 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
     }
 
     echo json_encode(['status' => 'ok', 'restored' => $slug, 'timestamp' => $timestamp]);
+}
+
+// --- Search API ---
+
+function handleApiSearch(FileStorage $storage): void
+{
+    $query = $_REQUEST['q'] ?? '';
+    if ($query === '') {
+        echo json_encode(['results' => []]);
+        return;
+    }
+
+    $query = mb_strtolower($query, 'UTF-8');
+    $pages = $storage->listPublishedPages();
+    $results = [];
+
+    foreach ($pages as $slug => $data) {
+        $content = mb_strtolower($data['content'] ?? '', 'UTF-8');
+        $pos = mb_strpos($content, $query, 0, 'UTF-8');
+        if ($pos === false) {
+            continue;
+        }
+
+        // Extract snippet around match
+        $start = max(0, $pos - 40);
+        $snippet = mb_substr($data['content'], $start, 120, 'UTF-8');
+        if ($start > 0) {
+            $snippet = '...' . $snippet;
+        }
+
+        $results[] = [
+            'slug'       => $slug,
+            'snippet'    => $snippet,
+            'format'     => $data['format'] ?? 'html',
+            'status'     => $data['status'] ?? 'published',
+            'updated_at' => $data['updated_at'],
+        ];
+    }
+
+    echo json_encode(['query' => $_REQUEST['q'], 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+// --- Sitemap API ---
+
+function handleApiSitemap(FileStorage $storage): void
+{
+    header('Content-Type: application/xml; charset=UTF-8');
+
+    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+    $basePath = dirname($_SERVER['SCRIPT_NAME']);
+    if ($basePath === '/') {
+        $basePath = '';
+    }
+
+    $pages = $storage->listPublishedPages();
+
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+
+    // Home page
+    $xml .= "  <url>\n";
+    $xml .= "    <loc>{$host}{$basePath}/</loc>\n";
+    $xml .= "    <changefreq>weekly</changefreq>\n";
+    $xml .= "  </url>\n";
+
+    foreach ($pages as $slug => $data) {
+        $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
+        $lastmod = substr($data['updated_at'], 0, 10); // YYYY-MM-DD
+        $xml .= "  <url>\n";
+        $xml .= "    <loc>{$loc}</loc>\n";
+        $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+        $xml .= "  </url>\n";
+    }
+
+    $xml .= '</urlset>';
+    echo $xml;
+}
+
+// --- Export API ---
+
+function handleApiExport(FileStorage $storage): void
+{
+    $config = $storage->readConfig();
+    unset($config['password']);
+
+    $export = [
+        'version'   => App::VERSION,
+        'exported_at' => date('c'),
+        'config'    => $config,
+        'pages'     => $storage->listPages(),
+    ];
+
+    header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
+    echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+// --- Import API ---
+
+function handleApiImport(FileStorage $storage): void
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
+    csrf_verify();
+
+    $input = file_get_contents('php://input');
+    if ($input === false || $input === '') {
+        // Try form data
+        $input = $_POST['data'] ?? '';
+    }
+
+    $data = json_decode($input, true);
+    if (!is_array($data)) {
+        apiError(400, 'Invalid JSON');
+        return;
+    }
+
+    $imported = ['config' => false, 'pages' => 0];
+
+    // Import config
+    if (isset($data['config']) && is_array($data['config'])) {
+        // Don't overwrite password on import
+        unset($data['config']['password']);
+        if ($data['config'] !== []) {
+            $storage->writeConfig($data['config']);
+            $imported['config'] = true;
+        }
+    }
+
+    // Import pages
+    if (isset($data['pages']) && is_array($data['pages'])) {
+        foreach ($data['pages'] as $slug => $pageData) {
+            if (!FileStorage::validateSlug($slug) || !isset($pageData['content'])) {
+                continue;
+            }
+            $format = $pageData['format'] ?? 'html';
+            $blocks = $pageData['blocks'] ?? null;
+            $status = $pageData['status'] ?? 'published';
+            $storage->writePage($slug, $pageData['content'], $format, $blocks, $status);
+            $imported['pages']++;
+        }
+    }
+
+    echo json_encode(['status' => 'ok', 'imported' => $imported]);
 }
 
 function apiError(int $code, string $message): void
