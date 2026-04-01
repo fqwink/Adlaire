@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 19;
-    public const VERSION = 'Ver.1.4-19';
+    public const VERSION_BUILD = 20;
+    public const VERSION = 'Ver.1.4-20';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -383,6 +383,18 @@ final class App
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
             $safeTitle = esc($this->defaults['content']);
+
+            // Format switcher toolbar (page content only)
+            if ($isPage) {
+                $formats = ['html' => 'HTML', 'markdown' => 'Markdown', 'blocks' => 'Blocks'];
+                echo "<div class='ce-format-bar' data-slug='{$safeId}'>";
+                foreach ($formats as $fmt => $label) {
+                    $active = ($fmt === $format) ? ' class="active"' : '';
+                    $safeFmt = esc($fmt);
+                    echo "<button{$active} data-format='{$safeFmt}'>{$label}</button>";
+                }
+                echo "</div>";
+            }
 
             if ($isBlocks) {
                 $blocksJson = '';

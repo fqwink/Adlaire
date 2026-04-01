@@ -102,6 +102,12 @@ span.editText textarea{
 	background-color: transparent;
 }
 
+/* Format Switcher */
+.ce-format-bar{display:flex;gap:4px;margin-bottom:8px;padding:4px 0;}
+.ce-format-bar button{background:#1f2b33;color:#888;border:1px solid #333;padding:4px 12px;border-radius:3px;cursor:pointer;font-size:12px;text-transform:uppercase;}
+.ce-format-bar button.active{background:#1ab;color:#fff;border-color:#1ab;}
+.ce-format-bar button:hover:not(.active){color:#fff;}
+
 /* Block Editor */
 .ce-editor{position:relative;}
 .ce-block{display:flex;align-items:flex-start;margin:4px 0;position:relative;}
