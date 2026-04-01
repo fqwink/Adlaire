@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 20;
-    public const VERSION = 'Ver.1.4-20';
+    public const VERSION_BUILD = 21;
+    public const VERSION = 'Ver.1.4-21';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -375,21 +375,21 @@ final class App
 
     public function content(string $id, string $content): void
     {
-        $format = $this->config['pageFormat'] ?? 'html';
+        $format = $this->config['pageFormat'] ?? 'blocks';
         $isPage = ($id === $this->config['page']);
         $isMarkdown = ($format === 'markdown' && $isPage);
-        $isBlocks = ($format === 'blocks' && $isPage);
+        $isBlocks = (($format === 'blocks' || $format === 'html') && $isPage);
 
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
-            $safeTitle = esc($this->defaults['content']);
 
             // Format switcher toolbar (page content only)
             if ($isPage) {
-                $formats = ['html' => 'HTML', 'markdown' => 'Markdown', 'blocks' => 'Blocks'];
+                $formats = ['blocks' => 'Blocks', 'markdown' => 'Markdown'];
+                $displayFormat = ($format === 'html') ? 'blocks' : $format;
                 echo "<div class='ce-format-bar' data-slug='{$safeId}'>";
                 foreach ($formats as $fmt => $label) {
-                    $active = ($fmt === $format) ? ' class="active"' : '';
+                    $active = ($fmt === $displayFormat) ? ' class="active"' : '';
                     $safeFmt = esc($fmt);
                     echo "<button{$active} data-format='{$safeFmt}'>{$label}</button>";
                 }
@@ -397,20 +397,32 @@ final class App
             }
 
             if ($isBlocks) {
+                // Block editor for page content (also handles legacy html pages)
                 $blocksJson = '';
                 if (isset($this->config['pageBlocks'])) {
                     $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
+                } elseif ($content !== '') {
+                    // Legacy HTML content — convert to single paragraph block for editing
+                    $legacyBlocks = [['type' => 'paragraph', 'data' => ['text' => $content]]];
+                    $blocksJson = esc(json_encode($legacyBlocks, JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
+            } elseif ($isMarkdown) {
+                $safeTitle = esc($this->defaults['content'] ?? '');
+                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText' data-format='markdown'>{$content}</span>";
             } else {
-                $formatAttr = $isMarkdown ? " data-format='markdown'" : '';
-                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
+                // Non-page content (sidebar etc.) — keep editable span
+                $safeTitle = esc($this->defaults['content'] ?? '');
+                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
             }
         } else {
             if ($isBlocks) {
                 $blocksJson = '';
                 if (isset($this->config['pageBlocks'])) {
                     $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
+                } elseif ($content !== '') {
+                    echo $content;
+                    return;
                 }
                 echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
             } elseif ($isMarkdown) {
