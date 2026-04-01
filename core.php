@@ -492,7 +492,9 @@ final class FileStorage
         }
 
         $format = $data['format'] ?? 'html';
-        return $this->writePage($slug, $data['content'], $format);
+        $blocks = $data['blocks'] ?? null;
+        $status = $data['status'] ?? 'published';
+        return $this->writePage($slug, $data['content'], $format, $blocks, $status);
     }
 }
 
