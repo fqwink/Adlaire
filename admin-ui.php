@@ -66,7 +66,7 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
     <header class="admin-header">
         <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= App::VERSION ?></small></h1>
         <div>
-            <a href="./">← <?= esc($app->t('login')) === 'Login' ? 'View Site' : 'サイト表示' ?></a>
+            <a href="./">← <?= $app->language === 'en' ? 'View Site' : 'サイト表示' ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>
         </div>
     </header>
@@ -92,6 +92,8 @@ match ($adminAction) {
 function renderAdminDashboard(App $app): void
 {
     $pages = $app->storage->listPages();
+    // Sort by updated_at descending
+    uasort($pages, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
 
     // --- Page List ---
     echo '<section class="admin-section">';
@@ -110,7 +112,7 @@ function renderAdminDashboard(App $app): void
         echo "<td>{$format}</td>";
         echo "<td class='{$statusClass}'>{$status}</td>";
         echo "<td>{$updated}</td>";
-        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>Edit</a><a href='{$safeSlug}' target='_blank'>View</a></td>";
+        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>Edit</a><a href='{$safeSlug}' target='_blank'>View</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' onclick='deletePage(\"{$safeSlug}\");return false;'>Delete</a></td>";
         echo "</tr>";
     }
     if (empty($pages)) {
@@ -171,10 +173,21 @@ function renderAdminDashboard(App $app): void
     // Export/Import/Generate
     echo '<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">';
     echo '<a class="admin-btn admin-btn--outline" href="?api=export">Export</a>';
+    echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">Import <input type="file" accept=".json" style="display:none;" onchange="importSite(this)"></label>';
     echo '<button class="admin-btn" onclick="generateSite()">Generate Static Site</button>';
     echo '</div>';
+    echo '<div id="import-result" style="margin-top:4px;font-size:13px;"></div>';
     echo '<div id="generate-result" style="margin-top:8px;font-size:13px;"></div>';
     echo '<script>';
+    echo 'function importSite(input){';
+    echo 'var file=input.files[0];if(!file)return;';
+    echo 'var reader=new FileReader();reader.onload=function(){';
+    echo 'api.importSite(reader.result).then(function(r){';
+    echo 'document.getElementById("import-result").textContent="Imported: config="+r.config+", pages="+r.pages;';
+    echo 'document.getElementById("import-result").style.color="#0a0";';
+    echo 'setTimeout(function(){location.reload();},1500);';
+    echo '}).catch(function(e){document.getElementById("import-result").textContent="Error: "+e.message;document.getElementById("import-result").style.color="#c00";});';
+    echo '};reader.readAsText(file);}';
     echo 'function generateSite(){';
     echo 'var el=document.getElementById("generate-result");';
     echo 'el.textContent="Generating...";el.style.color="#f90";';
@@ -183,6 +196,13 @@ function renderAdminDashboard(App $app): void
     echo '.then(function(r){return r.json();})';
     echo '.then(function(d){if(d.status==="ok"){el.textContent="Generated "+d.pages+" pages to "+d.output;el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
     echo '.catch(function(e){el.textContent="Error: "+e.message;el.style.color="#c00";});';
+    echo '}';
+    echo '</script>';
+
+    echo '<script>';
+    echo 'function deletePage(slug){';
+    echo 'if(!confirm("Delete page: "+slug+"?"))return;';
+    echo 'api.deletePage(slug).then(function(){location.reload();}).catch(function(e){alert("Error: "+e.message);});';
     echo '}';
     echo '</script>';
 
@@ -201,9 +221,9 @@ function renderAdminEditor(App $app): void
     $format = $pageData['format'] ?? 'blocks';
     $status = $pageData['status'] ?? 'published';
     $content = $pageData['content'] ?? '';
-    $blocksJson = '';
+    $blocksB64 = '';
     if (isset($pageData['blocks'])) {
-        $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+        $blocksB64 = base64_encode(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
     }
 
     $safeSlug = esc($slug);
@@ -222,9 +242,7 @@ function renderAdminEditor(App $app): void
     }
     echo "</div>";
 
-    // Status
-    echo "<select onchange='api.savePage(\"{$safeSlug}\", \"\", \"" . esc($format) . "\").catch(()=>{});fieldSave(\"" . $safeSlug . "_status\",this.value);location.reload();' style='display:none;'>";
-    echo "</select>";
+    // Status toggle
     $pubSelected = $status === 'published' ? ' selected' : '';
     $draftSelected = $status === 'draft' ? ' selected' : '';
     echo "<label style='font-size:13px;'>Status: </label>";
@@ -235,17 +253,19 @@ function renderAdminEditor(App $app): void
     echo "<button class='admin-btn' id='save-status-btn' style='font-size:12px;padding:4px 12px;'>Save Status</button>";
     echo "<script>document.getElementById('save-status-btn').addEventListener('click',function(){";
     echo "var s=document.getElementById('status-select').value;";
-    echo "api.savePage('" . $safeSlug . "','" . esc(json_encode($pageData['blocks'] ?? [], JSON_UNESCAPED_UNICODE)) . "','blocks').then(function(){";
-    echo "fetch('index.php?api=pages',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},";
-    echo "body:'slug={$safeSlug}&content=&format={$format}&status='+s+'&csrf='+csrfToken}).then(function(){location.reload();});";
-    echo "});});</script>";
+    echo "var body=new URLSearchParams();";
+    echo "body.append('slug','{$safeSlug}');body.append('status',s);body.append('csrf',csrfToken);";
+    echo "body.append('content','');body.append('format','" . esc($format) . "');";
+    echo "fetch('index.php?api=pages',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
+    echo ".then(function(r){return r.json();}).then(function(){location.reload();});";
+    echo "});</script>";
 
     echo "</div>";
 
     // Editor area
     if ($format === 'blocks') {
         echo "<div class='admin-editor-area'>";
-        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
+        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='{$blocksB64}'></div>";
         echo "</div>";
     } elseif ($format === 'markdown') {
         echo "<div class='admin-editor-area'>";
@@ -272,7 +292,6 @@ function renderAdminEditor(App $app): void
 
 function renderAdminNewPage(App $app): void
 {
-    $csrf = csrf_token();
     echo "<section class='admin-section'>";
     echo "<h2>New Page</h2>";
     echo "<div class='admin-form'>";

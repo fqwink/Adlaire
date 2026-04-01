@@ -5,6 +5,12 @@
  *
  * Requires: csrfToken global variable set by PHP.
  */
+function updateCsrfFromResponse(res) {
+    const newToken = res.headers.get('X-CSRF-Token');
+    if (newToken) {
+        window.csrfToken = newToken;
+    }
+}
 const api = {
     /**
      * List all pages (metadata only, no content).
@@ -31,7 +37,7 @@ const api = {
     /**
      * Create or update a page.
      */
-    async savePage(slug, content, format = 'html') {
+    async savePage(slug, content, format = 'blocks') {
         const body = new URLSearchParams();
         body.append('slug', slug);
         body.append('content', content);
@@ -45,8 +51,9 @@ const api = {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
         });
-        const json = await res.json();
+        updateCsrfFromResponse(res);
         if (!res.ok) {
+            const json = await res.json();
             throw new Error(json.error);
         }
     },
@@ -57,8 +64,9 @@ const api = {
         const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}&csrf=${encodeURIComponent(csrfToken)}`, {
             method: 'DELETE',
         });
-        const json = await res.json();
+        updateCsrfFromResponse(res);
         if (!res.ok) {
+            const json = await res.json();
             throw new Error(json.error);
         }
     },

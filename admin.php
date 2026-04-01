@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 6;
-    public const VERSION_BUILD = 26;
-    public const VERSION = 'Ver.1.6-26';
+    public const VERSION_MINOR = 7;
+    public const VERSION_BUILD = 27;
+    public const VERSION = 'Ver.1.7-27';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -434,50 +434,6 @@ final class App
         echo '</ul>';
     }
 
-    public function settings(): void
-    {
-        $settingsLabel = esc($this->t('settings'));
-        $themeLabel = esc($this->t('settings_theme'));
-        $menuLabel = esc($this->t('settings_menu'));
-        $menuHint = $this->t('settings_menu_hint');
-        $langLabel = esc($this->t('settings_language'));
-
-        echo "<div class='settings'>
-        <h3 class='toggle'>↕ {$settingsLabel} ↕</h3>
-        <div class='hide'>
-        <div class='change border'><b>{$themeLabel}</b>&nbsp;<span id='themeSelect'><select name='themeSelect' onchange='fieldSave(\"themeSelect\",this.value);'>";
-
-        $themesDir = __DIR__ . '/themes';
-        if (is_dir($themesDir)) {
-            $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
-            if (is_array($dirs)) {
-                foreach ($dirs as $dir) {
-                    $val = basename($dir);
-                    $safeVal = esc($val);
-                    $selected = ($val === $this->config['themeSelect']) ? ' selected' : '';
-                    echo "<option value=\"{$safeVal}\"{$selected}>{$safeVal}</option>\n";
-                }
-            }
-        }
-
-        echo "</select></span></div>";
-
-        echo "<div class='change border'><b>{$langLabel}</b>&nbsp;<select onchange='fieldSave(\"language\",this.value);'>";
-        foreach (['ja' => '日本語', 'en' => 'English'] as $code => $label) {
-            $selected = ($code === $this->language) ? ' selected' : '';
-            echo "<option value=\"{$code}\"{$selected}>{$label}</option>";
-        }
-        echo "</select></div>";
-
-        echo "<div class='change border'><b>{$menuLabel} <small>({$menuHint})</small></b><span id='menu' title='Home' class='editText'>{$this->config['menu']}</span></div>";
-
-        foreach (['title', 'description', 'keywords', 'copyright'] as $key) {
-            $safeDefault = esc((string) ($this->defaults[$key] ?? ''));
-            $safeValue = esc((string) ($this->config[$key] ?? ''));
-            echo "<div class='change border'><span title='{$safeDefault}' id='{$key}' class='editText'>{$safeValue}</span></div>";
-        }
-        echo '</div></div>';
-    }
 }
 
 // --- Admin edit handler ---
@@ -527,6 +483,8 @@ function handleEdit(): void
         exit;
     }
 
+    // Return new CSRF token for subsequent requests (one-time token)
+    header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
     echo $content;
     exit;
 }
@@ -551,6 +509,7 @@ function handleApi(): void
 
     header('Content-Type: application/json; charset=UTF-8');
     header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_HOST'] ?? 'null'));
+    header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
 
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
@@ -1006,8 +965,8 @@ function renderBlocksToHtml(array $blocks): string
         $d = $block['data'] ?? [];
         $html .= match ($block['type'] ?? '') {
             'paragraph' => '<p>' . ($d['text'] ?? '') . '</p>',
-            'heading'   => '<h' . max(1, min(3, (int) ($d['level'] ?? 2))) . '>' . ($d['text'] ?? '') . '</h' . max(1, min(3, (int) ($d['level'] ?? 2))) . '>',
-            'list'      => '<' . (($d['style'] ?? '') === 'ordered' ? 'ol' : 'ul') . '>' . implode('', array_map(fn($i) => '<li>' . $i . '</li>', $d['items'] ?? [])) . '</' . (($d['style'] ?? '') === 'ordered' ? 'ol' : 'ul') . '>',
+            'heading'   => (function() use ($d) { $l = max(1, min(3, (int) ($d['level'] ?? 2))); return "<h{$l}>" . ($d['text'] ?? '') . "</h{$l}>"; })(),
+            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . $i . '</li>', $d['items'] ?? [])) . "</{$t}>"; })(),
             'code'      => '<pre><code>' . htmlspecialchars((string) ($d['code'] ?? ''), ENT_QUOTES, 'UTF-8') . '</code></pre>',
             'quote'     => '<blockquote>' . ($d['text'] ?? '') . '</blockquote>',
             'delimiter' => '<hr>',
@@ -1041,7 +1000,8 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         if ($item === '') continue;
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';
-        $menuHtml .= "<li{$active}><a href='{$itemSlug}/'>" . esc($item) . "</a></li>";
+        $safeItemSlug = esc($itemSlug);
+        $menuHtml .= "<li{$active}><a href='/{$safeItemSlug}/'>" . esc($item) . "</a></li>";
     }
     $menuHtml .= '</ul>';
 

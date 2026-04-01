@@ -30,6 +30,11 @@ function fieldSave(key, val) {
         if (!response.ok) {
             throw new Error(String(response.status));
         }
+        // Update CSRF token from response header (one-time token)
+        const newToken = response.headers.get('X-CSRF-Token');
+        if (newToken) {
+            window.csrfToken = newToken;
+        }
         return response.text();
     })
         .then(data => {
@@ -37,6 +42,8 @@ function fieldSave(key, val) {
             location.reload();
             return;
         }
+        // Flash save feedback for settings fields
+        showFieldFeedback(key, true);
         const el = document.getElementById(key);
         if (!el) {
             changing = false;
@@ -52,7 +59,17 @@ function fieldSave(key, val) {
     })
         .catch(() => {
         changing = false;
+        showFieldFeedback(key, false);
     });
+}
+function showFieldFeedback(key, success) {
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${key}\\""]`)
+        || document.getElementById(key);
+    if (!el)
+        return;
+    const orig = el.style.borderColor;
+    el.style.borderColor = success ? '#0a0' : '#c00';
+    setTimeout(() => { el.style.borderColor = orig; }, 1500);
 }
 // --- Text-based editing (Markdown and settings fields) ---
 function plainTextEdit(span) {
@@ -114,11 +131,19 @@ function renderBlocksContent() {
 // --- Block editor initialization ---
 function initBlockEditor() {
     document.querySelectorAll('.ce-editor-wrapper').forEach(wrapper => {
-        const blocksJson = wrapper.dataset.blocks;
-        let blocks = [];
-        if (blocksJson) {
+        // Support both data-blocks (JSON) and data-blocks-b64 (base64-encoded JSON)
+        let blocksRaw = wrapper.dataset.blocks || '';
+        const blocksB64 = wrapper.dataset.blocksB64;
+        if (blocksB64) {
             try {
-                blocks = JSON.parse(blocksJson);
+                blocksRaw = atob(blocksB64);
+            }
+            catch { /* empty */ }
+        }
+        let blocks = [];
+        if (blocksRaw) {
+            try {
+                blocks = JSON.parse(blocksRaw);
             }
             catch { /* empty */ }
         }

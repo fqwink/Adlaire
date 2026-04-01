@@ -34,6 +34,9 @@ function fieldSave(key: string, val: string): void {
     })
     .then(response => {
         if (!response.ok) { throw new Error(String(response.status)); }
+        // Update CSRF token from response header (one-time token)
+        const newToken = response.headers.get('X-CSRF-Token');
+        if (newToken) { (window as any).csrfToken = newToken; }
         return response.text();
     })
     .then(data => {
@@ -41,6 +44,9 @@ function fieldSave(key: string, val: string): void {
             location.reload();
             return;
         }
+
+        // Flash save feedback for settings fields
+        showFieldFeedback(key, true);
 
         const el = document.getElementById(key);
         if (!el) { changing = false; return; }
@@ -54,7 +60,17 @@ function fieldSave(key: string, val: string): void {
     })
     .catch(() => {
         changing = false;
+        showFieldFeedback(key, false);
     });
+}
+
+function showFieldFeedback(key: string, success: boolean): void {
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${key}\\""]`) as HTMLElement
+        || document.getElementById(key);
+    if (!el) return;
+    const orig = el.style.borderColor;
+    el.style.borderColor = success ? '#0a0' : '#c00';
+    setTimeout(() => { el.style.borderColor = orig; }, 1500);
 }
 
 // --- Text-based editing (Markdown and settings fields) ---
@@ -124,10 +140,15 @@ function renderBlocksContent(): void {
 
 function initBlockEditor(): void {
     document.querySelectorAll<HTMLElement>('.ce-editor-wrapper').forEach(wrapper => {
-        const blocksJson = wrapper.dataset.blocks;
+        // Support both data-blocks (JSON) and data-blocks-b64 (base64-encoded JSON)
+        let blocksRaw = wrapper.dataset.blocks || '';
+        const blocksB64 = wrapper.dataset.blocksB64;
+        if (blocksB64) {
+            try { blocksRaw = atob(blocksB64); } catch { /* empty */ }
+        }
         let blocks: { type: string; data: Record<string, unknown> }[] = [];
-        if (blocksJson) {
-            try { blocks = JSON.parse(blocksJson); } catch { /* empty */ }
+        if (blocksRaw) {
+            try { blocks = JSON.parse(blocksRaw); } catch { /* empty */ }
         }
 
         const editorData = {
