@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 21;
-    public const VERSION = 'Ver.1.4-21';
+    public const VERSION_MINOR = 5;
+    public const VERSION_BUILD = 22;
+    public const VERSION = 'Ver.1.5-22';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -212,7 +212,7 @@ final class App
             $this->config['page'] = $this->requestPage;
         }
         $this->config['page'] = self::getSlug($this->config['page']);
-        $this->config['pageFormat'] = 'html';
+        $this->config['pageFormat'] = 'blocks';
         $this->config['pageStatus'] = 'published';
 
         if (isset($_REQUEST['login'])) {
@@ -250,11 +250,7 @@ final class App
 
     private function loadPlugins(): void
     {
-        $cwd = getcwd();
-        if ($cwd === false) {
-            $cwd = __DIR__;
-        }
-        $pluginsDir = $cwd . '/plugins';
+        $pluginsDir = __DIR__ . '/plugins';
         if (is_dir($pluginsDir)) {
             $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
@@ -378,7 +374,7 @@ final class App
         $format = $this->config['pageFormat'] ?? 'blocks';
         $isPage = ($id === $this->config['page']);
         $isMarkdown = ($format === 'markdown' && $isPage);
-        $isBlocks = (($format === 'blocks' || $format === 'html') && $isPage);
+        $isBlocks = ($format === 'blocks' && $isPage);
 
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
@@ -386,10 +382,9 @@ final class App
             // Format switcher toolbar (page content only)
             if ($isPage) {
                 $formats = ['blocks' => 'Blocks', 'markdown' => 'Markdown'];
-                $displayFormat = ($format === 'html') ? 'blocks' : $format;
                 echo "<div class='ce-format-bar' data-slug='{$safeId}'>";
                 foreach ($formats as $fmt => $label) {
-                    $active = ($fmt === $displayFormat) ? ' class="active"' : '';
+                    $active = ($fmt === $format) ? ' class="active"' : '';
                     $safeFmt = esc($fmt);
                     echo "<button{$active} data-format='{$safeFmt}'>{$label}</button>";
                 }
@@ -397,21 +392,16 @@ final class App
             }
 
             if ($isBlocks) {
-                // Block editor for page content (also handles legacy html pages)
                 $blocksJson = '';
                 if (isset($this->config['pageBlocks'])) {
                     $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
-                } elseif ($content !== '') {
-                    // Legacy HTML content — convert to single paragraph block for editing
-                    $legacyBlocks = [['type' => 'paragraph', 'data' => ['text' => $content]]];
-                    $blocksJson = esc(json_encode($legacyBlocks, JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
             } elseif ($isMarkdown) {
                 $safeTitle = esc($this->defaults['content'] ?? '');
                 echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText' data-format='markdown'>{$content}</span>";
             } else {
-                // Non-page content (sidebar etc.) — keep editable span
+                // Non-page content (sidebar etc.)
                 $safeTitle = esc($this->defaults['content'] ?? '');
                 echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
             }
@@ -420,9 +410,6 @@ final class App
                 $blocksJson = '';
                 if (isset($this->config['pageBlocks'])) {
                     $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
-                } elseif ($content !== '') {
-                    echo $content;
-                    return;
                 }
                 echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
             } elseif ($isMarkdown) {
@@ -534,7 +521,7 @@ function handleEdit(): void
     } else {
         // Preserve existing page format when editing inline
         $existing = $storage->readPageData($fieldname);
-        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'html';
+        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'blocks';
         $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
         $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
         $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
@@ -638,7 +625,7 @@ function apiPageSave(FileStorage $storage): void
 
     $slug = $_POST['slug'] ?? null;
     $content = $_POST['content'] ?? null;
-    $format = $_POST['format'] ?? 'html';
+    $format = $_POST['format'] ?? 'blocks';
 
     if ($slug === null || $content === null) {
         apiError(400, 'Missing slug or content');
@@ -650,7 +637,7 @@ function apiPageSave(FileStorage $storage): void
         return;
     }
 
-    if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
+    if (!in_array($format, ['markdown', 'blocks'], true)) {
         apiError(400, 'Invalid format');
         return;
     }

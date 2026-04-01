@@ -1,10 +1,9 @@
 /**
  * EditInplace - Inline content editing for Adlaire Platform.
  *
- * Provides unified inplace editing for all three page formats:
- * - HTML: click to edit in textarea
+ * Provides unified inplace editing for page formats:
+ * - Blocks: block editor with auto-save on focusout (default)
  * - Markdown: click to edit in textarea (raw markdown)
- * - Blocks: block editor with auto-save on focusout
  *
  * Also handles format switching via the format toolbar.
  *
@@ -58,7 +57,7 @@ function fieldSave(key: string, val: string): void {
     });
 }
 
-// --- Text-based editing (HTML and Markdown) ---
+// --- Text-based editing (Markdown and settings fields) ---
 
 function plainTextEdit(span: HTMLElement): void {
     const id = span.id;
@@ -83,6 +82,7 @@ function plainTextEdit(span: HTMLElement): void {
         if (isMarkdown) {
             fieldSave(id, textarea.value);
         } else {
+            // Settings fields (title, description, etc.)
             fieldSave(id, nl2br(textarea.value));
         }
     });
@@ -234,11 +234,7 @@ function switchFormat(slug: string, newFormat: string): void {
             // Revert on failure
         });
     } else {
-        const content = newFormat === 'html'
-            ? nl2br(currentContent)
-            : currentContent;
-
-        api.savePage(slug, content, newFormat).then(() => {
+        api.savePage(slug, currentContent, newFormat).then(() => {
             location.reload();
         }).catch(() => {
             // Revert on failure

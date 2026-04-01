@@ -113,10 +113,13 @@ final class FileStorage
                 if (!file_exists($dest)) {
                     $mtime = date('c', filemtime($file) ?: time());
                     $content = file_get_contents($file);
+                    $rawContent = $content !== false ? $content : '';
+                    $pageBlocks = [['type' => 'paragraph', 'data' => ['text' => $rawContent]]];
                     $pageData = [
-                        'content'    => $content !== false ? $content : '',
-                        'format'     => 'html',
+                        'content'    => $rawContent,
+                        'format'     => 'blocks',
                         'status'     => 'published',
+                        'blocks'     => $pageBlocks,
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
@@ -202,25 +205,8 @@ final class FileStorage
         return $this->writeConfig([$key => $value]);
     }
 
-    public function readPage(string $slug): string|false
-    {
-        if (!self::validateSlug($slug)) {
-            return false;
-        }
-        $path = $this->pagesDir . '/' . $slug . '.json';
-        if (!file_exists($path)) {
-            return false;
-        }
-        $json = $this->lockedRead($path);
-        if ($json === false) {
-            return false;
-        }
-        $data = json_decode($json, true);
-        return is_array($data) && isset($data['content']) ? $data['content'] : false;
-    }
-
     /**
-     * @return array{content: string, created_at: string, updated_at: string}|false
+     * @return array{content: string, format: string, status: string, created_at: string, updated_at: string, blocks?: array}|false
      */
     public function readPageData(string $slug): array|false
     {
@@ -242,14 +228,14 @@ final class FileStorage
     /**
      * @param array<int, array{type: string, data: array<string, mixed>}>|null $blocks
      */
-    public function writePage(string $slug, string $content, string $format = 'html', ?array $blocks = null, string $status = 'published'): bool
+    public function writePage(string $slug, string $content, string $format = 'blocks', ?array $blocks = null, string $status = 'published'): bool
     {
         if (!self::validateSlug($slug)) {
             return false;
         }
 
-        if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
-            $format = 'html';
+        if (!in_array($format, ['markdown', 'blocks'], true)) {
+            $format = 'blocks';
         }
         if (!in_array($status, ['draft', 'published'], true)) {
             $status = 'published';
@@ -293,7 +279,7 @@ final class FileStorage
             return false;
         }
 
-        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '.json';
+        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
         copy($path, $backupPath);
 
         unlink($path);
@@ -488,7 +474,7 @@ final class FileStorage
         if (!self::validateSlug($slug)) {
             return false;
         }
-        if (!preg_match('/^\d{8}_\d{6}$/', $timestamp)) {
+        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
             return false;
         }
 
