@@ -85,6 +85,7 @@ Adlaire/
 │   ├── pages/{slug}.json      #   ページデータ
 │   ├── revisions/{slug}/      #   リビジョン履歴（最大30世代）
 │   └── backups/               #   設定バックアップ（最大9世代）
+├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
 ├── package.json / tsconfig.json
 ├── CLAUDE.md                  # 開発規約
@@ -240,7 +241,20 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 |---------|-----|-----------|
 | `GET` | `?api=sitemap` | sitemap.xml（公開ページのみ、Content-Type: application/xml） |
 
-### 5.5 エクスポート・インポート API
+### 5.5 静的サイト生成 API
+
+| メソッド | URL | レスポンス |
+|---------|-----|-----------|
+| `POST` | `?api=generate&csrf=xxx` | `{ status: "ok", pages: 数, output: "出力ディレクトリ" }` |
+
+- 公開ページのみを対象に静的 HTML ファイルを生成する。
+- 出力先: `dist/` ディレクトリ（プロジェクトルート直下）。
+- 生成内容: 各ページの HTML（テーマ適用済み）、CSS、JS、sitemap.xml。
+- blocks 形式ページは `renderBlocks()` で HTML に変換して出力。
+- markdown 形式ページは `markdownToHtml()` で HTML に変換して出力。
+- 認証必須（管理者のみ実行可能）。
+
+### 5.6 エクスポート・インポート API
 
 | メソッド | URL | レスポンス |
 |---------|-----|-----------|
@@ -359,6 +373,7 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 - 新規ページ作成ボタン
 - サイト設定パネル: タイトル, 説明, キーワード, コピーライト, メニュー, テーマ, 言語
 - エクスポート / インポートボタン
+- 静的サイト生成ボタン（`dist/` に HTML 出力）
 
 ### 7.4 ページ編集 (`?admin=edit&page={slug}`)
 
@@ -393,7 +408,8 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | サイト内検索 | 実装済 |
 | サイトマップ自動生成 | 実装済 |
 | エクスポート / インポート | 実装済 |
-| 管理ツール専用 UI | **計画** |
+| 管理ツール専用 UI | 実装済 |
+| 静的サイト生成 | **計画** |
 
 ### 8.2 認証・セキュリティ
 
