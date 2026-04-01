@@ -53,6 +53,9 @@ const api = {
         body.append('content', content);
         body.append('format', format);
         body.append('csrf', csrfToken);
+        if (format === 'blocks') {
+            body.append('blocks', content);
+        }
 
         const res = await fetch('index.php?api=pages', {
             method: 'POST',

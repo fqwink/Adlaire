@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 3;
-    public const VERSION_BUILD = 14;
-    public const VERSION = 'Ver.1.3-14';
+    public const VERSION_BUILD = 17;
+    public const VERSION = 'Ver.1.3-17';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -365,15 +365,36 @@ final class App
     public function content(string $id, string $content): void
     {
         $format = $this->config['pageFormat'] ?? 'html';
-        $isMarkdown = ($format === 'markdown' && $id === $this->config['page']);
+        $isPage = ($id === $this->config['page']);
+        $isMarkdown = ($format === 'markdown' && $isPage);
+        $isBlocks = ($format === 'blocks' && $isPage);
 
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
             $safeTitle = esc($this->defaults['content']);
-            $formatAttr = $isMarkdown ? " data-format='markdown'" : '';
-            echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
+
+            if ($isBlocks) {
+                // Block editor: render as container div with block data
+                $blocksJson = '';
+                $pageData = $this->storage->readPageData($this->config['page']);
+                if ($pageData !== false && isset($pageData['blocks'])) {
+                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                }
+                echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
+            } else {
+                $formatAttr = $isMarkdown ? " data-format='markdown'" : '';
+                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
+            }
         } else {
-            if ($isMarkdown) {
+            if ($isBlocks) {
+                // Visitor: render blocks via JS
+                $pageData = $this->storage->readPageData($this->config['page']);
+                $blocksJson = '';
+                if ($pageData !== false && isset($pageData['blocks'])) {
+                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                }
+                echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
+            } elseif ($isMarkdown) {
                 $encoded = esc(base64_encode($content));
                 echo "<div class='markdown-content' data-raw-b64='{$encoded}'>{$content}</div>";
             } else {
@@ -578,7 +599,16 @@ function apiPageSave(FileStorage $storage): void
         return;
     }
 
-    $result = $storage->writePage($slug, $content, $format);
+    $blocks = null;
+    if ($format === 'blocks' && isset($_POST['blocks'])) {
+        $blocks = json_decode($_POST['blocks'], true);
+        if (!is_array($blocks)) {
+            apiError(400, 'Invalid blocks JSON');
+            return;
+        }
+    }
+
+    $result = $storage->writePage($slug, $content, $format, $blocks);
     if (!$result) {
         apiError(500, 'Write failed');
         return;
