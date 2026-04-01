@@ -1,11 +1,11 @@
 # Adlaire Platform - ルールブック Ver.1.x 系
 
-**最終バージョン**: Ver.1.9-29
+**最終バージョン**: Ver.1.9-30
 **最終更新**: 2026-04-01
 **状態**: **凍結** — 本ファイルは変更しない。
 
-> Ver.1.x 系の仕様書。Ver.1.9-29 をもって 1.0 系は完了。
-> 上位原則は `CHARTER.md`（憲章）を参照。
+> Ver.1.x 系の仕様書。Ver.1.9-30 をもって 1.0 系は完了。
+> 上位原則は `CHARTER.md`（ルールブック憲章）を参照。
 
 ---
 
@@ -89,10 +89,14 @@ Adlaire/
 ├── package.json / tsconfig.json
 ├── CLAUDE.md                  # 開発規約（ルート配置）
 ├── README.md                  # プロジェクト説明（ルート配置）
+├── rulebookdocs/              # ルールブックドキュメントフォルダ
+│   ├── CHARTER.md             #   ルールブック憲章
+│   ├── RULEBOOK_Ver1.md       #   本ファイル（Ver.1.x 系、凍結）
+│   └── RULEBOOK_Ver2.md       #   Ver.2.x 系
 ├── docs/                      # ドキュメントフォルダ
-│   ├── RULEBOOK.md            #   本ファイル（絶対原則）
 │   ├── CHANGES.md             #   変更履歴
-│   └── RELEASE-NOTES.md       #   リリースノート
+│   └── RELEASENOTES.md        #   リリースノート
+├── themes/admin.css           # 管理 UI スタイルシート
 └── Licenses/
 ```
 
@@ -502,9 +506,10 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | 29 | i18n | 管理 UI ラベル（Dashboard, Pages, Edit 等）の翻訳対応 | 実装済 |
 | 30 | ドキュメント | RULEBOOK を Ver.1.7/1.8 の実装結果で更新 | 実装済 |
 
-### 9.3 Ver.1.9 — 1.0系最終版（バグ修正32件）
+### 9.3 Ver.1.9 — 1.0系最終版（バグ修正38件）
 
-バグ修正32件を実施し、1.0系の品質を確定。詳細は `docs/CHANGES.md` を参照。
+バグ修正38件（Ver.1.9-29 で32件 + Ver.1.9-30 で6件）を実施し、1.0系の品質を確定。
+詳細は `docs/CHANGES.md` を参照。
 
 ---
 
