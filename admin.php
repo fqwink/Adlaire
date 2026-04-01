@@ -764,8 +764,9 @@ function handleApiSitemap(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
     // Home page
+    $homeLoc = htmlspecialchars("{$host}{$basePath}/", ENT_XML1, 'UTF-8');
     $xml .= "  <url>\n";
-    $xml .= "    <loc>{$host}{$basePath}/</loc>\n";
+    $xml .= "    <loc>{$homeLoc}</loc>\n";
     $xml .= "    <changefreq>weekly</changefreq>\n";
     $xml .= "  </url>\n";
 
