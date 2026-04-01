@@ -88,9 +88,12 @@ Adlaire/
 ├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
 ├── package.json / tsconfig.json
-├── CLAUDE.md                  # 開発規約
-├── RULEBOOK.md                # 本ファイル（絶対原則）
-├── README.md / CHANGES.md / RELEASE-NOTES.md
+├── CLAUDE.md                  # 開発規約（ルート配置）
+├── README.md                  # プロジェクト説明（ルート配置）
+├── docs/                      # ドキュメントフォルダ
+│   ├── RULEBOOK.md            #   本ファイル（絶対原則）
+│   ├── CHANGES.md             #   変更履歴
+│   └── RELEASE-NOTES.md       #   リリースノート
 └── Licenses/
 ```
 
