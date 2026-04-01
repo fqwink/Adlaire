@@ -25,7 +25,8 @@ function autosize(textarea: HTMLTextAreaElement): void {
     textarea.style.resize = 'none';
 
     function resize(): void {
-        textarea.style.height = 'auto';
+        textarea.style.overflowY = 'hidden';
+        textarea.style.height = '0';
         const scrollHeight = textarea.scrollHeight + extra;
         textarea.style.height = Math.max(scrollHeight, minHeight) + 'px';
     }
