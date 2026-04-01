@@ -531,17 +531,20 @@ function handleApi(): void
         return;
     }
 
-    header('Content-Type: application/json; charset=UTF-8');
-
     $storage = new FileStorage('files');
     $method = $_SERVER['REQUEST_METHOD'];
 
+    // Sitemap uses XML content type — handle before JSON header
+    if ($endpoint === 'sitemap') {
+        handleApiSitemap($storage);
+        exit;
+    }
+
+    header('Content-Type: application/json; charset=UTF-8');
+
     // Public endpoints (no authentication)
-    if (in_array($endpoint, ['sitemap', 'search'], true)) {
-        match ($endpoint) {
-            'sitemap' => handleApiSitemap($storage),
-            'search'  => handleApiSearch($storage),
-        };
+    if ($endpoint === 'search') {
+        handleApiSearch($storage);
         exit;
     }
 
