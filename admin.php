@@ -231,6 +231,9 @@ final class App
             $this->config['content'] = $pageData['content'];
             $this->config['pageFormat'] = $pageData['format'] ?? 'html';
             $this->config['pageStatus'] = $pageData['status'] ?? 'published';
+            if (isset($pageData['blocks'])) {
+                $this->config['pageBlocks'] = $pageData['blocks'];
+            }
             return;
         }
 
@@ -382,11 +385,9 @@ final class App
             $safeTitle = esc($this->defaults['content']);
 
             if ($isBlocks) {
-                // Block editor: render as container div with block data
                 $blocksJson = '';
-                $pageData = $this->storage->readPageData($this->config['page']);
-                if ($pageData !== false && isset($pageData['blocks'])) {
-                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                if (isset($this->config['pageBlocks'])) {
+                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
             } else {
@@ -395,11 +396,9 @@ final class App
             }
         } else {
             if ($isBlocks) {
-                // Visitor: render blocks via JS
-                $pageData = $this->storage->readPageData($this->config['page']);
                 $blocksJson = '';
-                if ($pageData !== false && isset($pageData['blocks'])) {
-                    $blocksJson = esc(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+                if (isset($this->config['pageBlocks'])) {
+                    $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div class='blocks-content' data-blocks='{$blocksJson}'></div>";
             } elseif ($isMarkdown) {
