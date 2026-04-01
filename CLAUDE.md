@@ -18,6 +18,12 @@
   - `docs/CHANGES.md` — 変更履歴
   - `docs/RELEASE-NOTES.md` — リリースノート
 
+## ドキュメント命名規則
+
+- ドキュメントファイル名は**正式名称を大文字**で記述する。
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASE-NOTES.md`
+- バージョン付きファイルは `V1.md`, `V2.md` のように大文字で記述する。
+
 ## ルールブック管理方針
 
 - ルールブックは**メジャーバージョンごとに独立ファイル**で管理する。
