@@ -213,6 +213,7 @@ final class App
         }
         $this->config['page'] = self::getSlug($this->config['page']);
         $this->config['pageFormat'] = 'html';
+        $this->config['pageStatus'] = 'published';
 
         if (isset($_REQUEST['login'])) {
             return;
