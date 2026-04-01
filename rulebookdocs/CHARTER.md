@@ -19,6 +19,9 @@
 | `rulebookdocs/CHARTER.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
 | `rulebookdocs/RULEBOOK_Ver1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-30） |
 | `rulebookdocs/RULEBOOK_Ver2.md` | ルールブック Ver.2.x 系（現行策定中） |
+| `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 製品方向性ルールブック（ポジション・ターゲット・採用方針） |
+| `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | エディタルールブック（設計原則・開発範囲・禁止事項） |
+| `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | ライフサイクルシステムルールブック（Setup/Update統合基盤） |
 
 ## 3. バージョン管理方針
 

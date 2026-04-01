@@ -13,6 +13,9 @@
   - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
   - `rulebookdocs/RULEBOOK_Ver1.md` — ルールブック Ver.1.x 系（凍結）
   - `rulebookdocs/RULEBOOK_Ver2.md` — ルールブック Ver.2.x 系（現行）
+  - `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
+  - `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` — エディタルールブック
+  - `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
