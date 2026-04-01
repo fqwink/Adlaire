@@ -796,6 +796,7 @@ function handleApiExport(FileStorage $storage): void
         'pages'     => $storage->listPages(),
     ];
 
+    header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
     echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
