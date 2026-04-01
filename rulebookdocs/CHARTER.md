@@ -16,9 +16,9 @@
 
 | ファイル | 内容 |
 |---------|------|
-| `rulebook-docs/CHARTER.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
-| `rulebook-docs/RULEBOOK_V1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-29） |
-| `rulebook-docs/RULEBOOK_V2.md` | ルールブック Ver.2.x 系（現行策定中） |
+| `rulebookdocs/CHARTER.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
+| `rulebookdocs/RULEBOOK_V1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-29） |
+| `rulebookdocs/RULEBOOK_V2.md` | ルールブック Ver.2.x 系（現行策定中） |
 
 ## 3. バージョン管理方針
 
