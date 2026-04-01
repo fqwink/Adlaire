@@ -10,7 +10,7 @@
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
 - `README.md` — プロジェクト説明（プロジェクトルート）
 - `rulebook-docs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
-  - `rulebook-docs/rulebook-kensho.md` — ルールブック憲章（全バージョン共通の最上位原則）
+  - `rulebook-docs/RulebookCharter.md` — ルールブック憲章（全バージョン共通の最上位原則）
   - `rulebook-docs/rulebook-v1.md` — ルールブック Ver.1.x 系（凍結）
   - `rulebook-docs/rulebook-v2.md` — ルールブック Ver.2.x 系（現行）
   - ※ `rulebook-docs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
