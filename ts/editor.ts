@@ -127,7 +127,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
         };
     },
 
-    delimiter(_data) {
+    delimiter() {
         return {
             render() {
                 const el = document.createElement('div');
