@@ -188,7 +188,7 @@ final class App
             $csrf = csrf_token();
             $loginLabel = esc($this->t('login_submit'));
             $changePwLabel = esc($this->t('change_password_label'));
-            $changePwHint = $this->t('change_password_hint');
+            $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'>
