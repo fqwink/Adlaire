@@ -138,7 +138,7 @@ final class App
         $stored = $this->storage->readConfig();
 
         foreach ($this->config as $key => $val) {
-            if ($key === 'content' || $key === 'loggedin') {
+            if ($key === 'content' || $key === 'loggedin' || $key === 'page') {
                 continue;
             }
 
