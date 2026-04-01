@@ -406,7 +406,7 @@ final class FileStorage
         $content = stream_get_contents($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
-        return $content;
+        return $content !== false ? $content : false;
     }
 
     private function rotateBackups(): void
