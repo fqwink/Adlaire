@@ -9,22 +9,29 @@
 
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
 - `README.md` — プロジェクト説明（プロジェクトルート）
-- `rulebook-docs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
-  - `rulebook-docs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
-  - `rulebook-docs/V1.md` — ルールブック Ver.1.x 系（凍結）
-  - `rulebook-docs/V2.md` — ルールブック Ver.2.x 系（現行）
-  - ※ `rulebook-docs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
+- `rulebookdocs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
+  - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
+  - `rulebookdocs/RULEBOOK_Ver1.md` — ルールブック Ver.1.x 系（凍結）
+  - `rulebookdocs/RULEBOOK_Ver2.md` — ルールブック Ver.2.x 系（現行）
+  - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
-  - `docs/RELEASE-NOTES.md` — リリースノート
+  - `docs/RELEASENOTES.md` — リリースノート
+
+## ドキュメント命名規則
+
+- ドキュメントファイル名は**正式名称を大文字**で記述する。
+- 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
+- バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`, `RULEBOOK_Ver1.md`
 
 ## ルールブック管理方針
 
 - ルールブックは**メジャーバージョンごとに独立ファイル**で管理する。
-- `rulebook-docs/` フォルダ（プロジェクトルート直下）にルールブックを集約する。
-  - `rulebook-docs/CHARTER.md` — 憲章（全バージョン共通の最上位原則）
-  - `rulebook-docs/V1.md` — ルールブック Ver.1.x 系（凍結）
-  - `rulebook-docs/V2.md` — ルールブック Ver.2.x 系（現行）
+- `rulebookdocs/` フォルダ（プロジェクトルート直下）にルールブックを集約する。
+  - `rulebookdocs/CHARTER.md` — 憲章（全バージョン共通の最上位原則）
+  - `rulebookdocs/RULEBOOK_Ver1.md` — ルールブック Ver.1.x 系（凍結）
+  - `rulebookdocs/RULEBOOK_Ver2.md` — ルールブック Ver.2.x 系（現行）
 - 旧バージョンのルールブックは**凍結保存**し、変更しない。
 - 新バージョンのルールブックは旧版を基盤として策定する。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
@@ -44,9 +51,9 @@
 - **TypeScript バージョンは 5 系に固定**（`~5.8`）。メジャーバージョン 6 以降への更新は別途検討。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 - TypeScript ソースは `ts/` ディレクトリに配置する。
-- コンパイル済み JavaScript は `js/dist/` に出力される。
+- コンパイル済み JavaScript は `js/` に出力される。
 - `npm run build`（`tsc`）でコンパイルを実行する。
-- `js/dist/` 内のファイルを手動で編集してはならない。
+- `js/` 内のファイルを手動編集を禁止する。
 
 ## ビルド手順
 
