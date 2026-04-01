@@ -711,7 +711,7 @@ function handleApiSearch(FileStorage $storage): void
     }
 
     $query = mb_strtolower($query, 'UTF-8');
-    $pages = $storage->listPages();
+    $pages = $storage->listPublishedPages();
     $results = [];
 
     foreach ($pages as $slug => $data) {
