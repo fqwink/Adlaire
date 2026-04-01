@@ -102,6 +102,12 @@ span.editText textarea{
 	background-color: transparent;
 }
 
+/* Format Switcher */
+.ce-format-bar{display:flex;gap:4px;margin-bottom:8px;padding:4px 0;}
+.ce-format-bar button{background:#1f2b33;color:#888;border:1px solid #333;padding:4px 12px;border-radius:3px;cursor:pointer;font-size:12px;text-transform:uppercase;}
+.ce-format-bar button.active{background:#1ab;color:#fff;border-color:#1ab;}
+.ce-format-bar button:hover:not(.active){color:#fff;}
+
 /* Block Editor */
 .ce-editor{position:relative;}
 .ce-block{display:flex;align-items:flex-start;margin:4px 0;position:relative;}
@@ -126,6 +132,16 @@ span.editText textarea{
 .ce-toolbox{display:flex;gap:4px;padding:6px;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.1);margin:4px 0 4px 30px;}
 .ce-toolbox__btn{background:none;border:1px solid #ddd;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:13px;}
 .ce-toolbox__btn:hover{background:#f0f0f0;}
+.ce-image__url{display:block;width:100%;padding:4px 8px;margin-bottom:4px;border:1px solid #ddd;border-radius:3px;font-size:13px;box-sizing:border-box;}
+.ce-image figcaption[placeholder]:empty:before{content:attr(placeholder);color:#aaa;font-style:italic;}
+.ce-inline-toolbar{position:absolute;display:flex;gap:2px;background:#1f2b33;border-radius:4px;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:1000;}
+.ce-inline-toolbar button{background:none;border:none;color:#fff;cursor:pointer;padding:2px 8px;font-size:14px;border-radius:2px;}
+.ce-inline-toolbar button:hover{background:rgba(255,255,255,.15);}
+.ce-save-indicator{text-align:right;font-size:12px;height:18px;color:#888;transition:opacity .3s;}
+.ce-save--saving{color:#f90;}
+.ce-save--saved{color:#0c0;}
+.ce-save--error{color:#c00;}
+.ce-btn--up,.ce-btn--down{font-size:10px;}
 
 .border{
 	margin: 10px;
@@ -198,4 +214,9 @@ footer p{
 	#nav ul{margin:0;}
 	#wrapper{margin: 5%;}
 	#side{margin: 5%;}
+	.ce-block__toolbar{opacity:1;flex-direction:row;margin-right:0;margin-bottom:4px;}
+	.ce-block{flex-direction:column;}
+	.ce-toolbox{flex-wrap:wrap;margin-left:0;}
+	.ce-format-bar{flex-wrap:wrap;}
+	.ce-inline-toolbar{position:fixed;bottom:0;left:0;right:0;top:auto;justify-content:center;border-radius:0;}
 }

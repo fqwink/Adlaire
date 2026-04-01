@@ -9,23 +9,20 @@
 const i18n = {
     lang: 'ja',
     translations: {},
+    ready: Promise.resolve(),
     /**
      * Initialize i18n by loading the translation file for the given language.
      */
-    async init(lang) {
+    init(lang) {
         if (lang !== 'ja' && lang !== 'en') {
             lang = 'ja';
         }
         this.lang = lang;
-        try {
-            const response = await fetch(`data/lang/${lang}.json`);
-            if (response.ok) {
-                this.translations = await response.json();
-            }
-        }
-        catch {
-            // Silently fall back to empty translations (keys returned as-is)
-        }
+        this.ready = fetch(`data/lang/${lang}.json`)
+            .then(response => response.ok ? response.json() : {})
+            .then(data => { this.translations = data; })
+            .catch(() => { });
+        return this.ready;
     },
     /**
      * Translate a key with optional parameter substitution.

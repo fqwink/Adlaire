@@ -24,7 +24,14 @@
     "click_to_edit": "クリックして編集！",
     "credit": "Powered by <a href=\"\">Adlaire Platform</a>",
     "permission_error": "filesフォルダに755のパーミッションを設定してください。",
+    "login_rate_limited": "ログイン試行回数が上限に達しました。しばらくお待ちください。",
     "settings_format": "ページ形式",
     "format_html": "HTML",
-    "format_markdown": "Markdown"
+    "format_markdown": "Markdown",
+    "block_text": "テキスト",
+    "block_heading": "見出し",
+    "block_list": "リスト",
+    "block_code": "コード",
+    "block_quote": "引用",
+    "block_image": "画像"
 }

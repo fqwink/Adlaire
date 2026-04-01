@@ -3,8 +3,38 @@
  * Editor - Block-based content editor for Adlaire Platform.
  * Editor.js-like architecture implemented in pure TypeScript.
  *
- * Spec: RULEBOOK.md Section 6.2
+ * Spec: RULEBOOK.md Section 6.3
  */
+// --- Helper: attach Backspace handler to any contentEditable block ---
+function attachBackspaceHandler(el) {
+    el.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && el.textContent === '') {
+            e.preventDefault();
+            const editor = el.closest('.ce-editor')?.__editor;
+            if (!editor)
+                return;
+            const block = el.closest('.ce-block');
+            const idx = editor.getBlockIndex(block);
+            if (idx > 0) {
+                editor.removeBlock(idx);
+                editor.focusBlock(idx - 1);
+            }
+        }
+    });
+}
+// --- Helper: attach Enter handler for list items ---
+function attachListItemHandlers(li) {
+    li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const newLi = document.createElement('li');
+            newLi.contentEditable = 'true';
+            attachListItemHandlers(newLi);
+            li.after(newLi);
+            newLi.focus();
+        }
+    });
+}
 // --- Built-in Block Tools ---
 const builtinTools = {
     paragraph(data) {
@@ -24,6 +54,7 @@ const builtinTools = {
                         }
                     }
                 });
+                attachBackspaceHandler(el);
                 return el;
             },
             save(el) {
@@ -32,13 +63,15 @@ const builtinTools = {
         };
     },
     heading(data) {
-        const level = data.level || 2;
+        const rawLevel = data.level || 2;
+        const level = Math.max(1, Math.min(3, rawLevel));
         return {
             render() {
                 const el = document.createElement(`h${level}`);
                 el.contentEditable = 'true';
                 el.className = 'ce-heading';
                 el.innerHTML = data.text || '';
+                attachBackspaceHandler(el);
                 return el;
             },
             save(el) {
@@ -58,15 +91,7 @@ const builtinTools = {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
                     li.innerHTML = item;
-                    li.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const newLi = document.createElement('li');
-                            newLi.contentEditable = 'true';
-                            li.after(newLi);
-                            newLi.focus();
-                        }
-                    });
+                    attachListItemHandlers(li);
                     el.appendChild(li);
                 });
                 return el;
@@ -105,6 +130,7 @@ const builtinTools = {
                 bq.className = 'ce-quote';
                 bq.contentEditable = 'true';
                 bq.innerHTML = data.text || '';
+                attachBackspaceHandler(bq);
                 return bq;
             },
             save(el) {
@@ -133,24 +159,81 @@ const builtinTools = {
                 const img = document.createElement('img');
                 img.src = data.url || '';
                 img.alt = '';
-                wrap.appendChild(img);
+                // URL input for editing
+                const urlInput = document.createElement('input');
+                urlInput.type = 'text';
+                urlInput.className = 'ce-image__url';
+                urlInput.placeholder = 'Image URL...';
+                urlInput.value = data.url || '';
+                urlInput.addEventListener('input', () => {
+                    img.src = urlInput.value;
+                });
                 const cap = document.createElement('figcaption');
                 cap.contentEditable = 'true';
                 cap.textContent = data.caption || '';
+                cap.setAttribute('placeholder', 'Caption...');
+                wrap.appendChild(urlInput);
+                wrap.appendChild(img);
                 wrap.appendChild(cap);
                 return wrap;
             },
             save(el) {
-                const img = el.querySelector('img');
+                const urlInput = el.querySelector('.ce-image__url');
                 const cap = el.querySelector('figcaption');
                 return {
-                    url: img?.src || '',
+                    url: urlInput?.value || '',
                     caption: cap?.textContent || '',
                 };
             },
         };
     },
 };
+// --- Inline Toolbar ---
+class InlineToolbar {
+    constructor() {
+        this.el = document.createElement('div');
+        this.el.className = 'ce-inline-toolbar';
+        this.el.innerHTML = `
+            <button data-cmd="bold" title="Bold"><b>B</b></button>
+            <button data-cmd="italic" title="Italic"><i>I</i></button>
+            <button data-cmd="createLink" title="Link">🔗</button>
+        `;
+        this.el.style.display = 'none';
+        document.body.appendChild(this.el);
+        this.el.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const cmd = btn.dataset.cmd;
+                if (cmd === 'createLink') {
+                    const url = prompt('URL:');
+                    if (url)
+                        document.execCommand(cmd, false, url);
+                }
+                else {
+                    document.execCommand(cmd);
+                }
+            });
+        });
+        document.addEventListener('selectionchange', () => this.update());
+    }
+    update() {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+            this.el.style.display = 'none';
+            return;
+        }
+        const range = sel.getRangeAt(0);
+        const ancestor = range.commonAncestorContainer;
+        if (!ancestor.closest?.('.ce-editor') && !(ancestor.parentElement?.closest('.ce-editor'))) {
+            this.el.style.display = 'none';
+            return;
+        }
+        const rect = range.getBoundingClientRect();
+        this.el.style.display = 'flex';
+        this.el.style.top = `${rect.top + window.scrollY - 40}px`;
+        this.el.style.left = `${rect.left + window.scrollX + rect.width / 2 - this.el.offsetWidth / 2}px`;
+    }
+}
 // --- Editor Class ---
 class Editor {
     constructor(container, tools) {
@@ -161,6 +244,9 @@ class Editor {
         this.tools = { ...builtinTools, ...tools };
         this.container.classList.add('ce-editor');
         this.container.__editor = this;
+        if (!Editor.inlineToolbar) {
+            Editor.inlineToolbar = new InlineToolbar();
+        }
     }
     static create(el, config) {
         const editor = new Editor(el, config?.tools);
@@ -231,10 +317,41 @@ class Editor {
         this.blockElements.splice(index, 1);
         this.blockTools.splice(index, 1);
         this.blockTypes.splice(index, 1);
-        // Ensure at least one block
         if (this.blockElements.length === 0) {
             this.insertBlock('paragraph', {}, 0);
         }
+    }
+    moveBlock(from, to) {
+        if (from < 0 || from >= this.blockElements.length)
+            return;
+        if (to < 0 || to >= this.blockElements.length)
+            return;
+        if (from === to)
+            return;
+        const el = this.blockElements[from];
+        const tool = this.blockTools[from];
+        const type = this.blockTypes[from];
+        this.blockElements.splice(from, 1);
+        this.blockTools.splice(from, 1);
+        this.blockTypes.splice(from, 1);
+        this.blockElements.splice(to, 0, el);
+        this.blockTools.splice(to, 0, tool);
+        this.blockTypes.splice(to, 0, type);
+        // Re-render DOM order
+        if (to >= this.blockElements.length - 1) {
+            this.container.appendChild(el);
+        }
+        else {
+            const ref = this.blockElements[to + 1];
+            this.container.insertBefore(el, ref);
+        }
+    }
+    focusBlock(index) {
+        if (index < 0 || index >= this.blockElements.length)
+            return;
+        const editable = this.blockElements[index].querySelector('[contenteditable]');
+        if (editable)
+            editable.focus();
     }
     getBlockIndex(blockEl) {
         return this.blockElements.indexOf(blockEl);
@@ -249,17 +366,38 @@ class Editor {
         const addBtn = document.createElement('button');
         addBtn.className = 'ce-btn ce-btn--add';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', () => {
+        addBtn.title = 'Add block';
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             this.showToolbox(wrapper);
+        });
+        const moveUpBtn = document.createElement('button');
+        moveUpBtn.className = 'ce-btn ce-btn--up';
+        moveUpBtn.textContent = '▲';
+        moveUpBtn.title = 'Move up';
+        moveUpBtn.addEventListener('click', () => {
+            const idx = this.getBlockIndex(wrapper);
+            this.moveBlock(idx, idx - 1);
+        });
+        const moveDownBtn = document.createElement('button');
+        moveDownBtn.className = 'ce-btn ce-btn--down';
+        moveDownBtn.textContent = '▼';
+        moveDownBtn.title = 'Move down';
+        moveDownBtn.addEventListener('click', () => {
+            const idx = this.getBlockIndex(wrapper);
+            this.moveBlock(idx, idx + 1);
         });
         const delBtn = document.createElement('button');
         delBtn.className = 'ce-btn ce-btn--del';
         delBtn.textContent = '×';
+        delBtn.title = 'Delete block';
         delBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.removeBlock(idx);
         });
         toolbar.appendChild(addBtn);
+        toolbar.appendChild(moveUpBtn);
+        toolbar.appendChild(moveDownBtn);
         toolbar.appendChild(delBtn);
         // Content
         const content = document.createElement('div');
@@ -270,18 +408,17 @@ class Editor {
         return wrapper;
     }
     showToolbox(refBlock) {
-        // Remove existing toolbox
         this.container.querySelector('.ce-toolbox')?.remove();
         const toolbox = document.createElement('div');
         toolbox.className = 'ce-toolbox';
         const toolTypes = [
-            { type: 'paragraph', label: 'Text' },
-            { type: 'heading', label: 'Heading' },
-            { type: 'list', label: 'List' },
-            { type: 'code', label: 'Code' },
-            { type: 'quote', label: 'Quote' },
+            { type: 'paragraph', label: i18n.t('block_text') },
+            { type: 'heading', label: i18n.t('block_heading') },
+            { type: 'list', label: i18n.t('block_list') },
+            { type: 'code', label: i18n.t('block_code') },
+            { type: 'quote', label: i18n.t('block_quote') },
             { type: 'delimiter', label: '---' },
-            { type: 'image', label: 'Image' },
+            { type: 'image', label: i18n.t('block_image') },
         ];
         toolTypes.forEach(({ type, label }) => {
             const btn = document.createElement('button');
@@ -296,7 +433,6 @@ class Editor {
             toolbox.appendChild(btn);
         });
         refBlock.after(toolbox);
-        // Close on outside click
         const close = (e) => {
             if (!toolbox.contains(e.target)) {
                 toolbox.remove();
@@ -313,6 +449,7 @@ class Editor {
         this.container.querySelector('.ce-toolbox')?.remove();
     }
 }
+Editor.inlineToolbar = null;
 // --- Render blocks to HTML (for visitor view) ---
 function escHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -324,7 +461,7 @@ function renderBlocks(blocks) {
             case 'paragraph':
                 return `<p>${d.text || ''}</p>`;
             case 'heading': {
-                const lvl = d.level || 2;
+                const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
                 return `<h${lvl}>${d.text || ''}</h${lvl}>`;
             }
             case 'list': {

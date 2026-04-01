@@ -38,8 +38,8 @@ const api = {
      */
     async listPages(): Promise<Record<string, PageSummary>> {
         const res = await fetch('index.php?api=pages');
+        if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.pages;
     },
 
@@ -48,8 +48,8 @@ const api = {
      */
     async getPage(slug: string): Promise<PageData> {
         const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`);
+        if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.data;
     },
 

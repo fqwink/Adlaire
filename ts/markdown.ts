@@ -10,18 +10,23 @@
 function markdownToHtml(md: string): string {
     let html = md;
 
-    // Escape HTML entities
-    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    // --- Fenced code blocks with optional language ---
-    // ```language\ncode\n``` → <pre><code class="language-xxx">
+    // --- Extract fenced code blocks BEFORE escaping (preserve raw content) ---
+    const codeBlocks: string[] = [];
     html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang, code) => {
+        const escaped = code.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const cls = lang ? ` class="language-${lang}"` : '';
-        return `<pre><code${cls}>${code.trim()}</code></pre>`;
+        codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
+        return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
     });
 
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Escape HTML entities (after code blocks are extracted)
+    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Inline code (skip placeholder patterns)
+    html = html.replace(/`([^`]+)`/g, (m, code) => {
+        if (m.includes('%%CODEBLOCK_')) return m;
+        return `<code>${code}</code>`;
+    });
 
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes: Record<string, string> = {};
@@ -124,6 +129,11 @@ function markdownToHtml(md: string): string {
         });
         html += '</ol></section>';
     }
+
+    // Restore code blocks from placeholders
+    codeBlocks.forEach((block, i) => {
+        html = html.replace(`%%CODEBLOCK_${i}%%`, block);
+    });
 
     // Clean up excessive newlines
     html = html.replace(/\n{2,}/g, '\n');

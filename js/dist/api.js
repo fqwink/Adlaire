@@ -11,10 +11,10 @@ const api = {
      */
     async listPages() {
         const res = await fetch('index.php?api=pages');
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            throw new Error(`API error: ${res.status}`);
         }
+        const json = await res.json();
         return json.pages;
     },
     /**
@@ -22,10 +22,10 @@ const api = {
      */
     async getPage(slug) {
         const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            throw new Error(`API error: ${res.status}`);
         }
+        const json = await res.json();
         return json.data;
     },
     /**

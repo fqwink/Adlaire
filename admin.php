@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 19;
-    public const VERSION = 'Ver.1.4-19';
+    public const VERSION_MINOR = 5;
+    public const VERSION_BUILD = 24;
+    public const VERSION = 'Ver.1.5-24';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -66,19 +66,24 @@ final class App
             ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
             : '';
 
-        $host = $_SERVER['HTTP_HOST'];
-        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'])) ?? '';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        // Whitelist: host must be valid hostname/IP with optional port
+        if (!preg_match('/^[a-zA-Z0-9.\-:]+(:\d+)?$/', $httpHost)) {
+            $httpHost = 'localhost';
+        }
+
+        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'] ?? '/')) ?? '/';
 
         $host = ($rp !== '' && str_contains($uri, $rp))
-            ? $host . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
-            : $host . '/' . $uri;
+            ? $httpHost . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
+            : $httpHost . '/' . $uri;
 
         $host = explode('?', $host)[0];
-        $host = '//' . str_replace('//', '/', $host);
+        $host = '//' . preg_replace('#/+#', '/', $host);
 
-        $strip = ['index.php', '?', '"', "'", '>', '<', '=', '(', ')', '\\'];
-        $rp = strip_tags(str_replace($strip, '', $rp));
-        $host = strip_tags(str_replace($strip, '', $host));
+        // Sanitize request page: allow only slug-safe characters and slashes
+        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rp = trim($rp, '/');
 
         return [$host, $rp];
     }
@@ -182,7 +187,7 @@ final class App
 
             $msg = '';
             if (isset($_POST['sub'])) {
-                $msg = $this->login();
+                $msg = esc($this->login());
             }
 
             $csrf = csrf_token();
@@ -212,7 +217,7 @@ final class App
             $this->config['page'] = $this->requestPage;
         }
         $this->config['page'] = self::getSlug($this->config['page']);
-        $this->config['pageFormat'] = 'html';
+        $this->config['pageFormat'] = 'blocks';
         $this->config['pageStatus'] = 'published';
 
         if (isset($_REQUEST['login'])) {
@@ -250,11 +255,7 @@ final class App
 
     private function loadPlugins(): void
     {
-        $cwd = getcwd();
-        if ($cwd === false) {
-            $cwd = __DIR__;
-        }
-        $pluginsDir = $cwd . '/plugins';
+        $pluginsDir = __DIR__ . '/plugins';
         if (is_dir($pluginsDir)) {
             $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
@@ -315,6 +316,10 @@ final class App
     {
         csrf_verify();
 
+        if (!login_rate_check()) {
+            return $this->t('login_rate_limited');
+        }
+
         $stored = $this->config['password'];
         $input = $_POST['password'] ?? '';
 
@@ -365,7 +370,7 @@ final class App
         $token = csrf_token();
         $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
         $safeLang = json_encode($this->language);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'html');
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks');
         echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
@@ -373,16 +378,39 @@ final class App
         }
     }
 
+    /**
+     * Output script tags for all compiled JS modules.
+     * Centralizes JS loading so themes don't need to list scripts manually.
+     */
+    public function scriptTags(): void
+    {
+        $scripts = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
+        foreach ($scripts as $name) {
+            echo "\t<script src=\"js/dist/{$name}.js\"></script>\n";
+        }
+    }
+
     public function content(string $id, string $content): void
     {
-        $format = $this->config['pageFormat'] ?? 'html';
+        $format = $this->config['pageFormat'] ?? 'blocks';
         $isPage = ($id === $this->config['page']);
         $isMarkdown = ($format === 'markdown' && $isPage);
         $isBlocks = ($format === 'blocks' && $isPage);
 
         if ($this->isLoggedIn()) {
             $safeId = esc($id);
-            $safeTitle = esc($this->defaults['content']);
+
+            // Format switcher toolbar (page content only)
+            if ($isPage) {
+                $formats = ['blocks' => 'Blocks', 'markdown' => 'Markdown'];
+                echo "<div class='ce-format-bar' data-slug='{$safeId}'>";
+                foreach ($formats as $fmt => $label) {
+                    $active = ($fmt === $format) ? ' class="active"' : '';
+                    $safeFmt = esc($fmt);
+                    echo "<button{$active} data-format='{$safeFmt}'>{$label}</button>";
+                }
+                echo "</div>";
+            }
 
             if ($isBlocks) {
                 $blocksJson = '';
@@ -390,9 +418,13 @@ final class App
                     $blocksJson = esc(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
                 }
                 echo "<div id='{$safeId}' class='ce-editor-wrapper' data-format='blocks' data-blocks='{$blocksJson}'></div>";
+            } elseif ($isMarkdown) {
+                $safeTitle = esc($this->defaults['content'] ?? '');
+                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText' data-format='markdown'>{$content}</span>";
             } else {
-                $formatAttr = $isMarkdown ? " data-format='markdown'" : '';
-                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'{$formatAttr}>{$content}</span>";
+                // Non-page content (sidebar etc.)
+                $safeTitle = esc($this->defaults['content'] ?? '');
+                echo "<span title='{$safeTitle}' id='{$safeId}' class='editText richText'>{$content}</span>";
             }
         } else {
             if ($isBlocks) {
@@ -467,7 +499,7 @@ final class App
 
         foreach (['title', 'description', 'keywords', 'copyright'] as $key) {
             $safeDefault = esc((string) ($this->defaults[$key] ?? ''));
-            $safeValue = esc($this->config[$key]);
+            $safeValue = esc((string) ($this->config[$key] ?? ''));
             echo "<div class='change border'><span title='{$safeDefault}' id='{$key}' class='editText'>{$safeValue}</span></div>";
         }
         echo '</div></div>';
@@ -491,8 +523,6 @@ function handleEdit(): void
         exit;
     }
 
-    $content = trim($content);
-
     if (!isset($_SESSION['l'])) {
         header('HTTP/1.1 401 Unauthorized');
         exit;
@@ -512,7 +542,7 @@ function handleEdit(): void
     } else {
         // Preserve existing page format when editing inline
         $existing = $storage->readPageData($fieldname);
-        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'html';
+        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'blocks';
         $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
         $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
         $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
@@ -546,6 +576,7 @@ function handleApi(): void
     }
 
     header('Content-Type: application/json; charset=UTF-8');
+    header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_HOST'] ?? 'null'));
 
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
@@ -616,7 +647,7 @@ function apiPageSave(FileStorage $storage): void
 
     $slug = $_POST['slug'] ?? null;
     $content = $_POST['content'] ?? null;
-    $format = $_POST['format'] ?? 'html';
+    $format = $_POST['format'] ?? 'blocks';
 
     if ($slug === null || $content === null) {
         apiError(400, 'Missing slug or content');
@@ -625,6 +656,11 @@ function apiPageSave(FileStorage $storage): void
 
     if (!FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
+        return;
+    }
+
+    if (!in_array($format, ['markdown', 'blocks'], true)) {
+        apiError(400, 'Invalid format');
         return;
     }
 
@@ -638,6 +674,10 @@ function apiPageSave(FileStorage $storage): void
     }
 
     $status = $_POST['status'] ?? 'published';
+    if (!in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid status');
+        return;
+    }
     $result = $storage->writePage($slug, $content, $format, $blocks, $status);
     if (!$result) {
         apiError(500, 'Write failed');

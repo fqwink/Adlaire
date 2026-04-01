@@ -113,10 +113,13 @@ final class FileStorage
                 if (!file_exists($dest)) {
                     $mtime = date('c', filemtime($file) ?: time());
                     $content = file_get_contents($file);
+                    $rawContent = $content !== false ? $content : '';
+                    $pageBlocks = [['type' => 'paragraph', 'data' => ['text' => $rawContent]]];
                     $pageData = [
-                        'content'    => $content !== false ? $content : '',
-                        'format'     => 'html',
+                        'content'    => $rawContent,
+                        'format'     => 'blocks',
                         'status'     => 'published',
+                        'blocks'     => $pageBlocks,
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
@@ -185,7 +188,8 @@ final class FileStorage
 
             if (file_exists($this->configFile)) {
                 $this->rotateBackups();
-                copy($this->configFile, $this->backupsDir . '/config.' . date('Ymd_His') . '.json');
+                $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
+                copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
             }
 
             $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -201,25 +205,8 @@ final class FileStorage
         return $this->writeConfig([$key => $value]);
     }
 
-    public function readPage(string $slug): string|false
-    {
-        if (!self::validateSlug($slug)) {
-            return false;
-        }
-        $path = $this->pagesDir . '/' . $slug . '.json';
-        if (!file_exists($path)) {
-            return false;
-        }
-        $json = $this->lockedRead($path);
-        if ($json === false) {
-            return false;
-        }
-        $data = json_decode($json, true);
-        return is_array($data) && isset($data['content']) ? $data['content'] : false;
-    }
-
     /**
-     * @return array{content: string, created_at: string, updated_at: string}|false
+     * @return array{content: string, format: string, status: string, created_at: string, updated_at: string, blocks?: array}|false
      */
     public function readPageData(string $slug): array|false
     {
@@ -241,14 +228,14 @@ final class FileStorage
     /**
      * @param array<int, array{type: string, data: array<string, mixed>}>|null $blocks
      */
-    public function writePage(string $slug, string $content, string $format = 'html', ?array $blocks = null, string $status = 'published'): bool
+    public function writePage(string $slug, string $content, string $format = 'blocks', ?array $blocks = null, string $status = 'published'): bool
     {
         if (!self::validateSlug($slug)) {
             return false;
         }
 
-        if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
-            $format = 'html';
+        if (!in_array($format, ['markdown', 'blocks'], true)) {
+            $format = 'blocks';
         }
         if (!in_array($status, ['draft', 'published'], true)) {
             $status = 'published';
@@ -292,7 +279,7 @@ final class FileStorage
             return false;
         }
 
-        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '.json';
+        $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
         copy($path, $backupPath);
 
         unlink($path);
@@ -435,7 +422,7 @@ final class FileStorage
             mkdir($dir, 0755, true);
         }
 
-        $revFile = $dir . '/' . date('Ymd_His') . '.json';
+        $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
         $this->atomicWrite($revFile, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
         // Rotate old revisions
@@ -487,7 +474,7 @@ final class FileStorage
         if (!self::validateSlug($slug)) {
             return false;
         }
-        if (!preg_match('/^\d{8}_\d{6}$/', $timestamp)) {
+        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
             return false;
         }
 
@@ -506,7 +493,7 @@ final class FileStorage
             return false;
         }
 
-        $format = $data['format'] ?? 'html';
+        $format = $data['format'] ?? 'blocks';
         $blocks = $data['blocks'] ?? null;
         $status = $data['status'] ?? 'published';
         return $this->writePage($slug, $data['content'], $format, $blocks, $status);
@@ -522,9 +509,7 @@ function esc(string $value): string
 
 function csrf_token(): string
 {
-    if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
     return $_SESSION['csrf'];
 }
 
@@ -536,4 +521,31 @@ function csrf_verify(): void
         header('HTTP/1.1 403 Forbidden');
         exit;
     }
+    // Regenerate token after successful verification (one-time use)
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+
+/**
+ * Rate limiting for login attempts.
+ * @return bool true if attempt is allowed, false if rate-limited
+ */
+function login_rate_check(): bool
+{
+    $maxAttempts = 5;
+    $windowSeconds = 300; // 5 minutes
+    $now = time();
+
+    $_SESSION['login_attempts'] ??= [];
+    // Prune old attempts
+    $_SESSION['login_attempts'] = array_filter(
+        $_SESSION['login_attempts'],
+        fn(int $t) => ($now - $t) < $windowSeconds
+    );
+
+    if (count($_SESSION['login_attempts']) >= $maxAttempts) {
+        return false;
+    }
+
+    $_SESSION['login_attempts'][] = $now;
+    return true;
 }

@@ -2,7 +2,7 @@
  * Editor - Block-based content editor for Adlaire Platform.
  * Editor.js-like architecture implemented in pure TypeScript.
  *
- * Spec: RULEBOOK.md Section 6.2
+ * Spec: RULEBOOK.md Section 6.3
  */
 
 // --- Types ---
@@ -25,6 +25,39 @@ interface BlockToolConfig {
 
 type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
 
+// --- Helper: attach Backspace handler to any contentEditable block ---
+
+function attachBackspaceHandler(el: HTMLElement): void {
+    el.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && el.textContent === '') {
+            e.preventDefault();
+            const editor = (el.closest('.ce-editor') as HTMLElement)?.__editor;
+            if (!editor) return;
+            const block = el.closest('.ce-block') as HTMLElement;
+            const idx = editor.getBlockIndex(block);
+            if (idx > 0) {
+                editor.removeBlock(idx);
+                editor.focusBlock(idx - 1);
+            }
+        }
+    });
+}
+
+// --- Helper: attach Enter handler for list items ---
+
+function attachListItemHandlers(li: HTMLLIElement): void {
+    li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const newLi = document.createElement('li');
+            newLi.contentEditable = 'true';
+            attachListItemHandlers(newLi);
+            li.after(newLi);
+            newLi.focus();
+        }
+    });
+}
+
 // --- Built-in Block Tools ---
 
 const builtinTools: Record<string, BlockToolFactory> = {
@@ -45,6 +78,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                         }
                     }
                 });
+                attachBackspaceHandler(el);
                 return el;
             },
             save(el) {
@@ -54,13 +88,15 @@ const builtinTools: Record<string, BlockToolFactory> = {
     },
 
     heading(data) {
-        const level = (data.level as number) || 2;
+        const rawLevel = (data.level as number) || 2;
+        const level = Math.max(1, Math.min(3, rawLevel));
         return {
             render() {
                 const el = document.createElement(`h${level}`);
                 el.contentEditable = 'true';
                 el.className = 'ce-heading';
                 el.innerHTML = (data.text as string) || '';
+                attachBackspaceHandler(el);
                 return el;
             },
             save(el) {
@@ -81,15 +117,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
                     li.innerHTML = item;
-                    li.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const newLi = document.createElement('li');
-                            newLi.contentEditable = 'true';
-                            li.after(newLi);
-                            newLi.focus();
-                        }
-                    });
+                    attachListItemHandlers(li);
                     el.appendChild(li);
                 });
                 return el;
@@ -130,6 +158,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 bq.className = 'ce-quote';
                 bq.contentEditable = 'true';
                 bq.innerHTML = (data.text as string) || '';
+                attachBackspaceHandler(bq);
                 return bq;
             },
             save(el) {
@@ -157,27 +186,95 @@ const builtinTools: Record<string, BlockToolFactory> = {
             render() {
                 const wrap = document.createElement('figure');
                 wrap.className = 'ce-image';
+
                 const img = document.createElement('img');
                 img.src = (data.url as string) || '';
                 img.alt = '';
-                wrap.appendChild(img);
+
+                // URL input for editing
+                const urlInput = document.createElement('input');
+                urlInput.type = 'text';
+                urlInput.className = 'ce-image__url';
+                urlInput.placeholder = 'Image URL...';
+                urlInput.value = (data.url as string) || '';
+                urlInput.addEventListener('input', () => {
+                    img.src = urlInput.value;
+                });
+
                 const cap = document.createElement('figcaption');
                 cap.contentEditable = 'true';
                 cap.textContent = (data.caption as string) || '';
+                cap.setAttribute('placeholder', 'Caption...');
+
+                wrap.appendChild(urlInput);
+                wrap.appendChild(img);
                 wrap.appendChild(cap);
                 return wrap;
             },
             save(el) {
-                const img = el.querySelector('img');
+                const urlInput = el.querySelector<HTMLInputElement>('.ce-image__url');
                 const cap = el.querySelector('figcaption');
                 return {
-                    url: img?.src || '',
+                    url: urlInput?.value || '',
                     caption: cap?.textContent || '',
                 };
             },
         };
     },
 };
+
+// --- Inline Toolbar ---
+
+class InlineToolbar {
+    private el: HTMLElement;
+
+    constructor() {
+        this.el = document.createElement('div');
+        this.el.className = 'ce-inline-toolbar';
+        this.el.innerHTML = `
+            <button data-cmd="bold" title="Bold"><b>B</b></button>
+            <button data-cmd="italic" title="Italic"><i>I</i></button>
+            <button data-cmd="createLink" title="Link">🔗</button>
+        `;
+        this.el.style.display = 'none';
+        document.body.appendChild(this.el);
+
+        this.el.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const cmd = btn.dataset.cmd!;
+                if (cmd === 'createLink') {
+                    const url = prompt('URL:');
+                    if (url) document.execCommand(cmd, false, url);
+                } else {
+                    document.execCommand(cmd);
+                }
+            });
+        });
+
+        document.addEventListener('selectionchange', () => this.update());
+    }
+
+    private update(): void {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+            this.el.style.display = 'none';
+            return;
+        }
+
+        const range = sel.getRangeAt(0);
+        const ancestor = range.commonAncestorContainer as HTMLElement;
+        if (!ancestor.closest?.('.ce-editor') && !(ancestor.parentElement?.closest('.ce-editor'))) {
+            this.el.style.display = 'none';
+            return;
+        }
+
+        const rect = range.getBoundingClientRect();
+        this.el.style.display = 'flex';
+        this.el.style.top = `${rect.top + window.scrollY - 40}px`;
+        this.el.style.left = `${rect.left + window.scrollX + rect.width / 2 - this.el.offsetWidth / 2}px`;
+    }
+}
 
 // --- Editor Class ---
 
@@ -187,12 +284,17 @@ class Editor {
     private blockElements: HTMLElement[] = [];
     private blockTools: BlockToolConfig[] = [];
     private blockTypes: string[] = [];
+    private static inlineToolbar: InlineToolbar | null = null;
 
     constructor(container: HTMLElement, tools?: Record<string, BlockToolFactory>) {
         this.container = container;
         this.tools = { ...builtinTools, ...tools };
         this.container.classList.add('ce-editor');
         (this.container as any).__editor = this;
+
+        if (!Editor.inlineToolbar) {
+            Editor.inlineToolbar = new InlineToolbar();
+        }
     }
 
     static create(el: HTMLElement, config?: { tools?: Record<string, BlockToolFactory>; data?: EditorData }): Editor {
@@ -268,10 +370,41 @@ class Editor {
         this.blockTools.splice(index, 1);
         this.blockTypes.splice(index, 1);
 
-        // Ensure at least one block
         if (this.blockElements.length === 0) {
             this.insertBlock('paragraph', {}, 0);
         }
+    }
+
+    moveBlock(from: number, to: number): void {
+        if (from < 0 || from >= this.blockElements.length) return;
+        if (to < 0 || to >= this.blockElements.length) return;
+        if (from === to) return;
+
+        const el = this.blockElements[from];
+        const tool = this.blockTools[from];
+        const type = this.blockTypes[from];
+
+        this.blockElements.splice(from, 1);
+        this.blockTools.splice(from, 1);
+        this.blockTypes.splice(from, 1);
+
+        this.blockElements.splice(to, 0, el);
+        this.blockTools.splice(to, 0, tool);
+        this.blockTypes.splice(to, 0, type);
+
+        // Re-render DOM order
+        if (to >= this.blockElements.length - 1) {
+            this.container.appendChild(el);
+        } else {
+            const ref = this.blockElements[to + 1];
+            this.container.insertBefore(el, ref);
+        }
+    }
+
+    focusBlock(index: number): void {
+        if (index < 0 || index >= this.blockElements.length) return;
+        const editable = this.blockElements[index].querySelector('[contenteditable]') as HTMLElement;
+        if (editable) editable.focus();
     }
 
     getBlockIndex(blockEl: HTMLElement): number {
@@ -290,19 +423,42 @@ class Editor {
         const addBtn = document.createElement('button');
         addBtn.className = 'ce-btn ce-btn--add';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', () => {
+        addBtn.title = 'Add block';
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             this.showToolbox(wrapper);
+        });
+
+        const moveUpBtn = document.createElement('button');
+        moveUpBtn.className = 'ce-btn ce-btn--up';
+        moveUpBtn.textContent = '▲';
+        moveUpBtn.title = 'Move up';
+        moveUpBtn.addEventListener('click', () => {
+            const idx = this.getBlockIndex(wrapper);
+            this.moveBlock(idx, idx - 1);
+        });
+
+        const moveDownBtn = document.createElement('button');
+        moveDownBtn.className = 'ce-btn ce-btn--down';
+        moveDownBtn.textContent = '▼';
+        moveDownBtn.title = 'Move down';
+        moveDownBtn.addEventListener('click', () => {
+            const idx = this.getBlockIndex(wrapper);
+            this.moveBlock(idx, idx + 1);
         });
 
         const delBtn = document.createElement('button');
         delBtn.className = 'ce-btn ce-btn--del';
         delBtn.textContent = '×';
+        delBtn.title = 'Delete block';
         delBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.removeBlock(idx);
         });
 
         toolbar.appendChild(addBtn);
+        toolbar.appendChild(moveUpBtn);
+        toolbar.appendChild(moveDownBtn);
         toolbar.appendChild(delBtn);
 
         // Content
@@ -316,20 +472,19 @@ class Editor {
     }
 
     private showToolbox(refBlock: HTMLElement): void {
-        // Remove existing toolbox
         this.container.querySelector('.ce-toolbox')?.remove();
 
         const toolbox = document.createElement('div');
         toolbox.className = 'ce-toolbox';
 
         const toolTypes: { type: string; label: string }[] = [
-            { type: 'paragraph', label: 'Text' },
-            { type: 'heading', label: 'Heading' },
-            { type: 'list', label: 'List' },
-            { type: 'code', label: 'Code' },
-            { type: 'quote', label: 'Quote' },
+            { type: 'paragraph', label: i18n.t('block_text') },
+            { type: 'heading', label: i18n.t('block_heading') },
+            { type: 'list', label: i18n.t('block_list') },
+            { type: 'code', label: i18n.t('block_code') },
+            { type: 'quote', label: i18n.t('block_quote') },
             { type: 'delimiter', label: '---' },
-            { type: 'image', label: 'Image' },
+            { type: 'image', label: i18n.t('block_image') },
         ];
 
         toolTypes.forEach(({ type, label }) => {
@@ -347,7 +502,6 @@ class Editor {
 
         refBlock.after(toolbox);
 
-        // Close on outside click
         const close = (e: MouseEvent) => {
             if (!toolbox.contains(e.target as Node)) {
                 toolbox.remove();
@@ -379,7 +533,7 @@ function renderBlocks(blocks: BlockData[]): string {
             case 'paragraph':
                 return `<p>${d.text || ''}</p>`;
             case 'heading': {
-                const lvl = d.level || 2;
+                const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
                 return `<h${lvl}>${d.text || ''}</h${lvl}>`;
             }
             case 'list': {

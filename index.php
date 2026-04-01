@@ -15,6 +15,14 @@ declare(strict_types=1);
  */
 
 ob_start();
+
+// Ensure output buffer is flushed even on fatal errors
+register_shutdown_function(function (): void {
+    if (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+});
+
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 session_start();
