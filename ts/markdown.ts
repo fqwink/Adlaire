@@ -103,8 +103,12 @@ function markdownToHtml(md: string): string {
         return '<ul>' + m + '</ul>';
     });
 
-    // Blockquotes
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    // Blockquotes — merge consecutive lines into single block
+    html = html.replace(/^&gt; (.+)$/gm, '<bq>$1</bq>');
+    html = html.replace(/((?:<bq>.*<\/bq>\n?)+)/g, (m) => {
+        const content = m.replace(/<\/?bq>/g, '').trim().replace(/\n/g, '<br>');
+        return `<blockquote>${content}</blockquote>`;
+    });
 
     // Paragraphs: wrap remaining lines that aren't already HTML tags
     html = html.replace(/^(?!<[a-z\/])(.*\S.*)$/gm, '<p>$1</p>');
