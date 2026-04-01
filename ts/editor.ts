@@ -101,8 +101,10 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 pre.className = 'ce-code';
                 const code = document.createElement('code');
                 code.contentEditable = 'true';
+                code.style.whiteSpace = 'pre-wrap';
                 code.textContent = (data.code as string) || '';
                 pre.appendChild(code);
+                pre.addEventListener('click', () => code.focus());
                 return pre;
             },
             save(el) {
