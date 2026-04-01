@@ -10,9 +10,10 @@
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
 - `README.md` — プロジェクト説明（プロジェクトルート）
 - `rulebook-docs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
-  - `rulebook-docs/CHARTER.md` — 憲章（全バージョン共通の最上位原則）
-  - `rulebook-docs/v1.md` — Ver.1.x 系（凍結）
-  - `rulebook-docs/v2.md` — Ver.2.x 系（現行）
+  - `rulebook-docs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
+  - `rulebook-docs/Ver.1.md` — Ver.1.x 系（凍結）
+  - `rulebook-docs/Ver.2.md` — Ver.2.x 系（現行）
+  - ※ `rulebook-docs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
   - `docs/RELEASE-NOTES.md` — リリースノート
@@ -22,8 +23,8 @@
 - ルールブックは**メジャーバージョンごとに独立ファイル**で管理する。
 - `rulebook-docs/` フォルダ（プロジェクトルート直下）にルールブックを集約する。
   - `rulebook-docs/CHARTER.md` — 憲章（全バージョン共通の最上位原則）
-  - `rulebook-docs/v1.md` — Ver.1.x 系（凍結）
-  - `rulebook-docs/v2.md` — Ver.2.x 系（現行）
+  - `rulebook-docs/Ver.1.md` — Ver.1.x 系（凍結）
+  - `rulebook-docs/Ver.2.md` — Ver.2.x 系（現行）
 - 旧バージョンのルールブックは**凍結保存**し、変更しない。
 - 新バージョンのルールブックは旧版を基盤として策定する。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
