@@ -478,13 +478,13 @@ class Editor {
         toolbox.className = 'ce-toolbox';
 
         const toolTypes: { type: string; label: string }[] = [
-            { type: 'paragraph', label: 'Text' },
-            { type: 'heading', label: 'Heading' },
-            { type: 'list', label: 'List' },
-            { type: 'code', label: 'Code' },
-            { type: 'quote', label: 'Quote' },
+            { type: 'paragraph', label: i18n.t('block_text') },
+            { type: 'heading', label: i18n.t('block_heading') },
+            { type: 'list', label: i18n.t('block_list') },
+            { type: 'code', label: i18n.t('block_code') },
+            { type: 'quote', label: i18n.t('block_quote') },
             { type: 'delimiter', label: '---' },
-            { type: 'image', label: 'Image' },
+            { type: 'image', label: i18n.t('block_image') },
         ];
 
         toolTypes.forEach(({ type, label }) => {

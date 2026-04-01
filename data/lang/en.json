@@ -27,5 +27,11 @@
     "login_rate_limited": "Too many login attempts. Please wait a few minutes.",
     "settings_format": "Page format",
     "format_html": "HTML",
-    "format_markdown": "Markdown"
+    "format_markdown": "Markdown",
+    "block_text": "Text",
+    "block_heading": "Heading",
+    "block_list": "List",
+    "block_code": "Code",
+    "block_quote": "Quote",
+    "block_image": "Image"
 }
