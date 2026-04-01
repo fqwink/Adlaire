@@ -32,7 +32,8 @@ const builtinTools = {
         };
     },
     heading(data) {
-        const level = data.level || 2;
+        const rawLevel = data.level || 2;
+        const level = Math.max(1, Math.min(3, rawLevel));
         return {
             render() {
                 const el = document.createElement(`h${level}`);
@@ -249,7 +250,8 @@ class Editor {
         const addBtn = document.createElement('button');
         addBtn.className = 'ce-btn ce-btn--add';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', () => {
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             this.showToolbox(wrapper);
         });
         const delBtn = document.createElement('button');
@@ -324,7 +326,7 @@ function renderBlocks(blocks) {
             case 'paragraph':
                 return `<p>${d.text || ''}</p>`;
             case 'heading': {
-                const lvl = d.level || 2;
+                const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
                 return `<h${lvl}>${d.text || ''}</h${lvl}>`;
             }
             case 'list': {

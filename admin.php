@@ -182,7 +182,7 @@ final class App
 
             $msg = '';
             if (isset($_POST['sub'])) {
-                $msg = $this->login();
+                $msg = esc($this->login());
             }
 
             $csrf = csrf_token();
@@ -467,7 +467,7 @@ final class App
 
         foreach (['title', 'description', 'keywords', 'copyright'] as $key) {
             $safeDefault = esc((string) ($this->defaults[$key] ?? ''));
-            $safeValue = esc($this->config[$key]);
+            $safeValue = esc((string) ($this->config[$key] ?? ''));
             echo "<div class='change border'><span title='{$safeDefault}' id='{$key}' class='editText'>{$safeValue}</span></div>";
         }
         echo '</div></div>';
@@ -490,8 +490,6 @@ function handleEdit(): void
         header('HTTP/1.1 400 Bad Request');
         exit;
     }
-
-    $content = trim($content);
 
     if (!isset($_SESSION['l'])) {
         header('HTTP/1.1 401 Unauthorized');
@@ -628,6 +626,11 @@ function apiPageSave(FileStorage $storage): void
         return;
     }
 
+    if (!in_array($format, ['html', 'markdown', 'blocks'], true)) {
+        apiError(400, 'Invalid format');
+        return;
+    }
+
     $blocks = null;
     if ($format === 'blocks' && isset($_POST['blocks'])) {
         $blocks = json_decode($_POST['blocks'], true);
@@ -638,6 +641,10 @@ function apiPageSave(FileStorage $storage): void
     }
 
     $status = $_POST['status'] ?? 'published';
+    if (!in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid status');
+        return;
+    }
     $result = $storage->writePage($slug, $content, $format, $blocks, $status);
     if (!$result) {
         apiError(500, 'Write failed');

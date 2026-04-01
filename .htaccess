@@ -1,5 +1,6 @@
 RedirectMatch 403 ^.*/files/
-RedirectMatch 403 ^.*/data/
+# Allow access to translation JSON files only
+RedirectMatch 403 ^.*/data/(?!lang/)
 <Files "core.php">
     Require all denied
 </Files>

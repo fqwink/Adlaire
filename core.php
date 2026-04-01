@@ -185,7 +185,8 @@ final class FileStorage
 
             if (file_exists($this->configFile)) {
                 $this->rotateBackups();
-                copy($this->configFile, $this->backupsDir . '/config.' . date('Ymd_His') . '.json');
+                $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
+                copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
             }
 
             $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -435,7 +436,7 @@ final class FileStorage
             mkdir($dir, 0755, true);
         }
 
-        $revFile = $dir . '/' . date('Ymd_His') . '.json';
+        $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
         $this->atomicWrite($revFile, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
         // Rotate old revisions
