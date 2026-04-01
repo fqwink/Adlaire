@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 18;
-    public const VERSION = 'Ver.1.4-18';
+    public const VERSION_BUILD = 19;
+    public const VERSION = 'Ver.1.4-19';
 
     /** @var array<string, mixed> */
     public array $config = [];
