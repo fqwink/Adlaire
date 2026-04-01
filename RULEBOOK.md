@@ -394,6 +394,9 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 
 ## 8. 機能仕様
 
+> 本セクションに記載の機能はすべて **Core 機能** とする。
+> Core 機能は Adlaire Platform の基本構成要素であり、常に利用可能でなければならない。
+
 ### 8.1 コンテンツ管理
 
 | 機能 | 状態 |
@@ -409,7 +412,7 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | サイトマップ自動生成 | 実装済 |
 | エクスポート / インポート | 実装済 |
 | 管理ツール専用 UI | 実装済 |
-| 静的サイト生成 | **計画** |
+| 静的サイト生成（dist/ 出力） | 実装済 |
 
 ### 8.2 認証・セキュリティ
 
