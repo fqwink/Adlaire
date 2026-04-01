@@ -152,12 +152,33 @@ function initBlockEditor(): void {
                 const slug = wrapper.id;
                 if (!slug) return;
 
-                api.savePage(slug, JSON.stringify(saved.blocks), 'blocks').catch(() => {
-                    // Silent fail - will retry on next focusout
+                showSaveIndicator(wrapper, 'saving');
+                api.savePage(slug, JSON.stringify(saved.blocks), 'blocks').then(() => {
+                    showSaveIndicator(wrapper, 'saved');
+                }).catch(() => {
+                    showSaveIndicator(wrapper, 'error');
                 });
             }, 300);
         });
     });
+}
+
+// --- Save indicator ---
+
+function showSaveIndicator(container: HTMLElement, state: 'saving' | 'saved' | 'error'): void {
+    let indicator = container.parentElement?.querySelector('.ce-save-indicator') as HTMLElement | null;
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'ce-save-indicator';
+        container.parentElement?.insertBefore(indicator, container);
+    }
+
+    indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '✓' : '✗';
+    indicator.className = 'ce-save-indicator ce-save--' + state;
+
+    if (state !== 'saving') {
+        setTimeout(() => { indicator!.className = 'ce-save-indicator'; }, 2000);
+    }
 }
 
 // --- Format switching ---
@@ -172,6 +193,7 @@ function initFormatSwitcher(): void {
                 const newFormat = btn.dataset.format;
                 if (!newFormat || btn.classList.contains('active')) return;
 
+                if (!confirm(`Format を ${newFormat} に変更しますか？\nコンテンツが変換されます。`)) return;
                 switchFormat(slug, newFormat);
             });
         });

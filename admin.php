@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 5;
-    public const VERSION_BUILD = 22;
-    public const VERSION = 'Ver.1.5-22';
+    public const VERSION_BUILD = 23;
+    public const VERSION = 'Ver.1.5-23';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -555,6 +555,7 @@ function handleApi(): void
     }
 
     header('Content-Type: application/json; charset=UTF-8');
+    header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_HOST'] ?? 'null'));
 
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
