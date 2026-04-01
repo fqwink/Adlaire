@@ -56,8 +56,9 @@ final class FileStorage
                 mkdir($dir, 0755, true);
             }
         }
-        if (!is_dir('plugins')) {
-            mkdir('plugins', 0755, true);
+        $pluginsDir = dirname($this->basePath) . '/plugins';
+        if (!is_dir($pluginsDir)) {
+            mkdir($pluginsDir, 0755, true);
         }
     }
 
@@ -295,6 +296,19 @@ final class FileStorage
         copy($path, $backupPath);
 
         unlink($path);
+
+        // Clean up revisions for deleted page
+        $revDir = $this->revisionsDir . '/' . $slug;
+        if (is_dir($revDir)) {
+            $revFiles = glob($revDir . '/*.json');
+            if (is_array($revFiles)) {
+                foreach ($revFiles as $rf) {
+                    unlink($rf);
+                }
+            }
+            rmdir($revDir);
+        }
+
         return true;
     }
 
@@ -392,7 +406,7 @@ final class FileStorage
         $content = stream_get_contents($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
-        return $content;
+        return $content !== false ? $content : false;
     }
 
     private function rotateBackups(): void

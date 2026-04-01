@@ -1,5 +1,31 @@
 # CHANGES - 変更履歴
 
+## Ver.1.4-19 (2026-04-01)
+
+### 新機能4件追加
+* 下書き・公開ワークフロー（ページに status フィールド追加、draft/published 管理）
+* サイト内検索 API（GET ?api=search&q=xxx、公開・認証不要）
+* サイトマップ自動生成（GET ?api=sitemap、XML形式、公開ページのみ）
+* エクスポート・インポート（GET ?api=export / POST ?api=import）
+
+### ブロックエディタ・Markdown 強化
+* ブロックエディタ（Editor.js ライク）を TypeScript で実装（7ブロック型）
+* ブロック format の PHP/TS エンドツーエンド実装
+* Markdown パーサー拡張（テーブル、タスクリスト、画像、脚注、コード言語指定、順序リスト）
+
+### バグ修正（30件）
+* セキュリティ: パスワード直接上書き防止、XSS修正（renderBlocks/検索スニペット/login form）
+* データ整合: status/format/blocks フィールドのマイグレーション・復元・保持
+* API: HTTPS判定、sitemap Content-Type、export ダウンロード、CSRF DELETE 対応
+* エディタ: image ツールボックス追加、リスト Enter キー、コードブロック focus
+* Markdown: テーブル空行、blockquote 結合、脚注 ID 重複
+* コア: cwd 破損防止、plugins 絶対パス、リビジョンクリーンアップ、autosize フリッカー
+
+### その他
+* FEATURES.md を RULEBOOK.md（ルールブック / 仕様書）にリネーム
+* CLAUDE.md に PHP 8.3+ 必須・TypeScript 5 固定を明記
+* JS 出力先を js/ に変更
+
 ## Ver.1.3-14 (2026-03-31)
 
 ### 新機能3件追加

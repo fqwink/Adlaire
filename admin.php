@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 1;
     public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 18;
-    public const VERSION = 'Ver.1.4-18';
+    public const VERSION_BUILD = 19;
+    public const VERSION = 'Ver.1.4-19';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -138,7 +138,7 @@ final class App
         $stored = $this->storage->readConfig();
 
         foreach ($this->config as $key => $val) {
-            if ($key === 'content' || $key === 'loggedin') {
+            if ($key === 'content' || $key === 'loggedin' || $key === 'page') {
                 continue;
             }
 
@@ -188,7 +188,7 @@ final class App
             $csrf = csrf_token();
             $loginLabel = esc($this->t('login_submit'));
             $changePwLabel = esc($this->t('change_password_label'));
-            $changePwHint = $this->t('change_password_hint');
+            $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'>
@@ -502,6 +502,11 @@ function handleEdit(): void
 
     $storage = new FileStorage('files');
 
+    if ($fieldname === 'password') {
+        header('HTTP/1.1 403 Forbidden');
+        exit;
+    }
+
     if ($storage->isConfigKey($fieldname)) {
         $result = $storage->writeConfigValue($fieldname, $content);
     } else {
@@ -704,13 +709,13 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 function handleApiSearch(FileStorage $storage): void
 {
-    $query = $_REQUEST['q'] ?? '';
-    if ($query === '') {
+    $rawQuery = $_REQUEST['q'] ?? '';
+    if ($rawQuery === '') {
         echo json_encode(['results' => []]);
         return;
     }
 
-    $query = mb_strtolower($query, 'UTF-8');
+    $query = mb_strtolower($rawQuery, 'UTF-8');
     $pages = $storage->listPublishedPages();
     $results = [];
 
@@ -730,14 +735,14 @@ function handleApiSearch(FileStorage $storage): void
 
         $results[] = [
             'slug'       => $slug,
-            'snippet'    => $snippet,
+            'snippet'    => strip_tags($snippet),
             'format'     => $data['format'] ?? 'html',
             'status'     => $data['status'] ?? 'published',
             'updated_at' => $data['updated_at'],
         ];
     }
 
-    echo json_encode(['query' => $_REQUEST['q'], 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    echo json_encode(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 // --- Sitemap API ---
@@ -759,8 +764,9 @@ function handleApiSitemap(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
     // Home page
+    $homeLoc = htmlspecialchars("{$host}{$basePath}/", ENT_XML1, 'UTF-8');
     $xml .= "  <url>\n";
-    $xml .= "    <loc>{$host}{$basePath}/</loc>\n";
+    $xml .= "    <loc>{$homeLoc}</loc>\n";
     $xml .= "    <changefreq>weekly</changefreq>\n";
     $xml .= "  </url>\n";
 
@@ -791,6 +797,7 @@ function handleApiExport(FileStorage $storage): void
         'pages'     => $storage->listPages(),
     ];
 
+    header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
     echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
@@ -804,12 +811,17 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    // CSRF token must be in URL query for JSON body requests
     csrf_verify();
 
     $input = file_get_contents('php://input');
     if ($input === false || $input === '') {
-        // Try form data
         $input = $_POST['data'] ?? '';
+    }
+
+    if ($input === '') {
+        apiError(400, 'Empty request body');
+        return;
     }
 
     $data = json_decode($input, true);

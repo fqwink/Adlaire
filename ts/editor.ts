@@ -81,6 +81,15 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
                     li.innerHTML = item;
+                    li.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const newLi = document.createElement('li');
+                            newLi.contentEditable = 'true';
+                            li.after(newLi);
+                            newLi.focus();
+                        }
+                    });
                     el.appendChild(li);
                 });
                 return el;
@@ -101,8 +110,10 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 pre.className = 'ce-code';
                 const code = document.createElement('code');
                 code.contentEditable = 'true';
+                code.style.whiteSpace = 'pre-wrap';
                 code.textContent = (data.code as string) || '';
                 pre.appendChild(code);
+                pre.addEventListener('click', () => code.focus());
                 return pre;
             },
             save(el) {
@@ -148,13 +159,12 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 wrap.className = 'ce-image';
                 const img = document.createElement('img');
                 img.src = (data.url as string) || '';
+                img.alt = '';
                 wrap.appendChild(img);
-                if (data.caption) {
-                    const cap = document.createElement('figcaption');
-                    cap.contentEditable = 'true';
-                    cap.textContent = data.caption as string;
-                    wrap.appendChild(cap);
-                }
+                const cap = document.createElement('figcaption');
+                cap.contentEditable = 'true';
+                cap.textContent = (data.caption as string) || '';
+                wrap.appendChild(cap);
                 return wrap;
             },
             save(el) {
@@ -319,6 +329,7 @@ class Editor {
             { type: 'code', label: 'Code' },
             { type: 'quote', label: 'Quote' },
             { type: 'delimiter', label: '---' },
+            { type: 'image', label: 'Image' },
         ];
 
         toolTypes.forEach(({ type, label }) => {
@@ -357,6 +368,10 @@ class Editor {
 
 // --- Render blocks to HTML (for visitor view) ---
 
+function escHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function renderBlocks(blocks: BlockData[]): string {
     return blocks.map(block => {
         const d = block.data;
@@ -373,14 +388,15 @@ function renderBlocks(blocks: BlockData[]): string {
                 return `<${tag}>${items.map(i => `<li>${i}</li>`).join('')}</${tag}>`;
             }
             case 'code':
-                return `<pre><code>${d.code || ''}</code></pre>`;
+                return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
             case 'quote':
                 return `<blockquote>${d.text || ''}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
             case 'image': {
-                const cap = d.caption ? `<figcaption>${d.caption}</figcaption>` : '';
-                return `<figure><img src="${d.url || ''}"/>${cap}</figure>`;
+                const url = escHtml(String(d.url || ''));
+                const cap = d.caption ? `<figcaption>${escHtml(String(d.caption))}</figcaption>` : '';
+                return `<figure><img src="${url}" alt=""/>${cap}</figure>`;
             }
             default:
                 return '';

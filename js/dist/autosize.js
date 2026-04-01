@@ -21,7 +21,8 @@ function autosize(textarea) {
     textarea.style.overflow = 'hidden';
     textarea.style.resize = 'none';
     function resize() {
-        textarea.style.height = 'auto';
+        textarea.style.overflowY = 'hidden';
+        textarea.style.height = '0';
         const scrollHeight = textarea.scrollHeight + extra;
         textarea.style.height = Math.max(scrollHeight, minHeight) + 'px';
     }

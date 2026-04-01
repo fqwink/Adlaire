@@ -30,9 +30,11 @@ function markdownToHtml(md: string): string {
         return '';
     });
 
-    // Footnote references: [^id] → superscript link
+    // Footnote references: [^id] → superscript link (unique IDs per occurrence)
+    let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
-        return `<sup><a href="#fn-${id}" id="fnref-${id}">${id}</a></sup>`;
+        fnRefCount++;
+        return `<sup><a href="#fn-${id}" id="fnref-${id}-${fnRefCount}">${id}</a></sup>`;
     });
 
     // Headings (### > ## > #)
@@ -56,7 +58,7 @@ function markdownToHtml(md: string): string {
 
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
-        const rows = tableBlock.trim().split('\n');
+        const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
         if (rows.length < 2) return tableBlock;
 
         const parseRow = (row: string): string[] =>
@@ -103,8 +105,12 @@ function markdownToHtml(md: string): string {
         return '<ul>' + m + '</ul>';
     });
 
-    // Blockquotes
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    // Blockquotes — merge consecutive lines into single block
+    html = html.replace(/^&gt; (.+)$/gm, '<bq>$1</bq>');
+    html = html.replace(/((?:<bq>.*<\/bq>\n?)+)/g, (m) => {
+        const content = m.replace(/<\/?bq>/g, '').trim().replace(/\n/g, '<br>');
+        return `<blockquote>${content}</blockquote>`;
+    });
 
     // Paragraphs: wrap remaining lines that aren't already HTML tags
     html = html.replace(/^(?!<[a-z\/])(.*\S.*)$/gm, '<p>$1</p>');
