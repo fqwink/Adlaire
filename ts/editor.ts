@@ -319,6 +319,7 @@ class Editor {
             { type: 'code', label: 'Code' },
             { type: 'quote', label: 'Quote' },
             { type: 'delimiter', label: '---' },
+            { type: 'image', label: 'Image' },
         ];
 
         toolTypes.forEach(({ type, label }) => {
