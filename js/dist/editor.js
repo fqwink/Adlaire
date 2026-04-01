@@ -121,13 +121,12 @@ const builtinTools = {
                 wrap.className = 'ce-image';
                 const img = document.createElement('img');
                 img.src = data.url || '';
+                img.alt = '';
                 wrap.appendChild(img);
-                if (data.caption) {
-                    const cap = document.createElement('figcaption');
-                    cap.contentEditable = 'true';
-                    cap.textContent = data.caption;
-                    wrap.appendChild(cap);
-                }
+                const cap = document.createElement('figcaption');
+                cap.contentEditable = 'true';
+                cap.textContent = data.caption || '';
+                wrap.appendChild(cap);
                 return wrap;
             },
             save(el) {

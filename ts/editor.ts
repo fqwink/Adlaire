@@ -148,13 +148,12 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 wrap.className = 'ce-image';
                 const img = document.createElement('img');
                 img.src = (data.url as string) || '';
+                img.alt = '';
                 wrap.appendChild(img);
-                if (data.caption) {
-                    const cap = document.createElement('figcaption');
-                    cap.contentEditable = 'true';
-                    cap.textContent = data.caption as string;
-                    wrap.appendChild(cap);
-                }
+                const cap = document.createElement('figcaption');
+                cap.contentEditable = 'true';
+                cap.textContent = (data.caption as string) || '';
+                wrap.appendChild(cap);
                 return wrap;
             },
             save(el) {
