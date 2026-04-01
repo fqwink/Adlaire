@@ -502,6 +502,11 @@ function handleEdit(): void
 
     $storage = new FileStorage('files');
 
+    if ($fieldname === 'password') {
+        header('HTTP/1.1 403 Forbidden');
+        exit;
+    }
+
     if ($storage->isConfigKey($fieldname)) {
         $result = $storage->writeConfigValue($fieldname, $content);
     } else {
