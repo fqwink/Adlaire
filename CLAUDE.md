@@ -23,6 +23,8 @@
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
+- `Licenses/` — ライセンスフォルダ（プロジェクトルート）
+  - `Licenses/LICENSE_Ver.2.0` — Adlaire License Ver.2.0
 
 ## ドキュメント命名規則
 
@@ -43,7 +45,7 @@
 
 > 詳細は `rulebookdocs/ARCHITECTURE_RULEBOOK.md` を参照。
 
-- **PHP 8.3+**（`declare(strict_types=1)`）、ルート2 + `Core/` 7ファイル構成
+- **PHP 8.3+**（`declare(strict_types=1)`）、ルート2 + `Core/` 8ファイル構成
 - **TypeScript 5 系固定**（`~5.8`）、JS 直接記述禁止、`ts/` → `js/` コンパイル生成
 - ビルド: `npm install` → `npm run build`（`tsc`）
 - `js/` 内の手動編集禁止

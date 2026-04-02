@@ -1,7 +1,7 @@
 # Adlaire Generator RULEBOOK
 
 - 文書名: Adlaire Generator RULEBOOK
-- 文書バージョン: Ver.1.0
+- 文書バージョン: Ver.1.1
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: 静的サイト生成の仕様を定義する技術規範文書

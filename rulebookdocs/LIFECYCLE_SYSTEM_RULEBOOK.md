@@ -1,7 +1,7 @@
 # Adlaire Lifecycle System RULEBOOK
 
 - 文書名: Adlaire Lifecycle System RULEBOOK
-- 文書バージョン: Ver.1.0-2
+- 文書バージョン: Ver.1.0-3
 - 作成日: 2026-04-01
 - 対象製品: Adlaire Static CMS (ASCMS)
 - 適用範囲: セットアップツール / アップデートシステム / Doctor / manifest / lock / state / report / 管理UI 連携

@@ -45,6 +45,7 @@
 | Ver.1.0 | 2026-04-02 | 初版（旧 RULEBOOK_Ver1/Ver2 から移行） |
 | Ver.1.1 | 2026-04-02 | Core/ ディレクトリ導入、data/ 統合、静的生成を GENERATOR_RULEBOOK に分離、セキュリティ基盤を Core 責務として明記 |
 | Ver.1.2 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
+| Ver.1.3 | 2026-04-02 | §2.2/§5 に Core/license.php・LICENSE_SYSTEM_RULEBOOK.md・Licenses/・REVISION_HISTORY.md を追加 |
 
 ## API_RULEBOOK.md（API・データ）
 

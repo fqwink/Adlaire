@@ -1,7 +1,7 @@
 # Adlaire Editor RULEBOOK
 
 - 文書名: Adlaire Editor RULEBOOK
-- 文書バージョン: Ver.1.2
+- 文書バージョン: Ver.1.3
 - 作成日: 2026-04-01
 - 対象製品: Adlaire Static CMS
 - 対象領域: Editor / Block Editor / Markdown 連携 / Revision / Draft-Publish / Publish Quality Check / Editor UI

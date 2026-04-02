@@ -1,7 +1,7 @@
 # Adlaire Architecture RULEBOOK
 
 - 文書名: Adlaire Architecture RULEBOOK
-- 文書バージョン: Ver.1.1
+- 文書バージョン: Ver.1.3
 - 作成日: 2026-04-02
 - 最終更新: 2026-04-02
 - 対象製品: Adlaire Static CMS
@@ -35,7 +35,7 @@
 
 ## 2.2 ファイル構成
 
-ルート配置2ファイル + `Core/` ディレクトリ7ファイルで構成する。
+ルート配置2ファイル + `Core/` ディレクトリ8ファイルで構成する。
 
 ### ルート配置（直接HTTPアクセス許可）
 
@@ -50,6 +50,7 @@
 |---------|------|
 | `Core/helpers.php` | ヘルパー関数（esc, csrf, rate_limit） |
 | `Core/core.php` | FileStorage クラス（データ層） |
+| `Core/license.php` | LicenseValidator クラス（API キー認証） |
 | `Core/app.php` | App クラス（設定, 認証, 翻訳, 描画, プラグイン） |
 | `Core/renderer.php` | サーバーサイド描画関数（renderBlocksToHtml, renderMarkdownToHtml） |
 | `Core/api.php` | REST API ルーター + 全ハンドラー + handleEdit |
@@ -145,6 +146,7 @@ Adlaire/
 ├── Core/                      # Core 基盤（直接HTTPアクセス禁止）
 │   ├── helpers.php            #   ヘルパー関数
 │   ├── core.php               #   FileStorage クラス
+│   ├── license.php            #   LicenseValidator（API キー認証）
 │   ├── app.php                #   App クラス
 │   ├── renderer.php           #   サーバーサイド描画関数
 │   ├── api.php                #   REST API ハンドラー
@@ -166,7 +168,8 @@ Adlaire/
 │   ├── pages.index.json       #   ページインデックスキャッシュ
 │   ├── revisions/{slug}/      #   リビジョン履歴
 │   ├── backups/               #   設定バックアップ
-│   └── system/install.lock    #   インストール済みフラグ
+│   ├── system/install.lock    #   インストール済みフラグ
+│   └── system/license.key    #   API キーファイル
 ├── themes/                    # テーマディレクトリ
 │   ├── AP-Default/            #   theme.php + style.css
 │   ├── AP-Adlaire/            #   theme.php + style.css
@@ -186,10 +189,13 @@ Adlaire/
 │   ├── ARCHITECTURE_RULEBOOK.md     # 本ファイル
 │   ├── API_RULEBOOK.md        #   API・データ
 │   ├── GENERATOR_RULEBOOK.md  #   静的サイト生成
-│   └── RELEASE_PLAN_RULEBOOK.md     # リリース計画
+│   ├── RELEASE_PLAN_RULEBOOK.md     # リリース計画
+│   ├── LICENSE_SYSTEM_RULEBOOK.md   # ライセンスシステム
+│   └── REVISION_HISTORY.md   #   改訂履歴
 ├── docs/                      # ドキュメントフォルダ
 │   └── CHANGES.md             #   変更履歴
 └── Licenses/
+    └── LICENSE_Ver.2.0        #   Adlaire License Ver.2.0
 ```
 
 ---
