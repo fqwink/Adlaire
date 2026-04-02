@@ -16,6 +16,8 @@
   - `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
   - `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` — エディタルールブック
   - `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
+  - `rulebookdocs/ADLAIRE_ARCHITECTURE_RULEBOOK.md` — アーキテクチャルールブック
+  - `rulebookdocs/ADLAIRE_API_RULEBOOK.md` — API・データルールブック
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴

@@ -456,15 +456,22 @@ require 'generator.php';  // 静的生成（全てに依存）
 
 ---
 
-## 4. 仕様（Ver.1.x からの継承）
+## 4. 仕様の移行状況
 
-Ver.2.x のベース仕様は Ver.1.x（`RULEBOOK_Ver1.md`）を継承する。
-以下のセクションは Ver.1.x と同一:
+Ver.2.3 以降、技術仕様は**分類ベースルールブック**に移行済み。
+本ファイルは**リリース計画の管理**のみに責務を縮小する。
 
-- PHP API 仕様（セクション4）
-- REST API 仕様（セクション5）
-- TypeScript モジュール仕様（セクション6）
-- 管理 UI 仕様（セクション7）
-- Core 機能仕様（セクション8）
+| 旧仕様セクション | 移行先 |
+|-----------------|--------|
+| アーキテクチャ・ファイル構成・セキュリティ | `ADLAIRE_ARCHITECTURE_RULEBOOK.md` |
+| データ仕様・PHP API・REST API | `ADLAIRE_API_RULEBOOK.md` |
+| TypeScript モジュール仕様 | `ADLAIRE_API_RULEBOOK.md` §5 |
+| 管理 UI 仕様 | `ADLAIRE_API_RULEBOOK.md` §6 |
+| Core 機能仕様 | `ADLAIRE_API_RULEBOOK.md` §7 |
+| セットアップ・アップデート仕様 | `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md`（既存） |
+| エディタ規範 | `ADLAIRE_EDITOR_RULEBOOK.md`（既存） |
+| 製品方向性 | `ADLAIRE_DIRECTION_RULEBOOK.md`（既存） |
 
-各バージョンの実装完了後、差分を本ファイルに追記する。
+> 技術仕様の変更・追加は、上記の分類ベースルールブックに対して行うこと。
+> 本ファイルのセクション 2（Ver.2.0 仕様）およびセクション 3（リリース計画）は、
+> 移行完了までの参照用として維持する。
