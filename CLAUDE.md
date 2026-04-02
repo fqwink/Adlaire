@@ -18,6 +18,7 @@
   - `rulebookdocs/API_RULEBOOK.md` — API・データルールブック
   - `rulebookdocs/GENERATOR_RULEBOOK.md` — 静的サイト生成ルールブック
   - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — リリース計画ルールブック
+  - `rulebookdocs/LICENSE_SYSTEM_RULEBOOK.md` — ライセンスシステムルールブック
   - `rulebookdocs/REVISION_HISTORY.md` — 全ルールブック改訂履歴
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
