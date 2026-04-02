@@ -25,6 +25,7 @@
 | `GENERATOR_RULEBOOK.md` | 分類ベース | 静的サイト生成（ビルド・出力・差分ビルド） |
 | `RELEASE_PLAN_RULEBOOK.md` | 分類ベース | リリース計画・リリース履歴 |
 | `LICENSE_SYSTEM_RULEBOOK.md` | 分類ベース | ライセンスシステム（API キー認証・ライセンス管理） |
+| `BAAS_HUB_RULEBOOK.md` | 分類ベース | BaaS連携Hub（責務・標準契約・イベント・縮退運転） |
 | `REVISION_HISTORY.md` | 管理 | 全ルールブック改訂履歴（統合管理） |
 
 ## 3. バージョン管理方針
