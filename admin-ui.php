@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 /**
  * Adlaire Platform - Admin UI Template
@@ -28,7 +29,7 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
 <body>
 <div class="admin-wrap">
     <header class="admin-header">
-        <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= App::VERSION ?></small></h1>
+        <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= esc(App::VERSION) ?></small></h1>
         <div>
             <a href="./">← <?= esc($app->t('admin_view_site')) ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>
@@ -170,6 +171,24 @@ function renderAdminDashboard(App $app): void
     echo '}';
     echo '</script>';
 
+    // --- System Info ---
+    echo '<section class="admin-section">';
+    echo '<h2>System</h2>';
+    $versionFile = __DIR__ . '/VERSION';
+    $fileVersion = file_exists($versionFile) ? esc(trim((string) file_get_contents($versionFile))) : '—';
+    $appVersion = esc(App::VERSION);
+    $lockFile = __DIR__ . '/files/system/install.lock';
+    $installedAt = '—';
+    if (file_exists($lockFile)) {
+        $lock = json_decode((string) file_get_contents($lockFile), true);
+        $installedAt = is_array($lock) ? esc(substr($lock['installed_at'] ?? '', 0, 19)) : '—';
+    }
+    echo "<table class='admin-table'>";
+    echo "<tr><th>Release Version</th><td>{$fileVersion}</td></tr>";
+    echo "<tr><th>App Version</th><td>{$appVersion}</td></tr>";
+    echo "<tr><th>Installed</th><td>{$installedAt}</td></tr>";
+    echo "<tr><th>PHP</th><td>" . esc(PHP_VERSION) . "</td></tr>";
+    echo "</table>";
     echo '</section>';
 }
 

@@ -9,8 +9,8 @@ declare(strict_types=1);
  *   Minor  - Incremented on backward-compatible feature additions.
  *   Build  - Cumulative revision number. Never resets.
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 
@@ -24,6 +24,7 @@ register_shutdown_function(function (): void {
 
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
+ini_set('session.cookie_samesite', 'Strict');
 session_start();
 
 require __DIR__ . '/core.php';
@@ -31,10 +32,19 @@ require __DIR__ . '/admin.php';
 
 // --- Bootstrap ---
 
+// Redirect to installer if not yet set up
+if (!file_exists(__DIR__ . '/files/system/install.lock') && file_exists(__DIR__ . '/bundle-installer.php')) {
+    header('Location: bundle-installer.php');
+    exit;
+}
+
 handleApi();
 handleEdit();
 
 $app = App::getInstance();
+
+// --- Security headers ---
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 // --- Admin UI routing ---
 if (isset($_REQUEST['admin'])) {

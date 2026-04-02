@@ -6,17 +6,17 @@ declare(strict_types=1);
  *
  * Application class and admin editing handler.
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 
 final class App
 {
-    public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 9;
-    public const VERSION_BUILD = 30;
-    public const VERSION = 'Ver.1.9-30';
+    public const VERSION_MAJOR = 2;
+    public const VERSION_MINOR = 2;
+    public const VERSION_BUILD = 33;
+    public const VERSION = 'Ver.2.2-33';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -169,6 +169,15 @@ final class App
 
     private function handleAuth(): void
     {
+        // Session timeout: 30 minutes inactivity
+        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+            session_destroy();
+            session_start();
+        }
+        if (isset($_SESSION['l'])) {
+            $_SESSION['last_activity'] = time();
+        }
+
         if (isset($_SESSION['l']) && $_SESSION['l'] === $this->config['password']) {
             $this->config['loggedin'] = true;
         }
@@ -234,7 +243,7 @@ final class App
                 return;
             }
             $this->config['content'] = $pageData['content'];
-            $this->config['pageFormat'] = $pageData['format'] ?? 'html';
+            $this->config['pageFormat'] = $pageData['format'] ?? 'blocks';
             $this->config['pageStatus'] = $pageData['status'] ?? 'published';
             if (isset($pageData['blocks'])) {
                 $this->config['pageBlocks'] = $pageData['blocks'];
@@ -339,6 +348,13 @@ final class App
 
         $newPass = $_POST['new'] ?? '';
         if ($newPass !== '') {
+            if (strlen($newPass) < 8) {
+                return $this->t('password_too_short');
+            }
+            $weak = ['admin', 'password', '12345678', 'adlaire'];
+            if (in_array(strtolower($newPass), $weak, true)) {
+                return $this->t('password_too_weak');
+            }
             $newHash = $this->savePassword($newPass);
             $this->config['password'] = $newHash;
             session_regenerate_id(true);
@@ -348,6 +364,7 @@ final class App
 
         session_regenerate_id(true);
         $_SESSION['l'] = $this->config['password'];
+        $_SESSION['last_activity'] = time();
         header('Location: ./');
         exit;
     }
@@ -506,7 +523,7 @@ function handleApi(): void
     $storage = new FileStorage('files');
     $method = $_SERVER['REQUEST_METHOD'];
 
-    // Sitemap uses XML content type — handle before JSON header
+    // Non-JSON endpoints
     if ($endpoint === 'sitemap') {
         handleApiSitemap($storage);
         exit;
@@ -523,6 +540,10 @@ function handleApi(): void
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
         handleApiSearch($storage);
+        exit;
+    }
+    if ($endpoint === 'version') {
+        handleApiVersion();
         exit;
     }
 
@@ -859,18 +880,29 @@ function handleApiGenerate(FileStorage $storage): void
 
     $app = App::getInstance();
     $distDir = __DIR__ . '/dist';
+    $force = ($_POST['force'] ?? $_REQUEST['force'] ?? '') === 'true';
+    $buildStateFile = $distDir . '/.build_state.json';
+    $lastBuildTime = '';
 
-    // Clean and recreate dist directory
-    if (is_dir($distDir)) {
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($distDir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($files as $file) {
-            if ($file->isDir()) {
-                rmdir($file->getRealPath());
-            } else {
-                unlink($file->getRealPath());
+    // Read previous build state for diff build
+    if (!$force && file_exists($buildStateFile)) {
+        $state = json_decode((string) file_get_contents($buildStateFile), true);
+        $lastBuildTime = is_array($state) ? ($state['built_at'] ?? '') : '';
+    }
+
+    // Full rebuild: clean dist directory
+    if ($force || $lastBuildTime === '') {
+        if (is_dir($distDir)) {
+            $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($distDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $file) {
+                if ($file->isDir()) {
+                    rmdir($file->getRealPath());
+                } else {
+                    unlink($file->getRealPath());
+                }
             }
         }
     }
@@ -893,8 +925,8 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Copy JS
-    $jsSrc = __DIR__ . '/js/dist';
-    $jsDst = $distDir . '/js/dist';
+    $jsSrc = __DIR__ . '/js';
+    $jsDst = $distDir . '/js';
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
             mkdir($jsDst, 0755, true);
@@ -922,8 +954,11 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
 
-    // Generate each page
+    // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
+        if ($lastBuildTime !== '' && ($data['updated_at'] ?? '') <= $lastBuildTime) {
+            continue; // Skip unchanged pages in diff build
+        }
         $format = $data['format'] ?? 'blocks';
         $contentHtml = '';
 
@@ -964,6 +999,12 @@ function handleApiGenerate(FileStorage $storage): void
     }
     $xml .= '</urlset>';
     file_put_contents($distDir . '/sitemap.xml', $xml);
+
+    // Save build state for diff builds
+    file_put_contents($distDir . '/.build_state.json', json_encode([
+        'built_at' => date('c'),
+        'pages' => $count,
+    ], JSON_PRETTY_PRINT));
 
     echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
 }
@@ -1088,6 +1129,30 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     </body>
     </html>
     HTML;
+}
+
+// --- Version API ---
+
+function handleApiVersion(): void
+{
+    $versionFile = __DIR__ . '/VERSION';
+    $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
+
+    $lockFile = __DIR__ . '/files/system/install.lock';
+    $installed = file_exists($lockFile);
+    $installedAt = '';
+    if ($installed) {
+        $lock = json_decode((string) file_get_contents($lockFile), true);
+        $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
+    }
+
+    echo json_encode([
+        'product' => 'Adlaire',
+        'version' => $version,
+        'app_version' => App::VERSION,
+        'installed' => $installed,
+        'installed_at' => $installedAt,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiError(int $code, string $message): void

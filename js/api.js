@@ -64,8 +64,9 @@ const api = {
      * Delete a page.
      */
     async deletePage(slug) {
-        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}&csrf=${encodeURIComponent(csrfToken)}`, {
+        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`, {
             method: 'DELETE',
+            headers: { 'X-CSRF-Token': csrfToken },
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {

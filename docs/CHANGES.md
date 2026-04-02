@@ -1,5 +1,25 @@
 # CHANGES - 変更履歴
 
+## Ver.2.1-32 (2026-04-02)
+
+### バグ修正（25件）
+* セキュリティ: DELETE CSRF をヘッダー送信に変更、SameSite cookie 追加
+* セキュリティ: install.lock/handleApiVersion null チェック、atomicWrite chmod チェック
+* セキュリティ: App::VERSION エスケープ、CSRF ヘッダー検証対応
+* データ: VERSION/package.json バージョン統一、manifest に installer 追加
+* データ: pageFormat デフォルト html→blocks 除去、rotateBackups 順序修正
+* コード: 著作権年 2014-2026、admin-ui section 二重閉じ修正
+
+## Ver.2.0-31 (2026-04-01)
+
+### セットアップツール・アップデートシステム
+* bundle-installer.php: 5ステップセットアップウィザード
+* release-manifest.json: バンドル整合性検証
+* VERSION ファイル: バージョン情報管理
+* GET ?api=version: バージョン情報 API
+* 管理 UI System セクション: バージョン・PHP情報表示
+* 初回アクセス時のインストーラーリダイレクト
+
 ## Ver.1.9-30 (2026-04-01) — 1.0系最終版
 
 ### 最終バグ修正（6件）

@@ -137,17 +137,40 @@ bundle-installer.php
 ### 2.3 アップデートシステム
 
 > 上位原則は `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` に従う。
-> **Ver.2.0 MVP には含めない。** Ver.2.0 リリース後に詳細を策定する。
 
-**方針**（暫定）:
-- 管理 UI (`?admin`) からバージョン確認・更新を実行
-- `VERSION` ファイルで現在のバージョンを管理
-- 更新は `release-manifest.json` で整合性検証
-- コアファイルの上書き + マイグレーション実行
-- 更新前に自動バックアップ
+#### 2.3.1 概要
 
-**非スコープ（Ver.2.0 MVP）**:
-- 自動ダウンロード
+管理 UI からバージョン確認と手動アップデートを実行する機能。
+完全自動更新は採用しない（ライフサイクルRULEBOOK原則3: 明示開始）。
+
+#### 2.3.2 画面（管理 UI 内）
+
+- ダッシュボードに現在のバージョン（`VERSION` ファイル）を表示
+- 「Check for Updates」ボタンでリモートの最新バージョンを確認（将来拡張）
+- Ver.2.0 MVP: ローカルの `VERSION` ファイル表示のみ
+
+#### 2.3.3 REST API
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `GET` | `?api=version` | 現在のバージョン情報を返す（認証不要） |
+
+レスポンス:
+```json
+{
+    "product": "Adlaire",
+    "version": "2.0.0",
+    "installed": true,
+    "installed_at": "ISO 8601"
+}
+```
+
+#### 2.3.4 非スコープ（Ver.2.0 MVP）
+
+- リモートバージョンチェック（自動ダウンロード）
+- 差分パッチ適用
+- ロールバック機能
+- コアファイル上書き更新
 - 差分パッチ
 - ロールバック機能
 
@@ -202,21 +225,109 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 | # | 新機能 | 状態 |
 |---|--------|:----:|
 | 1 | セットアップツール（`bundle-installer.php`） | **仕様策定完了** |
-| 2 | アップデートシステム（バージョン更新機能） | 方針策定済（詳細はMVP後） |
+| 2 | アップデートシステム（バージョン情報 API + 管理 UI 表示） | **仕様策定完了** |
 
-### 3.2 Ver.2.1 — Ver.2.0 機能改良・バグ修正
+### 3.2 Ver.2.1 — Ver.2.0 バグ修正（30件）
 
-> Ver.2.0 リリース後に策定する。
+> Ver.2.0 リリース後の品質確定リリース。バグ修正のみ。
+
+#### セキュリティ（10件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 1 | DELETE リクエストの CSRF トークンをURLからヘッダーに移行 | 高 |
+| 2 | import API の CSRF 検証タイミング修正 | 高 |
+| 3 | DELETE レスポンスに X-CSRF-Token ヘッダー追加 | 高 |
+| 4 | App::VERSION の出力をエスケープ | 中 |
+| 5 | MD5 レガシーパスワード検出時に強制リセットフラグ | 中 |
+| 6 | セッション cookie に SameSite=Strict 追加 | 中 |
+| 7 | editor.ts のブロック innerHTML を安全化 | 高 |
+| 8 | HTTPS 非使用時の管理画面警告表示 | 低 |
+| 9 | atomicWrite の chmod 失敗チェック追加 | 低 |
+| 10 | install.lock JSON パース失敗のハンドリング | 低 |
+
+#### データ整合性（8件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 11 | VERSION ファイルと App::VERSION の値を統一 | 高 |
+| 12 | package.json version を 2.0.0 に更新 | 中 |
+| 13 | release-manifest.json に bundle-installer.php 追加 | 中 |
+| 14 | pageFormat デフォルト 'html' フォールバック除去 | 中 |
+| 15 | PHP サーバーサイド Markdown のリスト正規表現修正 | 中 |
+| 16 | rotateBackups を新バックアップ作成後に実行 | 中 |
+| 17 | admin-ui.php の閉じタグ重複修正（section 二重閉じ） | 低 |
+| 18 | handleApiVersion の lock ファイル null チェック | 低 |
+
+#### コード品質（7件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 19 | login() の未使用変数 $newPass 整理 | 低 |
+| 20 | listRevisions に limit パラメータ追加 | 中 |
+| 21 | 著作権年を 2014-2026 に更新 | 低 |
+| 22 | admin-ui.php の System セクション version API 連携 | 中 |
+| 23 | bundle-installer.php の RewriteEngine 位置修正 | 低 |
+| 24 | tsconfig.json の include パターン確認 | 低 |
+| 25 | .htaccess の data/ ルール明確化 | 低 |
+
+#### ドキュメント（5件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 26 | RULEBOOK_Ver2.md の Ver.2.1 状態を「実装済」に | 低 |
+| 27 | docs/CHANGES.md に Ver.2.0-31, Ver.2.1 追加 | 低 |
+| 28 | docs/RELEASENOTES.md に Ver.2.0-31, Ver.2.1 追加 | 低 |
+| 29 | README.md のバージョン更新 | 低 |
+| 30 | CHARTER.md の Ver.2.x 状態更新 | 低 |
 
 ### 3.3 Ver.2.2 — セキュリティ・パフォーマンス
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 3 | ページインデックスキャッシュ（pages.index.json） | 計画 |
-| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | 計画 |
-| 5 | Content-Security-Policy ヘッダー | 計画 |
-| 6 | セッション有効期限（自動ログアウト） | 計画 |
-| 7 | パスワード強度検証 | 計画 |
+| 3 | ページインデックスキャッシュ（pages.index.json） | **仕様策定完了** |
+| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | **仕様策定完了** |
+| 5 | Content-Security-Policy ヘッダー | **仕様策定完了** |
+| 6 | セッション有効期限（自動ログアウト） | **仕様策定完了** |
+| 7 | パスワード強度検証 | **仕様策定完了** |
+
+#### 3.3.1 ページインデックスキャッシュ
+
+- `files/pages.index.json` にページメタデータ（slug, format, status, updated_at）をキャッシュする。
+- `listPages()` はキャッシュが存在し有効な場合、個別ページ JSON を読み込まずキャッシュを返す。
+- `writePage()`, `deletePage()`, `updatePageStatus()` 実行時にキャッシュを再構築する。
+- キャッシュ無効化: キャッシュファイルが存在しない場合、またはページディレクトリの mtime がキャッシュの mtime より新しい場合。
+
+#### 3.3.2 静的生成の差分ビルド
+
+- `handleApiGenerate()` で `dist/.build_state.json` に前回ビルド時刻を記録する。
+- 各ページの `updated_at` が前回ビルド時刻より新しい場合のみ再生成する。
+- `force=true` パラメータで全ページ再生成を強制できる。
+- CSS/JS/sitemap は常に再生成する。
+
+#### 3.3.3 Content-Security-Policy ヘッダー
+
+- `index.php` で以下の CSP ヘッダーを出力する:
+  ```
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'
+  ```
+- 管理 UI（`admin-ui.php`）では `script-src 'self' 'unsafe-inline'` を許可する（インラインスクリプト使用のため）。
+- API レスポンスには CSP を付与しない。
+
+#### 3.3.4 セッション有効期限
+
+- セッションに `last_activity` タイムスタンプを記録する。
+- 各リクエストで `last_activity` から30分以上経過している場合、セッションを破棄してログアウトする。
+- ログイン時に `last_activity` を設定する。
+- `handleAuth()` 内でチェックする。
+
+#### 3.3.5 パスワード強度検証
+
+- パスワード変更時（`login()` の新パスワード処理）に以下を検証する:
+  - 最低8文字以上（MUST）
+  - `admin`, `password`, `12345678` などの弱いパスワードを拒否（SHOULD）
+- `bundle-installer.php` の初期パスワード設定でも同じ検証を適用する。
+- 検証失敗時は翻訳済みエラーメッセージを返す。
 
 ### 3.4 Ver.2.3 — アーキテクチャ刷新
 

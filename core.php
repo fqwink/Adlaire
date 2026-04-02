@@ -6,8 +6,8 @@ declare(strict_types=1);
  *
  * FileStorage data management layer and utility functions.
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 
@@ -187,9 +187,9 @@ final class FileStorage
             $merged = array_merge($existing, $config);
 
             if (file_exists($this->configFile)) {
-                $this->rotateBackups();
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
                 copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
+                $this->rotateBackups();
             }
 
             $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -265,7 +265,9 @@ final class FileStorage
         }
 
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        return $this->atomicWrite($path, $json);
+        $result = $this->atomicWrite($path, $json);
+        if ($result) { $this->invalidatePageCache(); }
+        return $result;
     }
 
     public function deletePage(string $slug): bool
@@ -296,6 +298,7 @@ final class FileStorage
             rmdir($revDir);
         }
 
+        $this->invalidatePageCache();
         return true;
     }
 
@@ -304,6 +307,23 @@ final class FileStorage
      */
     public function listPages(): array
     {
+        // Try cache first
+        $cacheFile = $this->basePath . '/pages.index.json';
+        if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
+            $cacheMtime = filemtime($cacheFile);
+            $dirMtime = filemtime($this->pagesDir);
+            if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
+                $cached = $this->lockedRead($cacheFile);
+                if ($cached !== false) {
+                    $data = json_decode($cached, true);
+                    if (is_array($data)) {
+                        return $data;
+                    }
+                }
+            }
+        }
+
+        // Build from files
         $files = glob($this->pagesDir . '/*.json');
         $pages = [];
 
@@ -320,7 +340,21 @@ final class FileStorage
             }
         }
 
+        // Write cache
+        $this->atomicWrite($cacheFile, json_encode($pages, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
         return $pages;
+    }
+
+    /**
+     * Invalidate the page index cache.
+     */
+    private function invalidatePageCache(): void
+    {
+        $cacheFile = $this->basePath . '/pages.index.json';
+        if (file_exists($cacheFile)) {
+            unlink($cacheFile);
+        }
     }
 
     /**
@@ -342,7 +376,9 @@ final class FileStorage
 
         $path = $this->pagesDir . '/' . $slug . '.json';
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        return $this->atomicWrite($path, $json);
+        $result = $this->atomicWrite($path, $json);
+        if ($result) { $this->invalidatePageCache(); }
+        return $result;
     }
 
     /**
@@ -374,7 +410,10 @@ final class FileStorage
             return false;
         }
 
-        chmod($tmp, 0644);
+        if (!chmod($tmp, 0644)) {
+            unlink($tmp);
+            return false;
+        }
         return rename($tmp, $path);
     }
 
@@ -515,7 +554,7 @@ function csrf_token(): string
 
 function csrf_verify(): void
 {
-    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? '';
+    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
         header('HTTP/1.1 403 Forbidden');
