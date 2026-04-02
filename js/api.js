@@ -129,13 +129,15 @@ const api = {
     async importSite(data) {
         const res = await fetch(`index.php?api=import&csrf=${encodeURIComponent(csrfToken)}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: data,
         });
-        const json = await res.json();
+        updateCsrfFromResponse(res);
         if (!res.ok) {
+            const json = await res.json();
             throw new Error(json.error);
         }
+        const json = await res.json();
         return json.imported;
     },
 };

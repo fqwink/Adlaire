@@ -1,5 +1,15 @@
 # CHANGES - 変更履歴
 
+## Ver.2.2-34 (2026-04-02)
+
+### Ver.2.1 残存バグ修正（5件） + Ver.2.2 精査修正
+* import API: CSRF トークンをヘッダーでも送信、updateCsrfFromResponse 追加
+* MD5 レガシーパスワード: bcrypt 移行後にパスワード変更促進メッセージ
+* editor.ts: sanitizeHtml() で script タグ除去（paragraph/heading/quote）
+* HTTPS 非使用時の管理画面警告バナー
+* PHP Markdown: リスト正規表現を non-greedy に修正
+* bundle-installer.php: 弱いパスワード拒否を追加
+
 ## Ver.2.1-32 (2026-04-02)
 
 ### バグ修正（25件）

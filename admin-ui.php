@@ -28,6 +28,9 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
 </head>
 <body>
 <div class="admin-wrap">
+    <?php if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off'): ?>
+        <div style="background:#fff3cd;color:#856404;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:8px;">⚠ HTTPS is not enabled. Admin operations over HTTP are not secure.</div>
+    <?php endif; ?>
     <header class="admin-header">
         <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= esc(App::VERSION) ?></small></h1>
         <div>

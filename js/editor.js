@@ -35,6 +35,10 @@ function attachListItemHandlers(li) {
         }
     });
 }
+// --- Sanitize: strip script tags from block content ---
+function sanitizeHtml(html) {
+    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+}
 // --- Built-in Block Tools ---
 const builtinTools = {
     paragraph(data) {
@@ -43,7 +47,7 @@ const builtinTools = {
                 const el = document.createElement('div');
                 el.contentEditable = 'true';
                 el.className = 'ce-paragraph';
-                el.innerHTML = data.text || '';
+                el.innerHTML = sanitizeHtml(data.text || '');
                 el.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -70,7 +74,7 @@ const builtinTools = {
                 const el = document.createElement(`h${level}`);
                 el.contentEditable = 'true';
                 el.className = 'ce-heading';
-                el.innerHTML = data.text || '';
+                el.innerHTML = sanitizeHtml(data.text || '');
                 attachBackspaceHandler(el);
                 return el;
             },
@@ -129,7 +133,7 @@ const builtinTools = {
                 const bq = document.createElement('blockquote');
                 bq.className = 'ce-quote';
                 bq.contentEditable = 'true';
-                bq.innerHTML = data.text || '';
+                bq.innerHTML = sanitizeHtml(data.text || '');
                 attachBackspaceHandler(bq);
                 return bq;
             },

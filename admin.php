@@ -15,8 +15,8 @@ final class App
 {
     public const VERSION_MAJOR = 2;
     public const VERSION_MINOR = 2;
-    public const VERSION_BUILD = 33;
-    public const VERSION = 'Ver.2.2-33';
+    public const VERSION_BUILD = 34;
+    public const VERSION = 'Ver.2.2-34';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -333,10 +333,12 @@ final class App
         $stored = $this->config['password'];
         $input = $_POST['password'] ?? '';
 
+        $md5Migrated = false;
         if (strlen($stored) === 32 && ctype_xdigit($stored)) {
             $valid = hash_equals($stored, md5($input));
             if ($valid) {
                 $this->config['password'] = $this->savePassword($input);
+                $md5Migrated = true;
             }
         } else {
             $valid = password_verify($input, $stored);
@@ -344,6 +346,14 @@ final class App
 
         if (!$valid) {
             return $this->t('wrong_password');
+        }
+
+        if ($md5Migrated) {
+            // Password upgraded from MD5 to bcrypt — prompt change
+            session_regenerate_id(true);
+            $_SESSION['l'] = $this->config['password'];
+            $_SESSION['last_activity'] = time();
+            return $this->t('password_migrated');
         }
 
         $newPass = $_POST['new'] ?? '';
@@ -1057,7 +1067,7 @@ function renderMarkdownToHtml(string $md): string
     $html = preg_replace('/!\[([^\]]*)\]\(([^)]+)\)/', '<img src="$2" alt="$1">', $html) ?? $html;
     $html = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2">$1</a>', $html) ?? $html;
     $html = preg_replace('/^\- (.+)$/m', '<li>$1</li>', $html) ?? $html;
-    $html = preg_replace('/((?:<li>.*<\/li>\n?)+)/', '<ul>$1</ul>', $html) ?? $html;
+    $html = preg_replace('/((?:<li>.*?<\/li>\n?)+)/', '<ul>$1</ul>', $html) ?? $html;
     $html = preg_replace('/^&gt; (.+)$/m', '<blockquote>$1</blockquote>', $html) ?? $html;
     $html = preg_replace('/^(?!<[a-z\/])(.*\S.*)$/m', '<p>$1</p>', $html) ?? $html;
 
