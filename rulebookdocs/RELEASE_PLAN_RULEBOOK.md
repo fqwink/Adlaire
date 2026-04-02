@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.1.2
+- 文書バージョン: Ver.1.4
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -18,13 +18,20 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.3-35**（2026-04-02）
+**Ver.2.4-36**（2026-04-02）
 
 ---
 
 ## 3. リリース履歴
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
+
+#### Ver.2.4 — バグ修正（50件精査・49件実装・1件延期）
+
+Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + TS/フロント 20件）。
+致命的バグ3件、セキュリティ19件、データ整合性・エラーハンドリング等を修正。
+#46（document.execCommand 非推奨）は Ver.2.8 に延期。
+詳細は §4.6 を参照。
 
 #### Ver.2.3 — アーキテクチャ刷新（機能ベース分離）
 
@@ -156,11 +163,72 @@
 |---|--------|:----:|
 | 14 | Ver.2.4 後のバグ修正・改良 | 計画 |
 
-### 4.6 Ver.2.4 — バグ修正
+### 4.6 Ver.2.4 — バグ修正（50件精査） — **実装済**
 
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 13 | Ver.2.3 アーキテクチャ刷新後のバグ修正・精査・策定 | 計画 |
+> Ver.2.3 アーキテクチャ刷新後の全コード精査に基づくバグ修正。
+> PHP 30件 + TypeScript/フロントエンド 20件 = 50件。
+> #8, #12, #14, #16 は調査の結果、現行動作で問題なしと判断（修正不要）。
+> #46 は Ver.2.8 に延期（エディタ高度化バージョンで対応が適切なため）。
+
+#### PHP バグ修正（30件）
+
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 1 | セキュリティ | helpers.php | CSRF トークンが毎回再生成され複数タブで検証失敗 | **実装済** |
+| 2 | セキュリティ | api.php | CORS Origin 検証が str_contains 部分一致でバイパス可能 | **実装済** |
+| 3 | セキュリティ | api.php | handleEdit() がパスワードハッシュ一致を検証せず SESSION 存在のみチェック | **実装済** |
+| 4 | セキュリティ | api.php | handleApi() も同様にパスワードハッシュ一致を検証しない | **実装済** |
+| 5 | セキュリティ | app.php | セッション認証で hash_equals() を使用していない（タイミング攻撃リスク） | **実装済** |
+| 6 | セキュリティ | app.php | getLoginStatus() で $this->host を未エスケープで href 属性に出力（XSS） | **実装済** |
+| 7 | セキュリティ | app.php | content() で base64 値を属性に防御的エスケープなしで出力 | **実装済** |
+| 8 | データ整合性 | api.php | handleEdit() の CSRF トークン再生成とフロントエンドの整合性不足 | **実装済** |
+| 9 | エラーハンドリング | app.php | session_destroy() 後の session_start() で PHP 8.3 警告の可能性 | **実装済** |
+| 10 | エラーハンドリング | api.php | handleEdit() が Content-Type ヘッダを設定していない | **実装済** |
+| 11 | セキュリティ | api.php | handleEdit() でユーザー入力をエスケープなしで echo（格納型 XSS） | **実装済** |
+| 12 | アーキテクチャ | api.php | handleEdit() が独自に FileStorage を生成し App と共有されない | **実装済** |
+| 13 | セキュリティ | index.php | $_REQUEST['admin'] が COOKIE 経由で注入される可能性 | **実装済** |
+| 14 | コード品質 | app.php | パスワード変更成功後のリダイレクト不足 | **実装済** |
+| 15 | エッジケース | app.php | MD5 パスワードマイグレーションの判定が不完全（strlen==32 && ctype_xdigit） | **実装済** |
+| 16 | データ整合性 | core.php | listPages() キャッシュが直接ファイル操作時に古いまま | **実装済** |
+| 17 | エッジケース | generator.php | diff ビルドの日時比較がタイムゾーン混在時に誤判定 | **実装済** |
+| 18 | セキュリティ | generator.php | 静的生成で $sideContent（subside）が未エスケープ出力 | **実装済** |
+| 19 | コード品質 | admin-ui.php | CSP ヘッダが index.php と二重設定され unsafe-inline が無効化される可能性 | **実装済** |
+| 20 | 致命的バグ | admin-ui.php | Save Status ボタンが content='' で POST しページ内容を消去 | **実装済** |
+| 21 | 致命的バグ | bundle-installer.php | helpers.php を require していないため直接アクセス時 esc() 未定義エラー | **実装済** |
+| 22 | エッジケース | bundle-installer.php | session_start() 二重呼び出しの可能性 | **実装済** |
+| 23 | セキュリティ | app.php | editTags() がログインページで非認証ユーザーに CSRF トークンを出力 | **実装済** |
+| 24 | パフォーマンス | core.php | listPages() が content 含む全データをキャッシュに書き込みメモリ圧迫 | **実装済** |
+| 25 | エッジケース | app.php | handlePassword() に非文字列値が渡されると TypeError | **実装済** |
+| 26 | セキュリティ | renderer.php | Markdown の img/a 変換で URL 未エスケープ・javascript: スキーム未フィルタ | **実装済** |
+| 27 | コード品質 | renderer.php | コードブロック内の言語名が二重エスケープされる可能性 | **実装済** |
+| 28 | データ整合性 | core.php | マイグレーションで system ファイルが pages/ に誤移行されるリスク | **実装済** |
+| 29 | エッジケース | app.php | メニュー区切り文字の改行コード不一致（\r\n 混在時に分割失敗） | **実装済** |
+| 30 | セキュリティ | admin-ui.php | deletePage onclick で slug が JS コンテキスト適切にエスケープされていない | **実装済** |
+
+#### TypeScript/フロントエンド バグ修正（20件）
+
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 31 | セキュリティ | editor.ts | sanitizeHtml が script タグのみ除去で他の XSS ベクター素通し | **実装済** |
+| 32 | セキュリティ | editor.ts | list ブロック render で li.innerHTML にサニタイズなしで代入 | **実装済** |
+| 33 | セキュリティ | editor.ts | renderBlocks で paragraph/heading/quote/list が未エスケープ出力 | **実装済** |
+| 34 | 致命的バグ | api.ts | importSite で res.json() を2回呼び出し常に失敗 | **実装済** |
+| 35 | セキュリティ | api.ts | savePage の CSRF トークン更新と restoreRevision のトークン失効 | **実装済** |
+| 36 | 型安全性 | editor.ts | __editor プロパティの型定義不整合（as any の有無が不統一） | **実装済** |
+| 37 | エッジケース | editor.ts | heading レベル入力で不正値が NaN になり不正な要素が生成される | **実装済** |
+| 38 | データ損失 | editInplace.ts | 複数 .ce-editor-wrapper で activeEditor が最後のもので上書き | **実装済** |
+| 39 | セキュリティ | editInplace.ts | fieldSave でサーバーレスポンスを未検証で innerHTML に代入 | **実装済** |
+| 40 | コード品質 | editInplace.ts | plainTextEdit で innerHTML から br 除去するが他の HTML タグが残る | **実装済** |
+| 41 | エラーハンドリング | api.ts | savePage/deletePage のエラー時 res.json() が非 JSON で失敗 | **実装済** |
+| 42 | 初期化競合 | i18n.ts + editInplace.ts | i18n.init() 完了前にエディタが初期化され翻訳キー名が表示される | **実装済** |
+| 43 | セキュリティ | editor.ts | image ブロックの img.src に javascript: スキーム URL が設定可能 | **実装済** |
+| 44 | データ損失 | editInplace.ts | focusout 保存で activeEditor のグローバル参照が別エディタを指す | **実装済** |
+| 45 | DOM リーク | editor.ts | InlineToolbar の selectionchange リスナーが解除されない | **実装済** |
+| 46 | 非推奨 API | editor.ts | document.execCommand は Web 標準で非推奨 | Ver.2.8 延期 |
+| 47 | セキュリティ | api.ts | importSite で CSRF トークンを URL クエリパラメータに含め漏洩リスク | **実装済** |
+| 48 | エッジケース | editor.ts | Backspace ハンドラの空判定が不正確（br/零幅スペース考慮不足） | **実装済** |
+| 49 | エラーハンドリング | editInplace.ts | autosize/markdownToHtml の未定義チェック不足 | **実装済** |
+| 50 | データ損失 | editInplace.ts | switchFormat のエラー時にリカバリがなくデータ消失 | **実装済** |
 
 ---
 

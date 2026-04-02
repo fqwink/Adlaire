@@ -29,14 +29,14 @@ function handleEdit(): void
         exit;
     }
 
-    if (!isset($_SESSION['l'])) {
+    $storage = new FileStorage('files');
+    $config = $storage->readConfig();
+    if (!isset($_SESSION['l']) || !hash_equals($config['password'] ?? '', $_SESSION['l'])) {
         header('HTTP/1.1 401 Unauthorized');
         exit;
     }
 
     csrf_verify();
-
-    $storage = new FileStorage('files');
 
     if ($fieldname === 'password') {
         header('HTTP/1.1 403 Forbidden');
@@ -60,6 +60,7 @@ function handleEdit(): void
     }
 
     // Return new CSRF token for subsequent requests (one-time token)
+    header('Content-Type: text/plain; charset=UTF-8');
     header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
     echo $content;
     exit;
@@ -86,8 +87,11 @@ function handleApi(): void
     header('Content-Type: application/json; charset=UTF-8');
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
-    if ($origin !== '' && str_contains($origin, $allowedHost)) {
-        header('Access-Control-Allow-Origin: ' . $origin);
+    if ($origin !== '' && $allowedHost !== '') {
+        $parsed = parse_url($origin, PHP_URL_HOST);
+        if ($parsed === $allowedHost) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+        }
     }
     header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
 
@@ -102,7 +106,8 @@ function handleApi(): void
     }
 
     // Authenticated endpoints
-    if (!isset($_SESSION['l'])) {
+    $config = $storage->readConfig();
+    if (!isset($_SESSION['l']) || !hash_equals($config['password'] ?? '', $_SESSION['l'])) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
@@ -123,11 +128,15 @@ function handleApiPages(FileStorage $storage, string $method): void
 {
     $slug = $_REQUEST['slug'] ?? null;
 
+    $action = $_REQUEST['action'] ?? '';
+
     match ($method) {
         'GET' => $slug !== null
             ? apiPageGet($storage, $slug)
             : apiPageList($storage),
-        'POST'   => apiPageSave($storage),
+        'POST'   => $action === 'status'
+            ? apiPageStatusUpdate($storage)
+            : apiPageSave($storage),
         'DELETE' => apiPageDelete($storage, $slug),
         default  => apiError(405, 'Method not allowed'),
     };
@@ -203,6 +212,31 @@ function apiPageSave(FileStorage $storage): void
     }
 
     echo json_encode(['status' => 'ok', 'slug' => $slug]);
+}
+
+function apiPageStatusUpdate(FileStorage $storage): void
+{
+    csrf_verify();
+
+    $slug = $_POST['slug'] ?? null;
+    $status = $_POST['status'] ?? null;
+
+    if ($slug === null || !FileStorage::validateSlug($slug)) {
+        apiError(400, 'Invalid slug');
+        return;
+    }
+    if ($status === null || !in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid status');
+        return;
+    }
+
+    $result = $storage->updatePageStatus($slug, $status);
+    if (!$result) {
+        apiError(404, 'Page not found');
+        return;
+    }
+
+    echo json_encode(['status' => 'ok', 'slug' => $slug, 'page_status' => $status]);
 }
 
 function apiPageDelete(FileStorage $storage, ?string $slug): void

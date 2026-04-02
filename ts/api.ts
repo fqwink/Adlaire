@@ -79,7 +79,11 @@ const api = {
             body: body.toString(),
         });
         updateCsrfFromResponse(res);
-        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     /**
@@ -91,7 +95,11 @@ const api = {
             headers: { 'X-CSRF-Token': csrfToken },
         });
         updateCsrfFromResponse(res);
-        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     /**
@@ -117,6 +125,7 @@ const api = {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
         });
+        updateCsrfFromResponse(res);
         const json = await res.json();
         if (!res.ok) { throw new Error(json.error); }
     },
@@ -144,14 +153,14 @@ const api = {
      * Import site data from JSON.
      */
     async importSite(data: string): Promise<{ config: boolean; pages: number }> {
-        const res = await fetch(`index.php?api=import&csrf=${encodeURIComponent(csrfToken)}`, {
+        const res = await fetch('index.php?api=import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: data,
         });
         updateCsrfFromResponse(res);
-        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
         const json = await res.json();
+        if (!res.ok) { throw new Error(json.error); }
         return json.imported;
     },
 };

@@ -1,6 +1,5 @@
 <?php
 declare(strict_types=1);
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 /**
  * Adlaire Static CMS - Admin UI Template
@@ -245,8 +244,7 @@ function renderAdminEditor(App $app): void
     echo "var s=document.getElementById('status-select').value;";
     echo "var body=new URLSearchParams();";
     echo "body.append('slug','{$safeSlug}');body.append('status',s);body.append('csrf',csrfToken);";
-    echo "body.append('content','');body.append('format','" . esc($format) . "');";
-    echo "fetch('index.php?api=pages',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
+    echo "fetch('index.php?api=pages&action=status',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
     echo ".then(function(r){return r.json();}).then(function(){location.reload();});";
     echo "});</script>";
 

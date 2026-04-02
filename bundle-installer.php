@@ -23,9 +23,12 @@ if (file_exists($lockFile)) {
 }
 
 // --- Load core for FileStorage, esc(), csrf ---
+require __DIR__ . '/helpers.php';
 require __DIR__ . '/core.php';
 
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 // --- Detect functions ---
 

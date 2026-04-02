@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 3;
-    public const VERSION_BUILD = 35;
-    public const VERSION = 'Ver.2.3-35';
+    public const VERSION_MINOR = 4;
+    public const VERSION_BUILD = 36;
+    public const VERSION = 'Ver.2.4-36';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -159,9 +159,9 @@ final class App
         }
     }
 
-    private function handlePassword(string|false $fval, string $val): void
+    private function handlePassword(mixed $fval, string $val): void
     {
-        if ($fval === false || $fval === '') {
+        if (!is_string($fval) || $fval === '') {
             $this->config['password'] = $this->savePassword($val);
         }
     }
@@ -169,14 +169,16 @@ final class App
     private function handleAuth(): void
     {
         if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+            $_SESSION = [];
             session_destroy();
             session_start();
+            session_regenerate_id(true);
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
         }
 
-        if (isset($_SESSION['l']) && $_SESSION['l'] === $this->config['password']) {
+        if (isset($_SESSION['l']) && hash_equals($this->config['password'], $_SESSION['l'])) {
             $this->config['loggedin'] = true;
         }
 
@@ -306,7 +308,7 @@ final class App
 
     public function getLoginStatus(): string
     {
-        $host = $this->host;
+        $host = esc($this->host);
         if ($this->isLoggedIn()) {
             return "<a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
         }
@@ -330,7 +332,8 @@ final class App
         $input = $_POST['password'] ?? '';
 
         $md5Migrated = false;
-        if (strlen($stored) === 32 && ctype_xdigit($stored)) {
+        $isBcrypt = str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2b$');
+        if (!$isBcrypt && strlen($stored) === 32 && ctype_xdigit($stored)) {
             $valid = hash_equals($stored, md5($input));
             if ($valid) {
                 $this->config['password'] = $this->savePassword($input);
@@ -387,7 +390,7 @@ final class App
 
     public function editTags(): void
     {
-        if (!$this->isLoggedIn() && !isset($_REQUEST['login'])) {
+        if (!$this->isLoggedIn()) {
             return;
         }
         $token = csrf_token();
@@ -425,7 +428,7 @@ final class App
             if (isset($this->config['pageBlocks'])) {
                 $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
             }
-            echo "<div class='blocks-content' data-blocks-b64='{$blocksB64}'></div>";
+            echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         } elseif ($isMarkdown) {
             $encoded = esc(base64_encode($content));
             echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
@@ -436,7 +439,8 @@ final class App
 
     public function menu(): void
     {
-        $items = explode("<br />\n", $this->config['menu']);
+        $menu = str_replace("\r\n", "\n", $this->config['menu']);
+        $items = explode("<br />\n", $menu);
         echo '<ul>';
         foreach ($items as $item) {
             $item = trim($item);

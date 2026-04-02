@@ -29,9 +29,9 @@ type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
 
 function attachBackspaceHandler(el: HTMLElement): void {
     el.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && el.textContent === '') {
+        if (e.key === 'Backspace' && (el.textContent?.trim() === '')) {
             e.preventDefault();
-            const editor = (el.closest('.ce-editor') as HTMLElement)?.__editor;
+            const editor = (el.closest('.ce-editor') as any)?.__editor;
             if (!editor) return;
             const block = el.closest('.ce-block') as HTMLElement;
             const idx = editor.getBlockIndex(block);
@@ -61,7 +61,17 @@ function attachListItemHandlers(li: HTMLLIElement): void {
 // --- Sanitize: strip script tags from block content ---
 
 function sanitizeHtml(html: string): string {
-    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    // Remove dangerous tags
+    let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+    s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
+    s = s.replace(/<embed\b[^>]*\/?>/gi, '');
+    s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+    // Remove event handler attributes (on*)
+    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    // Remove javascript: URLs in href/src attributes
+    s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    return s;
 }
 
 // --- Built-in Block Tools ---
@@ -77,7 +87,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 el.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        const editor = (el.closest('.ce-editor') as HTMLElement)?.__editor;
+                        const editor = (el.closest('.ce-editor') as any)?.__editor;
                         if (editor) {
                             const idx = editor.getBlockIndex(el.closest('.ce-block') as HTMLElement);
                             editor.insertBlock('paragraph', {}, idx + 1);
@@ -122,7 +132,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 items.forEach(item => {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
-                    li.innerHTML = item;
+                    li.innerHTML = sanitizeHtml(item);
                     attachListItemHandlers(li);
                     el.appendChild(li);
                 });
@@ -194,7 +204,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 wrap.className = 'ce-image';
 
                 const img = document.createElement('img');
-                img.src = (data.url as string) || '';
+                const initialUrl = (data.url as string) || '';
+                img.src = /^\s*javascript\s*:/i.test(initialUrl) ? '' : initialUrl;
                 img.alt = '';
 
                 // URL input for editing
@@ -202,9 +213,10 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 urlInput.type = 'text';
                 urlInput.className = 'ce-image__url';
                 urlInput.placeholder = 'Image URL...';
-                urlInput.value = (data.url as string) || '';
+                urlInput.value = initialUrl;
                 urlInput.addEventListener('input', () => {
-                    img.src = urlInput.value;
+                    const val = urlInput.value;
+                    img.src = /^\s*javascript\s*:/i.test(val) ? '' : val;
                 });
 
                 const cap = document.createElement('figcaption');
@@ -233,6 +245,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
 
 class InlineToolbar {
     private el: HTMLElement;
+    private selectionHandler: () => void;
 
     constructor() {
         this.el = document.createElement('div');
@@ -258,7 +271,13 @@ class InlineToolbar {
             });
         });
 
-        document.addEventListener('selectionchange', () => this.update());
+        this.selectionHandler = () => this.update();
+        document.addEventListener('selectionchange', this.selectionHandler);
+    }
+
+    destroy(): void {
+        document.removeEventListener('selectionchange', this.selectionHandler);
+        this.el.remove();
     }
 
     private update(): void {
@@ -502,7 +521,8 @@ class Editor {
                 let defaultData: Record<string, unknown> = {};
                 if (type === 'heading') {
                     const level = prompt('Heading level (1-3):', '2');
-                    defaultData = { level: Math.max(1, Math.min(3, parseInt(level || '2', 10))) };
+                    const parsed = parseInt(level || '2', 10);
+                    defaultData = { level: Math.max(1, Math.min(3, isNaN(parsed) ? 2 : parsed)) };
                 } else if (type === 'list') {
                     const style = confirm('Ordered list? (OK=ordered, Cancel=unordered)') ? 'ordered' : 'unordered';
                     defaultData = { style, items: [''] };
@@ -544,20 +564,20 @@ function renderBlocks(blocks: BlockData[]): string {
         const d = block.data;
         switch (block.type) {
             case 'paragraph':
-                return `<p>${d.text || ''}</p>`;
+                return `<p>${escHtml(String(d.text || ''))}</p>`;
             case 'heading': {
                 const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
-                return `<h${lvl}>${d.text || ''}</h${lvl}>`;
+                return `<h${lvl}>${escHtml(String(d.text || ''))}</h${lvl}>`;
             }
             case 'list': {
                 const tag = d.style === 'ordered' ? 'ol' : 'ul';
                 const items = (d.items as string[]) || [];
-                return `<${tag}>${items.map(i => `<li>${i}</li>`).join('')}</${tag}>`;
+                return `<${tag}>${items.map(i => `<li>${escHtml(String(i))}</li>`).join('')}</${tag}>`;
             }
             case 'code':
                 return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
             case 'quote':
-                return `<blockquote>${d.text || ''}</blockquote>`;
+                return `<blockquote>${escHtml(String(d.text || ''))}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
             case 'image': {

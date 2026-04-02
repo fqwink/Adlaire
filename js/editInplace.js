@@ -50,10 +50,10 @@ function fieldSave(key, val) {
             return;
         }
         if (val === '') {
-            el.innerHTML = el.getAttribute('title') || '';
+            el.textContent = el.getAttribute('title') || '';
         }
         else {
-            el.innerHTML = data;
+            el.textContent = data;
         }
         changing = false;
     })
@@ -79,7 +79,7 @@ function plainTextEdit(span) {
     const isMarkdown = span.dataset.format === 'markdown';
     const content = isMarkdown
         ? span.innerHTML
-        : span.innerHTML.replace(/<br\s*\/?>/gi, '');
+        : (span.textContent || '');
     const textarea = document.createElement('textarea');
     textarea.name = 'textarea';
     textarea.id = id + '_field';
@@ -101,7 +101,9 @@ function plainTextEdit(span) {
     span.textContent = '';
     span.appendChild(textarea);
     textarea.focus();
-    autosize(textarea);
+    if (typeof autosize === 'function') {
+        autosize(textarea);
+    }
 }
 function richTextHook(span) {
     plainTextEdit(span);
@@ -111,7 +113,9 @@ function renderMarkdownContent() {
     document.querySelectorAll('.markdown-content').forEach(el => {
         const b64 = el.dataset.rawB64;
         const raw = b64 ? atob(b64) : (el.textContent || '');
-        el.innerHTML = markdownToHtml(raw);
+        if (typeof markdownToHtml === 'function') {
+            el.innerHTML = markdownToHtml(raw);
+        }
     });
 }
 function renderBlocksContent() {
@@ -159,7 +163,8 @@ function initBlockEditor() {
             version: '1.0',
             blocks: blocks.length > 0 ? blocks : [{ type: 'paragraph', data: { text: '' } }],
         };
-        activeEditor = Editor.create(wrapper, { data: editorData });
+        const editorInstance = Editor.create(wrapper, { data: editorData });
+        activeEditor = editorInstance;
         // Auto-save on focusout from the editor
         let saveTimer = null;
         wrapper.addEventListener('focusout', (e) => {
@@ -170,9 +175,9 @@ function initBlockEditor() {
             if (saveTimer)
                 clearTimeout(saveTimer);
             saveTimer = setTimeout(() => {
-                if (!activeEditor)
+                if (!editorInstance)
                     return;
-                const saved = activeEditor.save();
+                const saved = editorInstance.save();
                 const slug = wrapper.id;
                 if (!slug)
                     return;
@@ -268,14 +273,16 @@ function switchFormat(slug, newFormat) {
         api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
             location.reload();
         }).catch(() => {
-            // Revert on failure
+            alert('Format switch failed. Reloading to recover.');
+            location.reload();
         });
     }
     else {
         api.savePage(slug, currentContent, newFormat).then(() => {
             location.reload();
         }).catch(() => {
-            // Revert on failure
+            alert('Format switch failed. Reloading to recover.');
+            location.reload();
         });
     }
 }
@@ -284,10 +291,17 @@ function initEditInplace() {
     // Render content for visitors
     renderMarkdownContent();
     renderBlocksContent();
-    // Initialize block editor for admin (blocks-format pages)
-    initBlockEditor();
-    // Initialize format switcher for admin
-    initFormatSwitcher();
+    // Wait for i18n to be ready before initializing editor UI
+    const initEditorUI = () => {
+        initBlockEditor();
+        initFormatSwitcher();
+    };
+    if (typeof i18n !== 'undefined' && i18n.ready) {
+        i18n.ready.then(initEditorUI);
+    }
+    else {
+        initEditorUI();
+    }
     // Editable text spans (HTML and Markdown formats)
     document.querySelectorAll('span.editText').forEach(span => {
         span.addEventListener('click', () => {
