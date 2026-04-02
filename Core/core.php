@@ -6,9 +6,9 @@ declare(strict_types=1);
  *
  * FileStorage data management layer and utility functions.
  *
- * @copyright Copyright (c) 2014 - 2026 IEAS Group
- * @copyright Copyright (c) 2014 - 2026 AIZM
- * @license Adlaire License
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group
+ * @copyright Copyright (c) 2014 - 2026 倉田和宏
+ * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
 /**

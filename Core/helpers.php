@@ -7,9 +7,9 @@ declare(strict_types=1);
  * Utility functions: escaping, CSRF, rate limiting.
  * No dependencies.
  *
- * @copyright Copyright (c) 2014 - 2026 IEAS Group
- * @copyright Copyright (c) 2014 - 2026 AIZM
- * @license Adlaire License
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group
+ * @copyright Copyright (c) 2014 - 2026 倉田和宏
+ * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
 function esc(string $value): string

@@ -1,4 +1,7 @@
 /**
+ * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
  * API - REST API client for Adlaire Static CMS.
  * Provides typed methods for page CRUD and revision management.
  *

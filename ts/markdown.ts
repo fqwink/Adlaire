@@ -1,4 +1,7 @@
 /**
+ * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
  * Markdown - Lightweight Markdown to HTML converter.
  * Supports: headings, bold, italic, code blocks (with language), inline code,
  * links, images, tables, task lists, unordered/ordered lists, blockquotes,

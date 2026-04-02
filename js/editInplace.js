@@ -1,5 +1,8 @@
 "use strict";
 /**
+ * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
  * EditInplace - Inline content editing for Adlaire Static CMS.
  *
  * Provides unified inplace editing for page formats:
