@@ -1,5 +1,19 @@
 # CHANGES - 変更履歴
 
+## Ver.2.3-35 (2026-04-02)
+
+### アーキテクチャ刷新（機能ベースファイル分離）
+* admin.php を廃止、5ファイルに機能ベースで分離
+* helpers.php 新規: esc(), csrf_token(), csrf_verify(), login_rate_check() を core.php から分離
+* app.php 新規: App クラス全体（設定, 認証, 翻訳, 描画, プラグイン）を admin.php から分離
+* renderer.php 新規: renderBlocksToHtml(), renderMarkdownToHtml() を admin.php から分離
+* api.php 新規: handleApi(), handleEdit(), 全 REST API ハンドラーを admin.php から分離
+* generator.php 新規: handleApiGenerate(), generatePageHtml() を admin.php から分離
+* index.php: require 順序を helpers→core→app→renderer→api→generator に変更
+* .htaccess: 新規ファイルのアクセスブロック追加
+* core.php: FileStorage クラスのみに縮小
+* RULEBOOK: Ver.2.4 をバグ修正リリースに変更、以降のバージョンを1つスライド
+
 ## Ver.2.2-34 (2026-04-02)
 
 ### Ver.2.1 残存バグ修正（5件） + Ver.2.2 精査修正

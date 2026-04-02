@@ -19,7 +19,7 @@
 |---------|------|------|
 | `rulebookdocs/CHARTER.md` | 憲章 | **本ファイル** — 全バージョン共通の最上位原則 |
 | `rulebookdocs/RULEBOOK_Ver1.md` | バージョンベース | Ver.1.x 系（凍結 — Ver.1.9-30） |
-| `rulebookdocs/RULEBOOK_Ver2.md` | バージョンベース | Ver.2.x 系（現行策定中） |
+| `rulebookdocs/RULEBOOK_Ver2.md` | バージョンベース | Ver.2.x 系（現行 — Ver.2.3 実装完了） |
 | `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 分類ベース | 製品方向性（ポジション・ターゲット・採用方針） |
 | `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | 分類ベース | エディタ（設計原則・開発範囲・禁止事項） |
 | `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | 分類ベース | ライフサイクルシステム（Setup/Update統合基盤） |
