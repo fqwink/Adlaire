@@ -7,8 +7,8 @@ declare(strict_types=1);
  * Server-side rendering: blocks-to-HTML and Markdown-to-HTML conversion.
  * Depends on: helpers.php
  *
- * @copyright Copyright (c) 2014 - 2026 IEAS Group
- * @copyright Copyright (c) 2014 - 2026 AIZM
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group
+ * @copyright Copyright (c) 2014 - 2026 倉田和宏
  * @license Adlaire License
  */
 

@@ -7,8 +7,8 @@ declare(strict_types=1);
  * REST API handlers and admin edit handler.
  * Depends on: helpers.php, core.php, app.php, renderer.php
  *
- * @copyright Copyright (c) 2014 - 2026 IEAS Group
- * @copyright Copyright (c) 2014 - 2026 AIZM
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group
+ * @copyright Copyright (c) 2014 - 2026 倉田和宏
  * @license Adlaire License
  */
 

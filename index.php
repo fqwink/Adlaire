@@ -9,8 +9,8 @@ declare(strict_types=1);
  *   Minor  - Incremented on backward-compatible feature additions.
  *   Build  - Cumulative revision number. Never resets.
  *
- * @copyright Copyright (c) 2014 - 2026 IEAS Group
- * @copyright Copyright (c) 2014 - 2026 AIZM
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group
+ * @copyright Copyright (c) 2014 - 2026 倉田和宏
  * @license Adlaire License
  */
 

@@ -50,4 +50,4 @@ Licensed under Adlaire License, see [LICENSE](Licenses/LICENSE_Ver.1.0)
 
 ## Copyright
 
-Copyright (c) 2014 - 2026 IEAS Group & AIZM All Rights Reserved.
+Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏 All Rights Reserved.
