@@ -285,11 +285,49 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 3 | ページインデックスキャッシュ（pages.index.json） | 計画 |
-| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | 計画 |
-| 5 | Content-Security-Policy ヘッダー | 計画 |
-| 6 | セッション有効期限（自動ログアウト） | 計画 |
-| 7 | パスワード強度検証 | 計画 |
+| 3 | ページインデックスキャッシュ（pages.index.json） | **仕様策定完了** |
+| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | **仕様策定完了** |
+| 5 | Content-Security-Policy ヘッダー | **仕様策定完了** |
+| 6 | セッション有効期限（自動ログアウト） | **仕様策定完了** |
+| 7 | パスワード強度検証 | **仕様策定完了** |
+
+#### 3.3.1 ページインデックスキャッシュ
+
+- `files/pages.index.json` にページメタデータ（slug, format, status, updated_at）をキャッシュする。
+- `listPages()` はキャッシュが存在し有効な場合、個別ページ JSON を読み込まずキャッシュを返す。
+- `writePage()`, `deletePage()`, `updatePageStatus()` 実行時にキャッシュを再構築する。
+- キャッシュ無効化: キャッシュファイルが存在しない場合、またはページディレクトリの mtime がキャッシュの mtime より新しい場合。
+
+#### 3.3.2 静的生成の差分ビルド
+
+- `handleApiGenerate()` で `dist/.build_state.json` に前回ビルド時刻を記録する。
+- 各ページの `updated_at` が前回ビルド時刻より新しい場合のみ再生成する。
+- `force=true` パラメータで全ページ再生成を強制できる。
+- CSS/JS/sitemap は常に再生成する。
+
+#### 3.3.3 Content-Security-Policy ヘッダー
+
+- `index.php` で以下の CSP ヘッダーを出力する:
+  ```
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'
+  ```
+- 管理 UI（`admin-ui.php`）では `script-src 'self' 'unsafe-inline'` を許可する（インラインスクリプト使用のため）。
+- API レスポンスには CSP を付与しない。
+
+#### 3.3.4 セッション有効期限
+
+- セッションに `last_activity` タイムスタンプを記録する。
+- 各リクエストで `last_activity` から30分以上経過している場合、セッションを破棄してログアウトする。
+- ログイン時に `last_activity` を設定する。
+- `handleAuth()` 内でチェックする。
+
+#### 3.3.5 パスワード強度検証
+
+- パスワード変更時（`login()` の新パスワード処理）に以下を検証する:
+  - 最低8文字以上（MUST）
+  - `admin`, `password`, `12345678` などの弱いパスワードを拒否（SHOULD）
+- `bundle-installer.php` の初期パスワード設定でも同じ検証を適用する。
+- 検証失敗時は翻訳済みエラーメッセージを返す。
 
 ### 3.4 Ver.2.3 — アーキテクチャ刷新
 
