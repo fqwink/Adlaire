@@ -46,7 +46,7 @@ npm run build     # TypeScript → JavaScript コンパイル
 
 ## LICENSE
 
-Licensed under Adlaire License, see [LICENSE](Licenses/LICENSE_Ver.1.0)
+Licensed under Adlaire License Ver.2.0, see [LICENSE](Licenses/LICENSE_Ver.2.0)
 
 ## Copyright
 

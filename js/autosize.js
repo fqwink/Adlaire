@@ -1,5 +1,8 @@
 "use strict";
 /**
+ * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
  * Autosize - Auto-resize textarea to fit content.
  * Vanilla TypeScript replacement for jQuery autosize plugin.
  */

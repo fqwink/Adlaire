@@ -1,5 +1,8 @@
 "use strict";
 /**
+ * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
+ * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
  * Editor - Block-based content editor for Adlaire Static CMS.
  * Editor.js-like architecture implemented in pure TypeScript.
  *
