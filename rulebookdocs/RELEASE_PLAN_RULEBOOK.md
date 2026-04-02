@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.1.2
+- 文書バージョン: Ver.1.3
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -156,11 +156,70 @@
 |---|--------|:----:|
 | 14 | Ver.2.4 後のバグ修正・改良 | 計画 |
 
-### 4.6 Ver.2.4 — バグ修正
+### 4.6 Ver.2.4 — バグ修正（50件精査）
 
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 13 | Ver.2.3 アーキテクチャ刷新後のバグ修正・精査・策定 | 計画 |
+> Ver.2.3 アーキテクチャ刷新後の全コード精査に基づくバグ修正。
+> PHP 30件 + TypeScript/フロントエンド 20件 = 50件。
+
+#### PHP バグ修正（30件）
+
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 1 | セキュリティ | helpers.php | CSRF トークンが毎回再生成され複数タブで検証失敗 | 計画 |
+| 2 | セキュリティ | api.php | CORS Origin 検証が str_contains 部分一致でバイパス可能 | 計画 |
+| 3 | セキュリティ | api.php | handleEdit() がパスワードハッシュ一致を検証せず SESSION 存在のみチェック | 計画 |
+| 4 | セキュリティ | api.php | handleApi() も同様にパスワードハッシュ一致を検証しない | 計画 |
+| 5 | セキュリティ | app.php | セッション認証で hash_equals() を使用していない（タイミング攻撃リスク） | 計画 |
+| 6 | セキュリティ | app.php | getLoginStatus() で $this->host を未エスケープで href 属性に出力（XSS） | 計画 |
+| 7 | セキュリティ | app.php | content() で base64 値を属性に防御的エスケープなしで出力 | 計画 |
+| 8 | データ整合性 | api.php | handleEdit() の CSRF トークン再生成とフロントエンドの整合性不足 | 計画 |
+| 9 | エラーハンドリング | app.php | session_destroy() 後の session_start() で PHP 8.3 警告の可能性 | 計画 |
+| 10 | エラーハンドリング | api.php | handleEdit() が Content-Type ヘッダを設定していない | 計画 |
+| 11 | セキュリティ | api.php | handleEdit() でユーザー入力をエスケープなしで echo（格納型 XSS） | 計画 |
+| 12 | アーキテクチャ | api.php | handleEdit() が独自に FileStorage を生成し App と共有されない | 計画 |
+| 13 | セキュリティ | index.php | $_REQUEST['admin'] が COOKIE 経由で注入される可能性 | 計画 |
+| 14 | コード品質 | app.php | パスワード変更成功後のリダイレクト不足 | 計画 |
+| 15 | エッジケース | app.php | MD5 パスワードマイグレーションの判定が不完全（strlen==32 && ctype_xdigit） | 計画 |
+| 16 | データ整合性 | core.php | listPages() キャッシュが直接ファイル操作時に古いまま | 計画 |
+| 17 | エッジケース | generator.php | diff ビルドの日時比較がタイムゾーン混在時に誤判定 | 計画 |
+| 18 | セキュリティ | generator.php | 静的生成で $sideContent（subside）が未エスケープ出力 | 計画 |
+| 19 | コード品質 | admin-ui.php | CSP ヘッダが index.php と二重設定され unsafe-inline が無効化される可能性 | 計画 |
+| 20 | 致命的バグ | admin-ui.php | Save Status ボタンが content='' で POST しページ内容を消去 | 計画 |
+| 21 | 致命的バグ | bundle-installer.php | helpers.php を require していないため直接アクセス時 esc() 未定義エラー | 計画 |
+| 22 | エッジケース | bundle-installer.php | session_start() 二重呼び出しの可能性 | 計画 |
+| 23 | セキュリティ | app.php | editTags() がログインページで非認証ユーザーに CSRF トークンを出力 | 計画 |
+| 24 | パフォーマンス | core.php | listPages() が content 含む全データをキャッシュに書き込みメモリ圧迫 | 計画 |
+| 25 | エッジケース | app.php | handlePassword() に非文字列値が渡されると TypeError | 計画 |
+| 26 | セキュリティ | renderer.php | Markdown の img/a 変換で URL 未エスケープ・javascript: スキーム未フィルタ | 計画 |
+| 27 | コード品質 | renderer.php | コードブロック内の言語名が二重エスケープされる可能性 | 計画 |
+| 28 | データ整合性 | core.php | マイグレーションで system ファイルが pages/ に誤移行されるリスク | 計画 |
+| 29 | エッジケース | app.php | メニュー区切り文字の改行コード不一致（\r\n 混在時に分割失敗） | 計画 |
+| 30 | セキュリティ | admin-ui.php | deletePage onclick で slug が JS コンテキスト適切にエスケープされていない | 計画 |
+
+#### TypeScript/フロントエンド バグ修正（20件）
+
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 31 | セキュリティ | editor.ts | sanitizeHtml が script タグのみ除去で他の XSS ベクター素通し | 計画 |
+| 32 | セキュリティ | editor.ts | list ブロック render で li.innerHTML にサニタイズなしで代入 | 計画 |
+| 33 | セキュリティ | editor.ts | renderBlocks で paragraph/heading/quote/list が未エスケープ出力 | 計画 |
+| 34 | 致命的バグ | api.ts | importSite で res.json() を2回呼び出し常に失敗 | 計画 |
+| 35 | セキュリティ | api.ts | savePage の CSRF トークン更新と restoreRevision のトークン失効 | 計画 |
+| 36 | 型安全性 | editor.ts | __editor プロパティの型定義不整合（as any の有無が不統一） | 計画 |
+| 37 | エッジケース | editor.ts | heading レベル入力で不正値が NaN になり不正な要素が生成される | 計画 |
+| 38 | データ損失 | editInplace.ts | 複数 .ce-editor-wrapper で activeEditor が最後のもので上書き | 計画 |
+| 39 | セキュリティ | editInplace.ts | fieldSave でサーバーレスポンスを未検証で innerHTML に代入 | 計画 |
+| 40 | コード品質 | editInplace.ts | plainTextEdit で innerHTML から br 除去するが他の HTML タグが残る | 計画 |
+| 41 | エラーハンドリング | api.ts | savePage/deletePage のエラー時 res.json() が非 JSON で失敗 | 計画 |
+| 42 | 初期化競合 | i18n.ts + editInplace.ts | i18n.init() 完了前にエディタが初期化され翻訳キー名が表示される | 計画 |
+| 43 | セキュリティ | editor.ts | image ブロックの img.src に javascript: スキーム URL が設定可能 | 計画 |
+| 44 | データ損失 | editInplace.ts | focusout 保存で activeEditor のグローバル参照が別エディタを指す | 計画 |
+| 45 | DOM リーク | editor.ts | InlineToolbar の selectionchange リスナーが解除されない | 計画 |
+| 46 | 非推奨 API | editor.ts | document.execCommand は Web 標準で非推奨 | Ver.2.8 延期 |
+| 47 | セキュリティ | api.ts | importSite で CSRF トークンを URL クエリパラメータに含め漏洩リスク | 計画 |
+| 48 | エッジケース | editor.ts | Backspace ハンドラの空判定が不正確（br/零幅スペース考慮不足） | 計画 |
+| 49 | エラーハンドリング | editInplace.ts | autosize/markdownToHtml の未定義チェック不足 | 計画 |
+| 50 | データ損失 | editInplace.ts | switchFormat のエラー時にリカバリがなくデータ消失 | 計画 |
 
 ---
 
