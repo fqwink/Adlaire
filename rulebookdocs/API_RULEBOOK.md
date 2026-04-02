@@ -27,7 +27,7 @@
 
 # 2. データ仕様
 
-## 2.1 サイト設定 (`files/config.json`)
+## 2.1 サイト設定 (`data/config.json`)
 
 | キー | 型 | 説明 |
 |-----|-----|------|
@@ -41,7 +41,7 @@
 | `keywords` | string | キーワード |
 | `copyright` | string | 著作権表示 |
 
-## 2.2 ページデータ (`files/pages/{slug}.json`)
+## 2.2 ページデータ (`data/pages/{slug}.json`)
 
 ```json
 {
@@ -61,17 +61,17 @@
 - **status**: `published`（公開）/ `draft`（下書き、管理者のみ閲覧可）
 - **blocks**: format が `blocks` の場合のみ。ブロック配列。
 
-## 2.3 リビジョン (`files/revisions/{slug}/{timestamp}_{random}.json`)
+## 2.3 リビジョン (`data/revisions/{slug}/{timestamp}_{random}.json`)
 
 ページデータと同一構造。保存時の旧バージョンを自動保存。最大30世代。
 
-## 2.4 ページインデックスキャッシュ (`files/pages.index.json`)
+## 2.4 ページインデックスキャッシュ (`data/pages.index.json`)
 
 - ページメタデータ（slug, format, status, updated_at）をキャッシュする。
 - `listPages()` はキャッシュが有効な場合、個別ページ JSON を読み込まずキャッシュを返す。
 - `writePage()`, `deletePage()`, `updatePageStatus()` 実行時にキャッシュを再構築する。
 
-## 2.5 install.lock (`files/system/install.lock`)
+## 2.5 install.lock (`data/system/install.lock`)
 
 ```json
 {
@@ -104,7 +104,7 @@
 
 # 3. PHP API 仕様
 
-## 3.1 FileStorage (`core.php`)
+## 3.1 FileStorage (`Core/core.php`)
 
 | メソッド | 説明 |
 |---------|------|
@@ -128,7 +128,7 @@
 
 **定数**: `MAX_BACKUPS = 9`, `MAX_REVISIONS = 30`
 
-## 3.2 ヘルパー関数 (`helpers.php`)
+## 3.2 ヘルパー関数 (`Core/helpers.php`)
 
 | 関数 | 説明 |
 |------|------|
@@ -137,7 +137,7 @@
 | `csrf_verify(): void` | CSRF トークン検証（使用後再生成） |
 | `login_rate_check(): bool` | ログイン試行回数制限（5回/5分） |
 
-## 3.3 App (`app.php`)
+## 3.3 App (`Core/app.php`)
 
 | メソッド | 説明 |
 |---------|------|
@@ -153,14 +153,14 @@
 | `content(id, content): void` | コンテンツ出力（ブロック / Markdown / フィールド） |
 | `menu(): void` | ナビメニュー生成 |
 
-## 3.4 描画関数 (`renderer.php`)
+## 3.4 描画関数 (`Core/renderer.php`)
 
 | 関数 | 説明 |
 |------|------|
 | `renderBlocksToHtml(blocks): string` | ブロック配列→HTML（サーバーサイド、XSS エスケープ付き） |
 | `renderMarkdownToHtml(md): string` | Markdown→HTML（サーバーサイド） |
 
-## 3.5 API 関数 (`api.php`)
+## 3.5 API 関数 (`Core/api.php`)
 
 | 関数 | 説明 |
 |------|------|
@@ -175,7 +175,9 @@
 | `handleApiVersion()` | バージョン情報（公開・認証不要） |
 | `apiError(code, message)` | API エラーレスポンス |
 
-## 3.6 生成関数 (`generator.php`)
+## 3.6 生成関数 (`Core/generator.php`)
+
+> 詳細仕様は `GENERATOR_RULEBOOK.md` を参照。
 
 | 関数 | 説明 |
 |------|------|
@@ -228,11 +230,12 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 
 ## 4.6 静的サイト生成 API
 
+> 詳細仕様は `GENERATOR_RULEBOOK.md` を参照。
+
 | メソッド | URL | レスポンス |
 |---------|-----|-----------|
 | `POST` | `?api=generate` | `{ status: "ok", pages: 数, output: "dist/" }` |
 
-- 公開ページのみ対象。blocks は `renderBlocksToHtml()`, markdown は `renderMarkdownToHtml()` で変換。
 - 認証必須。
 
 ## 4.7 エクスポート・インポート API

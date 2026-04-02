@@ -16,6 +16,7 @@
   - `rulebookdocs/LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
   - `rulebookdocs/ARCHITECTURE_RULEBOOK.md` — アーキテクチャルールブック
   - `rulebookdocs/API_RULEBOOK.md` — API・データルールブック
+  - `rulebookdocs/GENERATOR_RULEBOOK.md` — 静的サイト生成ルールブック
   - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — リリース計画ルールブック
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
@@ -40,7 +41,7 @@
 
 > 詳細は `rulebookdocs/ARCHITECTURE_RULEBOOK.md` を参照。
 
-- **PHP 8.3+**（`declare(strict_types=1)`）、9ファイル Core 基盤（フラット構成）
+- **PHP 8.3+**（`declare(strict_types=1)`）、ルート2 + `Core/` 7ファイル構成
 - **TypeScript 5 系固定**（`~5.8`）、JS 直接記述禁止、`ts/` → `js/` コンパイル生成
 - ビルド: `npm install` → `npm run build`（`tsc`）
 - `js/` 内の手動編集禁止

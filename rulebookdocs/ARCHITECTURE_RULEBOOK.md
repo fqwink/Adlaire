@@ -1,12 +1,12 @@
 # Adlaire Architecture RULEBOOK
 
 - 文書名: Adlaire Architecture RULEBOOK
-- 文書バージョン: Ver.1.0
+- 文書バージョン: Ver.1.1
 - 作成日: 2026-04-02
+- 最終更新: 2026-04-02
 - 対象製品: Adlaire Platform
 - 文書種別: アーキテクチャ・ファイル構成・ビルド・セキュリティを定義する技術規範文書
 - 文書目的: Adlaire のコアアーキテクチャ、ファイル構成、TypeScript/JS 規約、ビルドプロセス、セキュリティ基盤を恒常的規範として定義する
-- 移行元: 旧 RULEBOOK_Ver1.md §1-2, 旧 RULEBOOK_Ver2.md §2.1/3.3/3.4（CHARTER.md に統合後、削除済み）
 
 ---
 
@@ -33,21 +33,28 @@
 - **PHP 8.3 以上を必須**とする。
 - すべての PHP ファイルに `declare(strict_types=1)` を記述する。
 
-## 2.2 ファイル構成（9ファイル Core 基盤）
+## 2.2 ファイル構成
 
-全ファイルは **Core 基盤** とする。ディレクトリ追加なし（フラット構成）。
+ルート配置2ファイル + `Core/` ディレクトリ7ファイルで構成する。
 
-| ファイル | 責務 | 直接HTTPアクセス |
-|---------|------|:---:|
-| `index.php` | エントリーポイント + ルーティング | 許可 |
-| `helpers.php` | ヘルパー関数（esc, csrf, rate_limit） | **禁止** |
-| `core.php` | FileStorage クラス（データ層） | **禁止** |
-| `app.php` | App クラス（設定, 認証, 翻訳, 描画, プラグイン） | **禁止** |
-| `renderer.php` | サーバーサイド描画関数（renderBlocksToHtml, renderMarkdownToHtml） | **禁止** |
-| `api.php` | REST API ルーター + 全ハンドラー + handleEdit | **禁止** |
-| `generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） | **禁止** |
-| `admin-ui.php` | 管理 UI テンプレート | **禁止** |
-| `bundle-installer.php` | セットアップツール（初期導入後に削除） | 許可（初回のみ） |
+### ルート配置（直接HTTPアクセス許可）
+
+| ファイル | 責務 |
+|---------|------|
+| `index.php` | エントリーポイント + ルーティング |
+| `bundle-installer.php` | セットアップツール（初期導入後に削除） |
+
+### Core ディレクトリ（直接HTTPアクセス禁止）
+
+| ファイル | 責務 |
+|---------|------|
+| `Core/helpers.php` | ヘルパー関数（esc, csrf, rate_limit） |
+| `Core/core.php` | FileStorage クラス（データ層） |
+| `Core/app.php` | App クラス（設定, 認証, 翻訳, 描画, プラグイン） |
+| `Core/renderer.php` | サーバーサイド描画関数（renderBlocksToHtml, renderMarkdownToHtml） |
+| `Core/api.php` | REST API ルーター + 全ハンドラー + handleEdit |
+| `Core/generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） |
+| `Core/admin-ui.php` | 管理 UI テンプレート |
 
 > **設計判断**: 認証メソッドは App クラスのプライベートメソッドとして密結合しているため、
 > 分離せず app.php に統合。content() / menu() も App クラスに残留。
@@ -56,39 +63,67 @@
 ## 2.3 require 順序（index.php）
 
 ```php
-require 'helpers.php';    // esc, csrf（依存なし）
-require 'core.php';       // FileStorage（helpers に依存）
-require 'app.php';        // App クラス（helpers, core に依存）
-require 'renderer.php';   // 描画関数（helpers に依存）
-require 'api.php';        // API ハンドラー（全てに依存）
-require 'generator.php';  // 静的生成（全てに依存）
+require 'Core/helpers.php';    // esc, csrf（依存なし）
+require 'Core/core.php';       // FileStorage（helpers に依存）
+require 'Core/app.php';        // App クラス（helpers, core に依存）
+require 'Core/renderer.php';   // 描画関数（helpers に依存）
+require 'Core/api.php';        // API ハンドラー（全てに依存）
+require 'Core/generator.php';  // 静的生成（全てに依存）
 ```
 
 ## 2.4 .htaccess アクセス制御
 
-- `index.php` 以外の PHP ファイルへの直接HTTPアクセスは `<Files>` ディレクティブで禁止する。
-- `files/` ディレクトリは `RedirectMatch 403` で保護する。
-- `data/` ディレクトリは `data/lang/` のみアクセス許可（翻訳 JSON）。
+- `Core/` ディレクトリへの直接HTTPアクセスをディレクトリ単位で禁止する。
+- `data/` ディレクトリは `data/lang/` のみアクセス許可（翻訳 JSON）。それ以外は禁止。
 - `release-manifest.json`, `VERSION` ファイルへの直接アクセスは禁止する。
 - クリーン URL は `RewriteRule` で実現する。
+- インデックス表示は無効化する（`-Indexes`）。
 
 ---
 
-# 3. TypeScript / JavaScript 規約
+# 3. データディレクトリ
 
-## 3.1 基本方針
+すべてのデータファイルは `data/` ディレクトリに格納する。
+
+## 3.1 ディレクトリ構成
+
+```
+data/
+├── lang/                      # 翻訳ファイル（JSON、公開アクセス許可）
+│   ├── ja.json
+│   └── en.json
+├── config.json                # サイト設定
+├── .config.lock               # 設定書き込み排他ロック
+├── pages/{slug}.json          # ページデータ
+├── pages.index.json           # ページインデックスキャッシュ
+├── revisions/{slug}/          # リビジョン履歴（最大30世代）
+├── backups/                   # 設定バックアップ（最大9世代）
+└── system/
+    └── install.lock           # インストール済みフラグ
+```
+
+## 3.2 アクセス制御
+
+- `data/lang/` のみ公開アクセスを許可する（TypeScript i18n モジュールが非同期読み込みするため）。
+- それ以外の `data/` 内ファイルは `.htaccess` で保護する。
+
+---
+
+# 4. TypeScript / JavaScript 規約
+
+## 4.1 基本方針
 
 - **TypeScript を全面的に採用する**。JavaScript の直接記述は禁止。
 - **TypeScript バージョンは 5 系に固定**（`~5.8`）。メジャーバージョン 6 以降への更新は別途検討。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 
-## 3.2 ディレクトリ配置
+## 4.2 ディレクトリ配置
 
 - TypeScript ソース: `ts/` ディレクトリ
 - コンパイル済み JavaScript: `js/` ディレクトリ（自動生成）
 - `js/` 内のファイルを手動編集することを禁止する。
 
-## 3.3 ビルド手順
+## 4.3 ビルド手順
 
 ```bash
 npm install       # 初回のみ
@@ -100,19 +135,21 @@ npm run build     # TypeScript → JavaScript コンパイル（tsc）
 
 ---
 
-# 4. プロジェクト構成
+# 5. プロジェクト構成
 
 ```
 Adlaire/
 ├── index.php                  # エントリーポイント
-├── helpers.php                # ヘルパー関数（esc, csrf, rate_limit）
-├── core.php                   # コア基盤（FileStorage クラス）
-├── app.php                    # App クラス（設定, 認証, 翻訳, 描画）
-├── renderer.php               # サーバーサイド描画関数
-├── api.php                    # REST API ハンドラー + handleEdit
-├── generator.php              # 静的サイト生成
-├── admin-ui.php               # 管理 UI テンプレート
+├── bundle-installer.php       # セットアップツール（初回のみ）
 ├── .htaccess                  # Apache URL書き換え・アクセス制御
+├── Core/                      # Core 基盤（直接HTTPアクセス禁止）
+│   ├── helpers.php            #   ヘルパー関数
+│   ├── core.php               #   FileStorage クラス
+│   ├── app.php                #   App クラス
+│   ├── renderer.php           #   サーバーサイド描画関数
+│   ├── api.php                #   REST API ハンドラー
+│   ├── generator.php          #   静的サイト生成
+│   └── admin-ui.php           #   管理 UI テンプレート
 ├── ts/                        # TypeScript ソース
 │   ├── globals.d.ts           #   グローバル型定義
 │   ├── autosize.ts            #   textarea 自動リサイズ
@@ -122,20 +159,18 @@ Adlaire/
 │   ├── markdown.ts            #   Markdown→HTML コンバーター
 │   └── api.ts                 #   REST API クライアント
 ├── js/                        # コンパイル済み JavaScript（自動生成）
-├── data/lang/                 # 翻訳ファイル（JSON）
-│   ├── ja.json
-│   └── en.json
-├── themes/                    # テーマディレクトリ
-│   ├── AP-Default/            #   theme.php + style.css
-│   └── AP-Adlaire/            #   theme.php + style.css
-├── files/                     # [実行時生成] データストレージ
+├── data/                      # データストレージ
+│   ├── lang/                  #   翻訳ファイル（JSON、公開許可）
 │   ├── config.json            #   サイト設定
-│   ├── .config.lock           #   設定書き込み排他ロック
 │   ├── pages/{slug}.json      #   ページデータ
 │   ├── pages.index.json       #   ページインデックスキャッシュ
-│   ├── revisions/{slug}/      #   リビジョン履歴（最大30世代）
-│   ├── backups/               #   設定バックアップ（最大9世代）
+│   ├── revisions/{slug}/      #   リビジョン履歴
+│   ├── backups/               #   設定バックアップ
 │   └── system/install.lock    #   インストール済みフラグ
+├── themes/                    # テーマディレクトリ
+│   ├── AP-Default/            #   theme.php + style.css
+│   ├── AP-Adlaire/            #   theme.php + style.css
+│   └── admin.css              #   管理 UI スタイルシート
 ├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
 ├── package.json / tsconfig.json
@@ -144,74 +179,62 @@ Adlaire/
 ├── CLAUDE.md                  # 開発規約
 ├── README.md                  # プロジェクト説明
 ├── rulebookdocs/              # ルールブックドキュメントフォルダ
+│   ├── CHARTER.md             #   憲章（最上位原則）
+│   ├── DIRECTION_RULEBOOK.md  #   製品方向性
+│   ├── EDITOR_RULEBOOK.md     #   エディタ
+│   ├── LIFECYCLE_SYSTEM_RULEBOOK.md  # ライフサイクルシステム
+│   ├── ARCHITECTURE_RULEBOOK.md     # 本ファイル
+│   ├── API_RULEBOOK.md        #   API・データ
+│   ├── GENERATOR_RULEBOOK.md  #   静的サイト生成
+│   └── RELEASE_PLAN_RULEBOOK.md     # リリース計画
 ├── docs/                      # ドキュメントフォルダ
-├── themes/admin.css           # 管理 UI スタイルシート
+│   └── CHANGES.md             #   変更履歴
 └── Licenses/
 ```
 
 ---
 
-# 5. セキュリティ基盤
+# 6. セキュリティ基盤
 
-## 5.1 認証
+> セキュリティ基盤は **Core の責務** である。
+> 本セクションは設計方針・仕組みを定義する。
+> 実装状態の一覧は `API_RULEBOOK.md` §7.2 を参照。
+
+## 6.1 認証
 
 - 管理者パスワードは **bcrypt** でハッシュ保存する（`password_hash()`）。
 - MD5 レガシーパスワードは初回認証時に bcrypt へ自動移行する。
 - パスワード変更時の最低要件: 8文字以上、弱いパスワード（admin, password, 12345678 等）を拒否。
 
-## 5.2 セッション
+## 6.2 セッション
 
 - セッション cookie: `httponly=1`, `use_strict_mode=1`, `cookie_samesite=Strict`。
 - セッション有効期限: 30分間の無操作で自動ログアウト（`last_activity` タイムスタンプ）。
 - ログイン成功時に `session_regenerate_id(true)` を実行する。
 
-## 5.3 CSRF 保護
+## 6.3 CSRF 保護
 
 - **ワンタイムトークン方式**: `csrf_token()` で生成、`csrf_verify()` で検証後に再生成。
 - API レスポンスに `X-CSRF-Token` ヘッダーでトークンを返却し、クライアント側で更新する。
 - `handleEdit()` のレスポンスにも `X-CSRF-Token` ヘッダーを付与する。
 
-## 5.4 レートリミット
+## 6.4 レートリミット
 
 - ログイン試行: 5回/5分（`login_rate_check()`）。
 
-## 5.5 Content-Security-Policy
+## 6.5 Content-Security-Policy
 
 - 公開ページ（`index.php`）:
   ```
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'
   ```
 
-## 5.6 入力サニタイズ
+## 6.6 入力サニタイズ
 
 - HTML 出力は `esc()`（`htmlspecialchars`）でエスケープする。
 - スラッグは `FileStorage::validateSlug()` で検証する。
 - ホスト名はホワイトリスト正規表現で検証する。
 - `renderBlocksToHtml()` は全テキストフィールドに `esc()` を適用する。
-
----
-
-# 6. 静的サイト生成
-
-## 6.1 概要
-
-- `POST ?api=generate` で `dist/` ディレクトリに静的 HTML を出力する。
-- 認証必須（管理者のみ）。
-
-## 6.2 差分ビルド
-
-- `dist/.build_state.json` に前回ビルド時刻を記録する。
-- 各ページの `updated_at` が前回ビルド時刻より新しい場合のみ再生成する。
-- `force=true` パラメータで全ページ再生成を強制できる。
-- CSS / JS / sitemap は常に再生成する。
-
-## 6.3 生成内容
-
-- 各ページの HTML（テーマ適用済み）
-- テーマ CSS
-- JS（レンダリング用のみ: markdown.js, editInplace.js）
-- 翻訳ファイル
-- sitemap.xml（公開ページのみ）
 
 ---
 
@@ -249,3 +272,12 @@ Adlaire/
 ## 9.3 改訂条件
 
 本 RULEBOOK を改訂する場合は、ファイル構成、セキュリティ、ビルドプロセスへの影響を明示しなければならない。
+
+---
+
+# 改訂履歴
+
+| バージョン | 日付 | 変更内容 |
+|-----------|------|---------|
+| Ver.1.0 | 2026-04-02 | 初版（旧 RULEBOOK_Ver1/Ver2 から移行） |
+| Ver.1.1 | 2026-04-02 | Core/ ディレクトリ導入、data/ 統合、静的生成を GENERATOR_RULEBOOK に分離、セキュリティ基盤を Core 責務として明記 |
