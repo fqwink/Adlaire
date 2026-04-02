@@ -24,6 +24,7 @@
 | `API_RULEBOOK.md` | 分類ベース | API・データ（REST API・PHP API・データ仕様・TS モジュール・管理UI） |
 | `GENERATOR_RULEBOOK.md` | 分類ベース | 静的サイト生成（ビルド・出力・差分ビルド） |
 | `RELEASE_PLAN_RULEBOOK.md` | 分類ベース | リリース計画・リリース履歴 |
+| `REVISION_HISTORY.md` | 管理 | 全ルールブック改訂履歴（統合管理） |
 
 ## 3. バージョン管理方針
 
@@ -184,7 +185,7 @@ bundle-installer.php
 ```json
 {
     "product": "Adlaire",
-    "version": "2.0.0",
+    "version": "(現在のバージョン)",
     "installed": true,
     "installed_at": "ISO 8601"
 }
