@@ -1,6 +1,6 @@
 # Adlaire Platform（略：AP , 翻訳：アドレイル・プラットホーム）
 
-**現在のバージョン: Ver.2.1-32**
+**現在のバージョン: Ver.2.3-35**
 
 APは、フラットファイルベースのCMSフレームワークです。データベース不要で、ブロックエディタによるコンテンツ編集、Markdown対応、多言語化、静的サイト生成を備えています。
 
@@ -50,4 +50,4 @@ Licensed under Adlaire License, see [LICENSE](Licenses/LICENSE_Ver.1.0)
 
 ## Copyright
 
-Copyright (c) 2014 - 2015 IEAS Group & AIZM All Rights Reserved.
+Copyright (c) 2014 - 2026 IEAS Group & AIZM All Rights Reserved.

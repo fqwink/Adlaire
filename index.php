@@ -27,8 +27,12 @@ ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Strict');
 session_start();
 
+require __DIR__ . '/helpers.php';
 require __DIR__ . '/core.php';
-require __DIR__ . '/admin.php';
+require __DIR__ . '/app.php';
+require __DIR__ . '/renderer.php';
+require __DIR__ . '/api.php';
+require __DIR__ . '/generator.php';
 
 // --- Bootstrap ---
 

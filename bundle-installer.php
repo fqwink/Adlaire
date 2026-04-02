@@ -110,6 +110,10 @@ function validate_input(array $post): array
     if (strlen($password) < 8) {
         $errors[] = 'Password must be at least 8 characters';
     }
+    $weak = ['admin', 'password', '12345678', 'adlaire'];
+    if (in_array(strtolower($password), $weak, true)) {
+        $errors[] = 'That password is too weak';
+    }
     if ($password !== $confirm) {
         $errors[] = 'Passwords do not match';
     }

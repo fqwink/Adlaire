@@ -58,6 +58,12 @@ function attachListItemHandlers(li: HTMLLIElement): void {
     });
 }
 
+// --- Sanitize: strip script tags from block content ---
+
+function sanitizeHtml(html: string): string {
+    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+}
+
 // --- Built-in Block Tools ---
 
 const builtinTools: Record<string, BlockToolFactory> = {
@@ -67,7 +73,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const el = document.createElement('div');
                 el.contentEditable = 'true';
                 el.className = 'ce-paragraph';
-                el.innerHTML = (data.text as string) || '';
+                el.innerHTML = sanitizeHtml((data.text as string) || '');
                 el.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -95,7 +101,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const el = document.createElement(`h${level}`);
                 el.contentEditable = 'true';
                 el.className = 'ce-heading';
-                el.innerHTML = (data.text as string) || '';
+                el.innerHTML = sanitizeHtml((data.text as string) || '');
                 attachBackspaceHandler(el);
                 return el;
             },
@@ -157,7 +163,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const bq = document.createElement('blockquote');
                 bq.className = 'ce-quote';
                 bq.contentEditable = 'true';
-                bq.innerHTML = (data.text as string) || '';
+                bq.innerHTML = sanitizeHtml((data.text as string) || '');
                 attachBackspaceHandler(bq);
                 return bq;
             },

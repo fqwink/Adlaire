@@ -49,11 +49,15 @@
 ## PHP ファイル構成
 
 - **PHP バージョンは 8.3 以上を必須**とする（`declare(strict_types=1)` 使用）。
-- `index.php` — エントリーポイント。セッション初期化と require のみ。
-- `core.php` — コア基盤。FileStorage クラス、ヘルパー関数。
-- `admin.php` — 管理ツール。App クラス、handleEdit 関数。
+- `index.php` — エントリーポイント。セッション初期化、require、ルーティング。
+- `helpers.php` — ヘルパー関数。esc, csrf_token, csrf_verify, login_rate_check。
+- `core.php` — コア基盤。FileStorage クラス。
+- `app.php` — App クラス。設定、認証、翻訳、描画、プラグイン。
+- `renderer.php` — サーバーサイド描画。renderBlocksToHtml, renderMarkdownToHtml。
+- `api.php` — REST API ハンドラー。handleApi, handleEdit, 全エンドポイント。
+- `generator.php` — 静的サイト生成。handleApiGenerate, generatePageHtml。
 - `admin-ui.php` — 管理 UI テンプレート。
-- `core.php` / `admin.php` / `admin-ui.php` への直接HTTPアクセスは `.htaccess` で禁止。
+- `index.php` 以外の PHP ファイルへの直接HTTPアクセスは `.htaccess` で禁止。
 
 ## JavaScript 開発規約
 

@@ -1,12 +1,16 @@
 {
     "product": "Adlaire",
     "channel": "release",
-    "version": "2.0.0",
+    "version": "2.3.0",
     "bundle_format": 1,
     "required_files": [
         "index.php",
+        "helpers.php",
         "core.php",
-        "admin.php",
+        "app.php",
+        "renderer.php",
+        "api.php",
+        "generator.php",
         "admin-ui.php",
         "bundle-installer.php",
         ".htaccess",

@@ -1,8 +1,8 @@
 # Adlaire Platform - ルールブック Ver.2.x 系
 
-**現行バージョン**: Ver.2.0-30（策定中）
-**最終更新**: 2026-04-01
-**状態**: **Ver.2.0 策定完了** — 実装着手可。
+**現行バージョン**: Ver.2.3-35
+**最終更新**: 2026-04-02
+**状態**: **Ver.2.3 実装完了** — Ver.2.4（バグ修正）策定待ち。
 
 > 上位原則は `CHARTER.md`（ルールブック憲章）を参照。
 > Ver.1.x 系（`RULEBOOK_Ver1.md`）を基盤とし、差分を以下に記載する。
@@ -30,17 +30,23 @@ Ver.1.x のアーキテクチャ仕様（セクション1）を継承する。
 
 ### 2.1 ファイル構成
 
-Ver.1.x からの継承 + Ver.2.0 追加ファイル:
+Ver.2.3 現行アーキテクチャ（10ファイル Core 基盤）:
 
-| ファイル | 役割 | 直接HTTPアクセス |
-|---------|------|:---:|
-| `index.php` | エントリーポイント | 許可 |
-| `core.php` | FileStorage・ヘルパー関数 | **禁止** |
-| `admin.php` | App クラス・REST API | **禁止** |
-| `admin-ui.php` | 管理 UI テンプレート | **禁止** |
-| `bundle-installer.php` | **[Ver.2.0 新規]** セットアップツール（初期導入後に削除） | 許可（初回のみ） |
-| `release-manifest.json` | **[Ver.2.0 新規]** 配布バンドル整合性検証用マニフェスト | **禁止** |
-| `VERSION` | **[Ver.2.0 新規]** バージョン情報ファイル | **禁止** |
+| ファイル | 役割 | 直接HTTPアクセス | 備考 |
+|---------|------|:---:|------|
+| `index.php` | エントリーポイント + ルーティング | 許可 | |
+| `helpers.php` | ヘルパー関数（esc, csrf, rate_limit） | **禁止** | Ver.2.3 で core.php から分離 |
+| `core.php` | FileStorage クラス（データ層） | **禁止** | |
+| `app.php` | App クラス（設定, 認証, 翻訳, 描画） | **禁止** | Ver.2.3 で admin.php から分離 |
+| `renderer.php` | サーバーサイド描画（blocks→HTML, markdown→HTML） | **禁止** | Ver.2.3 で admin.php から分離 |
+| `api.php` | REST API ハンドラー + handleEdit | **禁止** | Ver.2.3 で admin.php から分離 |
+| `generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） | **禁止** | Ver.2.3 で admin.php から分離 |
+| `admin-ui.php` | 管理 UI テンプレート | **禁止** | |
+| `bundle-installer.php` | セットアップツール（初期導入後に削除） | 許可（初回のみ） | Ver.2.0 新規 |
+| `release-manifest.json` | 配布バンドル整合性検証用マニフェスト | **禁止** | Ver.2.0 新規 |
+| `VERSION` | バージョン情報ファイル | **禁止** | Ver.2.0 新規 |
+
+> **廃止**: `admin.php` は Ver.2.3 で廃止。上記6ファイルに完全移行済み。
 
 ### 2.2 セットアップツール（bundle-installer.php）
 
@@ -130,8 +136,8 @@ bundle-installer.php
 
 #### 2.2.8 既存コードとの連携
 
-- `core.php` の `FileStorage` クラスを直接利用する（`require __DIR__ . '/core.php'`）
-- `esc()`, `csrf_token()`, `csrf_verify()` ヘルパー関数を利用する
+- `helpers.php` の `esc()`, `csrf_token()`, `csrf_verify()` ヘルパー関数を利用する
+- `core.php` の `FileStorage` クラスを直接利用する
 - セットアップ完了後は通常の `index.php` が動作する
 
 ### 2.3 アップデートシステム
@@ -200,7 +206,8 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
     "version": "2.0.0",
     "bundle_format": 1,
     "required_files": [
-        "index.php", "core.php", "admin.php", "admin-ui.php",
+        "index.php", "helpers.php", "core.php", "app.php",
+        "renderer.php", "api.php", "generator.php", "admin-ui.php",
         ".htaccess", "themes", "data/lang", "js"
     ],
     "checksums": {
@@ -224,8 +231,8 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 
 | # | 新機能 | 状態 |
 |---|--------|:----:|
-| 1 | セットアップツール（`bundle-installer.php`） | **仕様策定完了** |
-| 2 | アップデートシステム（バージョン情報 API + 管理 UI 表示） | **仕様策定完了** |
+| 1 | セットアップツール（`bundle-installer.php`） | **実装済** |
+| 2 | アップデートシステム（バージョン情報 API + 管理 UI 表示） | **実装済** |
 
 ### 3.2 Ver.2.1 — Ver.2.0 バグ修正（30件）
 
@@ -285,11 +292,11 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 3 | ページインデックスキャッシュ（pages.index.json） | **仕様策定完了** |
-| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | **仕様策定完了** |
-| 5 | Content-Security-Policy ヘッダー | **仕様策定完了** |
-| 6 | セッション有効期限（自動ログアウト） | **仕様策定完了** |
-| 7 | パスワード強度検証 | **仕様策定完了** |
+| 3 | ページインデックスキャッシュ（pages.index.json） | **実装済** |
+| 4 | 静的生成の差分ビルド（変更ページのみ再生成） | **実装済** |
+| 5 | Content-Security-Policy ヘッダー | **実装済** |
+| 6 | セッション有効期限（自動ログアウト） | **実装済** |
+| 7 | パスワード強度検証 | **実装済** |
 
 #### 3.3.1 ページインデックスキャッシュ
 
@@ -329,51 +336,123 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 - `bundle-installer.php` の初期パスワード設定でも同じ検証を適用する。
 - 検証失敗時は翻訳済みエラーメッセージを返す。
 
-### 3.4 Ver.2.3 — アーキテクチャ刷新
+### 3.4 Ver.2.3 — アーキテクチャ刷新（機能ベース10ファイル分離）
 
-> 検討中。Ver.2.2 リリース後に再検討。
 > **Ver.2.3 以降、ルールブックは分類/機能ベースに移行する。**
-> バージョンベースのルールブック（本ファイル含む）はいずれ廃止予定。
 > 詳細は `CHARTER.md` セクション 2.2「ルールブック移行方針」を参照。
+
+#### 3.4.1 設計原則
+
+- 「複雑性より整合性を優先する」
+- 「利便性より壊れにくさを優先する」
+- ディレクトリ追加なし（フラット構成）
+- 新しいパターン（Router クラス、Interface、EventDispatcher）は導入しない
+- admin.php の責務を機能ベースで分離するのみ
+
+#### 3.4.2 ファイル構成（9ファイル）
+
+全ファイルは **Core 基盤** とする。
+
+| ファイル | 責務 | 直接HTTPアクセス |
+|---------|------|:---:|
+| `index.php` | エントリーポイント + ルーティング | 許可 |
+| `helpers.php` | ヘルパー関数（esc, csrf, rate_limit） | **禁止** |
+| `core.php` | FileStorage クラス（データ層） | **禁止** |
+| `app.php` | App クラス（設定, 認証, 翻訳, 描画, プラグイン） | **禁止** |
+| `renderer.php` | サーバーサイド描画関数（renderBlocksToHtml, renderMarkdownToHtml） | **禁止** |
+| `api.php` | REST API ルーター + 全ハンドラー + handleEdit | **禁止** |
+| `generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） | **禁止** |
+| `admin-ui.php` | 管理 UI テンプレート | **禁止** |
+| `bundle-installer.php` | セットアップツール（初期導入後に削除） | 許可（初回のみ） |
+
+> **設計判断**: 当初 auth.php（認証分離）を計画したが、認証メソッドは App クラスの
+> プライベートメソッドとして密結合しているため、分離せず app.php に統合した。
+> content() / menu() も App クラスのメソッドとして app.php に残留。
+> renderBlocksToHtml() / renderMarkdownToHtml() はグローバル関数として renderer.php に分離。
+> 「複雑性より整合性」の原則に基づく判断。
+
+#### 3.4.3 require 順序（index.php）
+
+```php
+require 'helpers.php';    // esc, csrf（依存なし）
+require 'core.php';       // FileStorage（helpers に依存）
+require 'app.php';        // App クラス（helpers, core に依存）
+require 'renderer.php';   // 描画関数（helpers に依存）
+require 'api.php';        // API ハンドラー（全てに依存）
+require 'generator.php';  // 静的生成（全てに依存）
+```
+
+#### 3.4.4 分離ルール
+
+| 元ファイル | 移動先 | 対象 |
+|-----------|--------|------|
+| `core.php` ヘルパー関数 | `helpers.php` | `esc()`, `csrf_token()`, `csrf_verify()`, `login_rate_check()` |
+| `admin.php` App クラス全体 | `app.php` | App クラス（認証・描画・設定・翻訳を含む全メソッド） |
+| `admin.php` グローバル関数（描画） | `renderer.php` | `renderBlocksToHtml()`, `renderMarkdownToHtml()` |
+| `admin.php` グローバル関数（API） | `api.php` | `handleApi()`, `handleEdit()`, 全 API ハンドラー, `apiError()` |
+| `admin.php` 静的生成関数 | `generator.php` | `handleApiGenerate()`, `generatePageHtml()` |
+| `core.php` | `core.php`（維持） | FileStorage クラスのみ |
+
+#### 3.4.5 廃止
+
+- `admin.php` は **廃止**。分離先の5ファイル（app.php, renderer.php, api.php, generator.php, helpers.php）に完全移行。
+- 廃止ポリシーに従い、互換性維持は行わない。
+
+#### 3.4.6 不採用項目
+
+以下は Ver.2.3 では採用しない。将来必要に応じて再検討。
+
+| 項目 | 理由 |
+|------|------|
+| Router クラス | 現在の if/match 分岐で十分。複雑性を増やさない |
+| StorageInterface | FileStorage 以外の実装予定がない。必要になった時に導入 |
+| Config クラス | $config 配列で十分機能している |
+| EventDispatcher | $hooks 配列で十分。プラグイン基盤の需要が出てから検討 |
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 8 | admin.php を App クラス（app.php）と API 関数（api.php）に分離 | 再検討予定 |
-| 9 | ルーティングクラスの導入（Router） | 再検討予定 |
-| 10 | FileStorage をインターフェース化（StorageInterface） | 再検討予定 |
-| 11 | 設定クラスの導入（Config） | 再検討予定 |
-| 12 | イベントフック基盤の刷新（EventDispatcher） | 再検討予定 |
+| 8 | admin.php を機能ベース5ファイルに分離 | **実装済** |
+| 9 | ルーティングクラスの導入（Router） | **不採用** |
+| 10 | FileStorage をインターフェース化（StorageInterface） | **不採用** |
+| 11 | 設定クラスの導入（Config） | **不採用** |
+| 12 | イベントフック基盤の刷新（EventDispatcher） | **不採用** |
 
-### 3.5 Ver.2.4 — エディタ高度化
+### 3.5 Ver.2.4 — バグ修正
+
+| # | 改良点 | 状態 |
+|---|--------|:----:|
+| 13 | Ver.2.3 アーキテクチャ刷新後のバグ修正・精査 | 計画 |
+
+### 3.6 Ver.2.5 — エディタ高度化
 
 > 上位原則は `ADLAIRE_EDITOR_RULEBOOK.md` に従う。
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 13 | Undo/Redo（Ctrl+Z/Y、履歴スタック） | 計画 |
-| 14 | ブロック ドラッグ&ドロップ並び替え | 計画 |
-| 15 | ブロック コピー&ペースト（Ctrl+C/V） | 計画 |
-| 16 | heading レベルクリック切替（prompt → サイクル） | 計画 |
-| 17 | list 順序/非順序トグルボタン（confirm → 即切替） | 計画 |
+| 14 | Undo/Redo（Ctrl+Z/Y、履歴スタック） | 計画 |
+| 15 | ブロック ドラッグ&ドロップ並び替え | 計画 |
+| 16 | ブロック コピー&ペースト（Ctrl+C/V） | 計画 |
+| 17 | heading レベルクリック切替（prompt → サイクル） | 計画 |
+| 18 | list 順序/非順序トグルボタン（confirm → 即切替） | 計画 |
 
-### 3.6 Ver.2.5 — 機能拡張
-
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 18 | ページ並び順管理（ダッシュボードでドラッグ、menu 反映） | 計画 |
-| 19 | ページプレビュー（`?preview=slug` で下書きを公開レイアウト確認） | 計画 |
-| 20 | サイドバー（subside）をブロックエディタで編集 | 計画 |
-| 21 | エクスポートにリビジョンを含むオプション | 計画 |
-| 22 | 静的サイト用軽量 CSS（エディタ CSS 除外の minimal.css） | 計画 |
-
-### 3.7 Ver.2.6 — 品質・拡張性
+### 3.7 Ver.2.6 — 機能拡張
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 23 | エラーハンドリング統一（カスタム例外 + JSON エラー） | 計画 |
-| 24 | 言語ファイルのホットリロード | 計画 |
-| 25 | 管理 UI の完全翻訳（全テキスト） | 計画 |
-| 26 | テーマ設定ファイル（theme.json メタデータ） | 計画 |
+| 19 | ページ並び順管理（ダッシュボードでドラッグ、menu 反映） | 計画 |
+| 20 | ページプレビュー（`?preview=slug` で下書きを公開レイアウト確認） | 計画 |
+| 21 | サイドバー（subside）をブロックエディタで編集 | 計画 |
+| 22 | エクスポートにリビジョンを含むオプション | 計画 |
+| 23 | 静的サイト用軽量 CSS（エディタ CSS 除外の minimal.css） | 計画 |
+
+### 3.8 Ver.2.7 — 品質・拡張性
+
+| # | 改良点 | 状態 |
+|---|--------|:----:|
+| 24 | エラーハンドリング統一（カスタム例外 + JSON エラー） | 計画 |
+| 25 | 言語ファイルのホットリロード | 計画 |
+| 26 | 管理 UI の完全翻訳（全テキスト） | 計画 |
+| 27 | テーマ設定ファイル（theme.json メタデータ） | 計画 |
 
 ---
 

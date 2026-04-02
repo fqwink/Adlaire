@@ -146,11 +146,12 @@ const api = {
     async importSite(data: string): Promise<{ config: boolean; pages: number }> {
         const res = await fetch(`index.php?api=import&csrf=${encodeURIComponent(csrfToken)}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: data,
         });
+        updateCsrfFromResponse(res);
+        if (!res.ok) { const json = await res.json(); throw new Error(json.error); }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.imported;
     },
 };
