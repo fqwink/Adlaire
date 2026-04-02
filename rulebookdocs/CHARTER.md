@@ -11,17 +11,26 @@
 
 ## 2. ルールブックの構成
 
-ルールブックはメジャーバージョンごとに独立したファイルで管理する。
+### 2.1 現行構成
+
 ルールブックドキュメントフォルダ内に README.md（インデックス）は作成しない。
 
-| ファイル | 内容 |
-|---------|------|
-| `rulebookdocs/CHARTER.md` | **本ファイル（ルールブック憲章）** — 全バージョン共通の最上位原則 |
-| `rulebookdocs/RULEBOOK_Ver1.md` | ルールブック Ver.1.x 系（凍結 — Ver.1.9-30） |
-| `rulebookdocs/RULEBOOK_Ver2.md` | ルールブック Ver.2.x 系（現行策定中） |
-| `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 製品方向性ルールブック（ポジション・ターゲット・採用方針） |
-| `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | エディタルールブック（設計原則・開発範囲・禁止事項） |
-| `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | ライフサイクルシステムルールブック（Setup/Update統合基盤） |
+| ファイル | 種別 | 内容 |
+|---------|------|------|
+| `rulebookdocs/CHARTER.md` | 憲章 | **本ファイル** — 全バージョン共通の最上位原則 |
+| `rulebookdocs/RULEBOOK_Ver1.md` | バージョンベース | Ver.1.x 系（凍結 — Ver.1.9-30） |
+| `rulebookdocs/RULEBOOK_Ver2.md` | バージョンベース | Ver.2.x 系（現行策定中） |
+| `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 分類ベース | 製品方向性（ポジション・ターゲット・採用方針） |
+| `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | 分類ベース | エディタ（設計原則・開発範囲・禁止事項） |
+| `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | 分類ベース | ライフサイクルシステム（Setup/Update統合基盤） |
+
+### 2.2 ルールブック移行方針
+
+- **Ver.2.3 以降**、ルールブックは**分類ベースまたは機能ベース**で策定・更新する方針に移行する。
+- バージョンベースのルールブック（`RULEBOOK_Ver1.md`, `RULEBOOK_Ver2.md`）は**いずれ廃止**する。
+- 分類/機能ベースのルールブック（`ADLAIRE_*_RULEBOOK.md`）が正式な仕様管理方式となる。
+- 移行完了まではバージョンベースと分類ベースが併存する。
+- 憲章（`CHARTER.md`）は移行後も最上位原則として存続する。
 
 ## 3. バージョン管理方針
 
