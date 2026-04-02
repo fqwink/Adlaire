@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.1.6
+- 文書バージョン: Ver.1.7
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -262,7 +262,110 @@ Ver.3.0 系はブログ機能の新規追加とエディタ機能の強化改良
 
 ---
 
-## 6. バージョン未配分項目一覧（草案）
+## 6. API キー認証システム計画（草案）
+
+> **本セクションは「草案」段階である。**
+> セキュリティ強化を目的とし、商業利用・非商業利用を問わず全利用者に API キーの取得・適用を義務付ける。
+
+### 6.1 目的
+
+- 全インストールを API キーで管理し、不正利用・無断複製を防止する。
+- 商業利用と非商業利用を API キーの種別で区別する。
+- ライセンス違反の検出・追跡を可能にする。
+
+### 6.2 設計原則
+
+- **シンプルイズベスト** — 最小限のコードで実現し、外部依存を増やさない。
+- **共有サーバーで動作** — 特殊な PHP 拡張を要求しない。
+- **オフライン検証を基本** — 起動のたびに外部通信を必須としない。
+
+### 6.3 API キー種別
+
+| 種別 | 対象 | 費用 | 発行条件 |
+|------|------|:----:|---------|
+| Free | 個人・非営利・教育・自社サイト運用 | 無料 | 登録のみ |
+| Commercial | 有償製品・SaaS・クラウドベンダー・受託 | 有料 | 商業ライセンス契約 |
+
+### 6.4 API キー仕様
+
+```
+形式: ASCMS-{種別}-{ペイロード}-{署名}
+例:   ASCMS-FREE-xxxxxxxxxxxxxxxx-yyyyyyyy
+      ASCMS-COM-xxxxxxxxxxxxxxxx-yyyyyyyy
+```
+
+| 要素 | 内容 |
+|------|------|
+| プレフィックス | `ASCMS-FREE-` または `ASCMS-COM-` |
+| ペイロード | Base64 エンコードされた JSON（発行日、有効期限、ドメイン等） |
+| 署名 | HMAC-SHA256 による改ざん検証用ハッシュ（末尾8文字） |
+
+### 6.5 検証フロー
+
+```
+index.php 起動
+    │
+    ├─ install.lock 存在チェック
+    │   └─ なし → bundle-installer.php（セットアップ）
+    │
+    ├─ data/system/license.key 存在チェック
+    │   └─ なし → ライセンス登録画面を表示
+    │
+    ├─ API キー形式検証（プレフィックス・構造）
+    │   └─ 不正 → エラー表示 + 動作停止
+    │
+    ├─ 署名検証（HMAC-SHA256 オフライン検証）
+    │   └─ 不正 → エラー表示 + 動作停止
+    │
+    ├─ 有効期限チェック
+    │   └─ 期限切れ → 更新案内 + 動作停止
+    │
+    └─ 検証成功 → 通常起動
+```
+
+### 6.6 実装計画
+
+| ステップ | ファイル | 内容 |
+|---------|---------|------|
+| 1 | `Core/license.php` | LicenseValidator クラス（検証ロジック一式） |
+| 2 | `data/system/license.key` | API キー保存ファイル（1行テキスト） |
+| 3 | `index.php` | 起動時に LicenseValidator を呼び出すゲート追加 |
+| 4 | `bundle-installer.php` | セットアップ時に API キー入力ステップを追加 |
+| 5 | `Core/admin-ui.php` | 管理画面にライセンス情報・更新 UI を追加 |
+
+### 6.7 LicenseValidator クラス設計
+
+```php
+final class LicenseValidator
+{
+    // API キーファイルを読み込み検証
+    public static function validate(string $keyFile): LicenseResult;
+
+    // キー文字列の形式・署名・有効期限を検証
+    public static function verifyKey(string $key): LicenseResult;
+
+    // 種別を取得（FREE / COM）
+    public static function getType(string $key): string;
+}
+
+final class LicenseResult
+{
+    public readonly bool $valid;
+    public readonly string $type;      // 'FREE' | 'COM'
+    public readonly string $message;   // エラーメッセージ（検証失敗時）
+}
+```
+
+### 6.8 制約事項
+
+- API キー未適用時は**一切の機能が動作しない**（公開ページ・管理画面・API すべて停止）。
+- 署名検証の秘密鍵は `Core/license.php` にハードコードする（シンプル優先）。
+- 外部サーバーへの通信は行わない（オフライン完結）。
+- API キーの発行・管理は著作権者（Adlaire Group）が運用する（本ソフトウェアの範囲外）。
+
+---
+
+## 7. バージョン未配分項目一覧（草案）
 
 > **本セクションの全項目は「草案」段階である。**
 > バージョン配分・仕様とも未確定であり、実装の約束を意味しない。
@@ -299,7 +402,7 @@ Ver.3.0 系はブログ機能の新規追加とエディタ機能の強化改良
 
 ---
 
-## 7. 関連文書
+## 8. 関連文書
 
 | 文書 | 内容 |
 |------|------|
