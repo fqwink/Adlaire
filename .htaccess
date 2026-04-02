@@ -3,10 +3,22 @@ RedirectMatch 403 ^.*/files/
 RewriteCond %{REQUEST_URI} ^.*/data/ [NC]
 RewriteCond %{REQUEST_URI} !^.*/data/lang/ [NC]
 RewriteRule .* - [F,L]
+<Files "helpers.php">
+    Require all denied
+</Files>
 <Files "core.php">
     Require all denied
 </Files>
-<Files "admin.php">
+<Files "app.php">
+    Require all denied
+</Files>
+<Files "renderer.php">
+    Require all denied
+</Files>
+<Files "api.php">
+    Require all denied
+</Files>
+<Files "generator.php">
     Require all denied
 </Files>
 <Files "admin-ui.php">
