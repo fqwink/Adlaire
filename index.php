@@ -11,7 +11,7 @@ declare(strict_types=1);
  *
  * @copyright Copyright (c) 2014 - 2026 Adlaire Group
  * @copyright Copyright (c) 2014 - 2026 倉田和宏
- * @license Adlaire License Ver.2.0 (Platform Code)
+ * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
 ob_start();
