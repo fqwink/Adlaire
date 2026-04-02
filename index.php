@@ -27,17 +27,17 @@ ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Strict');
 session_start();
 
-require __DIR__ . '/helpers.php';
-require __DIR__ . '/core.php';
-require __DIR__ . '/app.php';
-require __DIR__ . '/renderer.php';
-require __DIR__ . '/api.php';
-require __DIR__ . '/generator.php';
+require __DIR__ . '/Core/helpers.php';
+require __DIR__ . '/Core/core.php';
+require __DIR__ . '/Core/app.php';
+require __DIR__ . '/Core/renderer.php';
+require __DIR__ . '/Core/api.php';
+require __DIR__ . '/Core/generator.php';
 
 // --- Bootstrap ---
 
 // Redirect to installer if not yet set up
-if (!file_exists(__DIR__ . '/files/system/install.lock') && file_exists(__DIR__ . '/bundle-installer.php')) {
+if (!file_exists(__DIR__ . '/data/system/install.lock') && file_exists(__DIR__ . '/bundle-installer.php')) {
     header('Location: bundle-installer.php');
     exit;
 }
@@ -57,7 +57,7 @@ if (isset($_GET['admin'])) {
         exit;
     }
     header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
-    require __DIR__ . '/admin-ui.php';
+    require __DIR__ . '/Core/admin-ui.php';
     ob_end_flush();
     exit;
 }

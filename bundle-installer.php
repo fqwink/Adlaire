@@ -13,7 +13,7 @@ declare(strict_types=1);
  */
 
 // --- Security: prevent re-execution ---
-$lockFile = __DIR__ . '/files/system/install.lock';
+$lockFile = __DIR__ . '/data/system/install.lock';
 if (file_exists($lockFile)) {
     echo '<!doctype html><html><head><meta charset="utf-8"><title>Adlaire Setup</title></head><body>';
     echo '<h1>Already Installed</h1><p>Adlaire is already installed. Delete <code>install.lock</code> to re-run setup.</p>';
@@ -23,8 +23,8 @@ if (file_exists($lockFile)) {
 }
 
 // --- Load core for FileStorage, esc(), csrf ---
-require __DIR__ . '/helpers.php';
-require __DIR__ . '/core.php';
+require __DIR__ . '/Core/helpers.php';
+require __DIR__ . '/Core/core.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -44,11 +44,11 @@ function detect_files_writable(): array
     if (!is_dir($dir)) {
         $created = @mkdir($dir, 0755, true);
         if (!$created) {
-            return ['ok' => false, 'message' => 'Cannot create files/ directory'];
+            return ['ok' => false, 'message' => 'Cannot create data/ directory'];
         }
     }
     $ok = is_writable($dir);
-    return ['ok' => $ok, 'message' => $ok ? 'files/ is writable' : 'files/ is not writable (set 755)'];
+    return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
 }
 
 function detect_session(): array
@@ -128,11 +128,11 @@ function validate_input(array $post): array
 
 function install_execute(string $siteName, string $locale, string $password): array
 {
-    $storage = new FileStorage('files');
+    $storage = new FileStorage('data');
     $storage->ensureDirectories();
 
     // Create system directory
-    $systemDir = __DIR__ . '/files/system';
+    $systemDir = __DIR__ . '/data/system';
     if (!is_dir($systemDir)) {
         mkdir($systemDir, 0755, true);
     }
@@ -152,7 +152,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
 
     $result = $storage->writeConfig($config);
     if (!$result) {
-        return ['ok' => false, 'message' => 'Failed to write config. Check files/ permissions.'];
+        return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
     }
 
     // Create install.lock
@@ -165,7 +165,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
         'installer_version' => '1.0.0',
     ];
     $lockResult = file_put_contents(
-        __DIR__ . '/files/system/install.lock',
+        __DIR__ . '/data/system/install.lock',
         json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
     );
 

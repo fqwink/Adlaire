@@ -25,7 +25,7 @@ function handleApiGenerate(FileStorage $storage): void
     csrf_verify();
 
     $app = App::getInstance();
-    $distDir = __DIR__ . '/dist';
+    $distDir = dirname(__DIR__) . '/dist';
     $force = ($_POST['force'] ?? $_REQUEST['force'] ?? '') === 'true';
     $buildStateFile = $distDir . '/.build_state.json';
     $lastBuildTime = '';
@@ -58,7 +58,7 @@ function handleApiGenerate(FileStorage $storage): void
 
     $pages = $storage->listPublishedPages();
     $theme = basename($app->config['themeSelect']);
-    $themePath = __DIR__ . '/themes/' . $theme;
+    $themePath = dirname(__DIR__) . '/themes/' . $theme;
     $count = 0;
 
     // Copy theme CSS
@@ -71,7 +71,7 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Copy JS
-    $jsSrc = __DIR__ . '/js';
+    $jsSrc = dirname(__DIR__) . '/js';
     $jsDst = $distDir . '/js';
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
@@ -86,7 +86,7 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Copy translation files
-    $langSrc = __DIR__ . '/data/lang';
+    $langSrc = dirname(__DIR__) . '/data/lang';
     $langDst = $distDir . '/data/lang';
     if (is_dir($langSrc)) {
         if (!is_dir($langDst)) {

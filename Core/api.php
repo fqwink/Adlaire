@@ -29,7 +29,7 @@ function handleEdit(): void
         exit;
     }
 
-    $storage = new FileStorage('files');
+    $storage = new FileStorage('data');
     $config = $storage->readConfig();
     if (!isset($_SESSION['l']) || !hash_equals($config['password'] ?? '', $_SESSION['l'])) {
         header('HTTP/1.1 401 Unauthorized');
@@ -75,7 +75,7 @@ function handleApi(): void
         return;
     }
 
-    $storage = new FileStorage('files');
+    $storage = new FileStorage('data');
     $method = $_SERVER['REQUEST_METHOD'];
 
     // Non-JSON endpoints
@@ -459,10 +459,10 @@ function handleApiImport(FileStorage $storage): void
 
 function handleApiVersion(): void
 {
-    $versionFile = __DIR__ . '/VERSION';
+    $versionFile = dirname(__DIR__) . '/VERSION';
     $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
-    $lockFile = __DIR__ . '/files/system/install.lock';
+    $lockFile = dirname(__DIR__) . '/data/system/install.lock';
     $installed = file_exists($lockFile);
     $installedAt = '';
     if ($installed) {

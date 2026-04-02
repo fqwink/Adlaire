@@ -1,38 +1,26 @@
-RedirectMatch 403 ^.*/files/
-# Allow access to translation JSON files only
+# --- Adlaire Static CMS - Access Control ---
+
+# Block direct access to Core/ directory
+RedirectMatch 403 ^.*/Core/
+
+# Block direct access to data/ (except data/lang/ for i18n)
+RewriteEngine on
 RewriteCond %{REQUEST_URI} ^.*/data/ [NC]
 RewriteCond %{REQUEST_URI} !^.*/data/lang/ [NC]
 RewriteRule .* - [F,L]
-<Files "helpers.php">
-    Require all denied
-</Files>
-<Files "core.php">
-    Require all denied
-</Files>
-<Files "app.php">
-    Require all denied
-</Files>
-<Files "renderer.php">
-    Require all denied
-</Files>
-<Files "api.php">
-    Require all denied
-</Files>
-<Files "generator.php">
-    Require all denied
-</Files>
-<Files "admin-ui.php">
-    Require all denied
-</Files>
+
+# Block direct access to sensitive files
 <Files "release-manifest.json">
     Require all denied
 </Files>
 <Files "VERSION">
     Require all denied
 </Files>
+
 ErrorDocument 403 &nbsp;
-RewriteEngine on
 Options -Indexes
+
+# Clean URLs
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond $1#%{REQUEST_URI} ([^#]*)#(.*)\1$

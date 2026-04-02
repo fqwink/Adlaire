@@ -16,8 +16,8 @@ final class App
 {
     public const VERSION_MAJOR = 2;
     public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 36;
-    public const VERSION = 'Ver.2.4-36';
+    public const VERSION_BUILD = 37;
+    public const VERSION = 'Ver.2.4-37';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -49,7 +49,7 @@ final class App
     {
         [$this->host, $this->requestPage] = $this->parseHost();
 
-        $this->storage = new FileStorage('files');
+        $this->storage = new FileStorage('data');
         $this->initDefaults();
         $this->storage->ensureDirectories();
         $this->storage->migrate();
@@ -264,7 +264,7 @@ final class App
 
     private function loadPlugins(): void
     {
-        $pluginsDir = __DIR__ . '/plugins';
+        $pluginsDir = dirname(__DIR__) . '/plugins';
         if (is_dir($pluginsDir)) {
             $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
@@ -282,7 +282,7 @@ final class App
             $lang = 'ja';
         }
         $this->language = $lang;
-        $file = __DIR__ . '/data/lang/' . $lang . '.json';
+        $file = dirname(__DIR__) . '/data/lang/' . $lang . '.json';
         if (is_file($file)) {
             $json = file_get_contents($file);
             if ($json !== false) {

@@ -112,7 +112,7 @@ function renderAdminDashboard(App $app): void
     $themeLabel = esc($app->t('settings_theme'));
     echo "<label>{$themeLabel}</label>";
     echo "<select onchange='fieldSave(\"themeSelect\", this.value)'>";
-    $themesDir = __DIR__ . '/themes';
+    $themesDir = dirname(__DIR__) . '/themes';
     if (is_dir($themesDir)) {
         $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
         if (is_array($dirs)) {
@@ -176,10 +176,10 @@ function renderAdminDashboard(App $app): void
     // --- System Info ---
     echo '<section class="admin-section">';
     echo '<h2>System</h2>';
-    $versionFile = __DIR__ . '/VERSION';
+    $versionFile = dirname(__DIR__) . '/VERSION';
     $fileVersion = file_exists($versionFile) ? esc(trim((string) file_get_contents($versionFile))) : '—';
     $appVersion = esc(App::VERSION);
-    $lockFile = __DIR__ . '/files/system/install.lock';
+    $lockFile = dirname(__DIR__) . '/data/system/install.lock';
     $installedAt = '—';
     if (file_exists($lockFile)) {
         $lock = json_decode((string) file_get_contents($lockFile), true);
