@@ -23,6 +23,8 @@
 | `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 分類ベース | 製品方向性（ポジション・ターゲット・採用方針） |
 | `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | 分類ベース | エディタ（設計原則・開発範囲・禁止事項） |
 | `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | 分類ベース | ライフサイクルシステム（Setup/Update統合基盤） |
+| `rulebookdocs/ADLAIRE_ARCHITECTURE_RULEBOOK.md` | 分類ベース | アーキテクチャ（ファイル構成・ビルド・セキュリティ） |
+| `rulebookdocs/ADLAIRE_API_RULEBOOK.md` | 分類ベース | API・データ（REST API・PHP API・データ仕様・TS モジュール・管理UI） |
 
 ### 2.2 ルールブック移行方針
 
@@ -31,6 +33,21 @@
 - 分類/機能ベースのルールブック（`ADLAIRE_*_RULEBOOK.md`）が正式な仕様管理方式となる。
 - 移行完了まではバージョンベースと分類ベースが併存する。
 - 憲章（`CHARTER.md`）は移行後も最上位原則として存続する。
+
+#### 移行状況（Ver.2.3 時点）
+
+| 移行元 | 移行先 | 状態 |
+|--------|--------|:----:|
+| `RULEBOOK_Ver1.md` §1-2（アーキテクチャ・構成） | `ADLAIRE_ARCHITECTURE_RULEBOOK.md` | **移行済** |
+| `RULEBOOK_Ver1.md` §3-7（データ・API・TS・UI） | `ADLAIRE_API_RULEBOOK.md` | **移行済** |
+| `RULEBOOK_Ver1.md` §8（機能仕様） | `ADLAIRE_API_RULEBOOK.md` §7 | **移行済** |
+| `RULEBOOK_Ver1.md` §9-10（リリース計画） | `RULEBOOK_Ver2.md`（継続管理） | 移行対象外 |
+| `RULEBOOK_Ver2.md` §2.1（ファイル構成） | `ADLAIRE_ARCHITECTURE_RULEBOOK.md` §2 | **移行済** |
+| `RULEBOOK_Ver2.md` §2.2-2.3（Setup/Update） | `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md`（既存） | 参照維持 |
+| `RULEBOOK_Ver2.md` §3.3（セキュリティ） | `ADLAIRE_ARCHITECTURE_RULEBOOK.md` §5 | **移行済** |
+| `RULEBOOK_Ver2.md` §3.4（アーキテクチャ刷新） | `ADLAIRE_ARCHITECTURE_RULEBOOK.md` §2 | **移行済** |
+
+バージョンベースのルールブックは**リリース計画の管理**のみに責務を縮小し、技術仕様は分類ベースに完全移行済み。
 
 ## 3. バージョン管理方針
 
