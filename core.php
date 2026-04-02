@@ -6,8 +6,8 @@ declare(strict_types=1);
  *
  * FileStorage data management layer and utility functions.
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 
@@ -187,9 +187,9 @@ final class FileStorage
             $merged = array_merge($existing, $config);
 
             if (file_exists($this->configFile)) {
-                $this->rotateBackups();
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
                 copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
+                $this->rotateBackups();
             }
 
             $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -374,7 +374,10 @@ final class FileStorage
             return false;
         }
 
-        chmod($tmp, 0644);
+        if (!chmod($tmp, 0644)) {
+            unlink($tmp);
+            return false;
+        }
         return rename($tmp, $path);
     }
 
@@ -515,7 +518,7 @@ function csrf_token(): string
 
 function csrf_verify(): void
 {
-    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? '';
+    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
         header('HTTP/1.1 403 Forbidden');

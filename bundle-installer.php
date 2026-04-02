@@ -7,8 +7,8 @@ declare(strict_types=1);
  * Public release ZIP setup tool. Single-file, no Node.js required.
  * Spec: rulebookdocs/RULEBOOK_Ver2.md Section 2.2
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 

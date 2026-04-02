@@ -227,9 +227,59 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 | 1 | セットアップツール（`bundle-installer.php`） | **仕様策定完了** |
 | 2 | アップデートシステム（バージョン情報 API + 管理 UI 表示） | **仕様策定完了** |
 
-### 3.2 Ver.2.1 — Ver.2.0 機能改良・バグ修正
+### 3.2 Ver.2.1 — Ver.2.0 バグ修正（30件）
 
-> Ver.2.0 リリース後に策定する。
+> Ver.2.0 リリース後の品質確定リリース。バグ修正のみ。
+
+#### セキュリティ（10件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 1 | DELETE リクエストの CSRF トークンをURLからヘッダーに移行 | 高 |
+| 2 | import API の CSRF 検証タイミング修正 | 高 |
+| 3 | DELETE レスポンスに X-CSRF-Token ヘッダー追加 | 高 |
+| 4 | App::VERSION の出力をエスケープ | 中 |
+| 5 | MD5 レガシーパスワード検出時に強制リセットフラグ | 中 |
+| 6 | セッション cookie に SameSite=Strict 追加 | 中 |
+| 7 | editor.ts のブロック innerHTML を安全化 | 高 |
+| 8 | HTTPS 非使用時の管理画面警告表示 | 低 |
+| 9 | atomicWrite の chmod 失敗チェック追加 | 低 |
+| 10 | install.lock JSON パース失敗のハンドリング | 低 |
+
+#### データ整合性（8件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 11 | VERSION ファイルと App::VERSION の値を統一 | 高 |
+| 12 | package.json version を 2.0.0 に更新 | 中 |
+| 13 | release-manifest.json に bundle-installer.php 追加 | 中 |
+| 14 | pageFormat デフォルト 'html' フォールバック除去 | 中 |
+| 15 | PHP サーバーサイド Markdown のリスト正規表現修正 | 中 |
+| 16 | rotateBackups を新バックアップ作成後に実行 | 中 |
+| 17 | admin-ui.php の閉じタグ重複修正（section 二重閉じ） | 低 |
+| 18 | handleApiVersion の lock ファイル null チェック | 低 |
+
+#### コード品質（7件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 19 | login() の未使用変数 $newPass 整理 | 低 |
+| 20 | listRevisions に limit パラメータ追加 | 中 |
+| 21 | 著作権年を 2014-2026 に更新 | 低 |
+| 22 | admin-ui.php の System セクション version API 連携 | 中 |
+| 23 | bundle-installer.php の RewriteEngine 位置修正 | 低 |
+| 24 | tsconfig.json の include パターン確認 | 低 |
+| 25 | .htaccess の data/ ルール明確化 | 低 |
+
+#### ドキュメント（5件）
+
+| # | 修正内容 | 深刻度 |
+|---|---------|:------:|
+| 26 | RULEBOOK_Ver2.md の Ver.2.1 状態を「実装済」に | 低 |
+| 27 | docs/CHANGES.md に Ver.2.0-31, Ver.2.1 追加 | 低 |
+| 28 | docs/RELEASENOTES.md に Ver.2.0-31, Ver.2.1 追加 | 低 |
+| 29 | README.md のバージョン更新 | 低 |
+| 30 | CHARTER.md の Ver.2.x 状態更新 | 低 |
 
 ### 3.3 Ver.2.2 — セキュリティ・パフォーマンス
 

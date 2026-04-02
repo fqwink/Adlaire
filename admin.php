@@ -6,17 +6,17 @@ declare(strict_types=1);
  *
  * Application class and admin editing handler.
  *
- * @copyright Copyright (c) 2014 - 2015 IEAS Group
- * @copyright Copyright (c) 2014 - 2015 AIZM
+ * @copyright Copyright (c) 2014 - 2026 IEAS Group
+ * @copyright Copyright (c) 2014 - 2026 AIZM
  * @license Adlaire License
  */
 
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 0;
-    public const VERSION_BUILD = 31;
-    public const VERSION = 'Ver.2.0-31';
+    public const VERSION_MINOR = 1;
+    public const VERSION_BUILD = 32;
+    public const VERSION = 'Ver.2.1-32';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -234,7 +234,7 @@ final class App
                 return;
             }
             $this->config['content'] = $pageData['content'];
-            $this->config['pageFormat'] = $pageData['format'] ?? 'html';
+            $this->config['pageFormat'] = $pageData['format'] ?? 'blocks';
             $this->config['pageStatus'] = $pageData['status'] ?? 'published';
             if (isset($pageData['blocks'])) {
                 $this->config['pageBlocks'] = $pageData['blocks'];
@@ -1106,7 +1106,7 @@ function handleApiVersion(): void
     $installedAt = '';
     if ($installed) {
         $lock = json_decode((string) file_get_contents($lockFile), true);
-        $installedAt = $lock['installed_at'] ?? '';
+        $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
     }
 
     echo json_encode([
