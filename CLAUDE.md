@@ -10,12 +10,13 @@
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
 - `README.md` — プロジェクト説明（プロジェクトルート）
 - `rulebookdocs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
-  - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
-  - `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
-  - `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` — エディタルールブック
-  - `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
-  - `rulebookdocs/ADLAIRE_ARCHITECTURE_RULEBOOK.md` — アーキテクチャルールブック
-  - `rulebookdocs/ADLAIRE_API_RULEBOOK.md` — API・データルールブック
+  - `rulebookdocs/CHARTER.md` — ルールブック憲章（最上位原則・実装仕様）
+  - `rulebookdocs/DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
+  - `rulebookdocs/EDITOR_RULEBOOK.md` — エディタルールブック
+  - `rulebookdocs/LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
+  - `rulebookdocs/ARCHITECTURE_RULEBOOK.md` — アーキテクチャルールブック
+  - `rulebookdocs/API_RULEBOOK.md` — API・データルールブック
+  - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — リリース計画ルールブック
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
@@ -26,19 +27,19 @@
 - ドキュメントファイル名は**正式名称を大文字**で記述する。
 - 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
 - バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
-- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`, `RULEBOOK_Ver1.md`
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`
 
 ## ルールブック管理方針
 
-- **分類/機能ベースのルールブック（`ADLAIRE_*_RULEBOOK.md`）が正式な仕様管理方式**である。
+- **機能分類ベースのルールブック（`*_RULEBOOK.md`）が正式な仕様管理方式**である。
 - 技術仕様の参照・変更は分類ベースルールブックに対して行うこと。
-- バージョンベースのルールブック（`RULEBOOK_Ver1.md`, `RULEBOOK_Ver2.md`）は**廃止・削除済み**。
-- リリース計画・セットアップ仕様等は `CHARTER.md` に統合。
+- リリース計画は `RELEASE_PLAN_RULEBOOK.md` に集約。
+- セットアップ・アップデート実装仕様は `CHARTER.md` §8-9 に記載。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
 
 ## 技術規約
 
-> 詳細は `rulebookdocs/ADLAIRE_ARCHITECTURE_RULEBOOK.md` を参照。
+> 詳細は `rulebookdocs/ARCHITECTURE_RULEBOOK.md` を参照。
 
 - **PHP 8.3+**（`declare(strict_types=1)`）、9ファイル Core 基盤（フラット構成）
 - **TypeScript 5 系固定**（`~5.8`）、JS 直接記述禁止、`ts/` → `js/` コンパイル生成

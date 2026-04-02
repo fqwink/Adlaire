@@ -6,7 +6,7 @@
 - 対象製品: Adlaire Platform
 - 文書種別: データ仕様・PHP API・REST API・TypeScript モジュール・管理 UI を定義する技術規範文書
 - 文書目的: Adlaire の全 API インターフェース、データスキーマ、TypeScript モジュール仕様、管理 UI 仕様を恒常的規範として定義する
-- 移行元: `RULEBOOK_Ver1.md` §3-7, `RULEBOOK_Ver2.md` §2.2-2.4
+- 移行元: 旧 RULEBOOK_Ver1.md §3-7, 旧 RULEBOOK_Ver2.md §2.2-2.4（CHARTER.md に統合後、削除済み）
 
 ---
 

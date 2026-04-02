@@ -6,7 +6,7 @@
 - 対象製品: Adlaire Platform
 - 文書種別: アーキテクチャ・ファイル構成・ビルド・セキュリティを定義する技術規範文書
 - 文書目的: Adlaire のコアアーキテクチャ、ファイル構成、TypeScript/JS 規約、ビルドプロセス、セキュリティ基盤を恒常的規範として定義する
-- 移行元: `RULEBOOK_Ver1.md` §1-2, `RULEBOOK_Ver2.md` §2.1/3.3/3.4
+- 移行元: 旧 RULEBOOK_Ver1.md §1-2, 旧 RULEBOOK_Ver2.md §2.1/3.3/3.4（CHARTER.md に統合後、削除済み）
 
 ---
 
@@ -21,7 +21,7 @@
 
 - 「**複雑性より整合性を優先する**」
 - 「**利便性より壊れにくさを優先する**」
-- コアは小さく保つ（Direction RULEBOOK §5.7）
+- コアは小さく保つ（DIRECTION_RULEBOOK.md §5.7）
 - 共有サーバーで成立する構成を維持する
 
 ---
@@ -95,7 +95,7 @@ npm install       # 初回のみ
 npm run build     # TypeScript → JavaScript コンパイル（tsc）
 ```
 
-- 本番環境に Node.js ビルドを持ち込まない（Direction RULEBOOK §7.3 準拠）。
+- 本番環境に Node.js ビルドを持ち込まない（DIRECTION_RULEBOOK.md §7.3 準拠）。
 - ビルド済みリリース物が配置済みであることを前提とする。
 
 ---
