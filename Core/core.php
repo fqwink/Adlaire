@@ -39,7 +39,7 @@ final class FileStorage
     /** Maximum number of page revisions to retain per page */
     private const MAX_REVISIONS = 30;
 
-    public function __construct(string $basePath = 'files')
+    public function __construct(string $basePath = 'data')
     {
         $this->basePath = $basePath;
         $this->configFile = $basePath . '/config.json';
@@ -51,10 +51,21 @@ final class FileStorage
 
     public function ensureDirectories(): void
     {
+        // Auto-migrate from legacy files/ to data/ directory
+        $legacyDir = dirname($this->basePath) . '/files';
+        if ($this->basePath === 'data' && !is_dir($this->basePath) && is_dir($legacyDir)) {
+            rename($legacyDir, $this->basePath);
+        }
+
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
+        }
+        // Ensure system directory exists
+        $systemDir = $this->basePath . '/system';
+        if (!is_dir($systemDir)) {
+            mkdir($systemDir, 0755, true);
         }
         $pluginsDir = dirname($this->basePath) . '/plugins';
         if (!is_dir($pluginsDir)) {
