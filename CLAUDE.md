@@ -10,7 +10,7 @@
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
 - `README.md` — プロジェクト説明（プロジェクトルート）
 - `rulebookdocs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
-  - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
+  - `rulebookdocs/CHARTER.md` — ルールブック憲章（最上位原則・リリース計画）
   - `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
   - `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` — エディタルールブック
   - `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
@@ -26,14 +26,13 @@
 - ドキュメントファイル名は**正式名称を大文字**で記述する。
 - 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
 - バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
-- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`, `RULEBOOK_Ver1.md`
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`
 
 ## ルールブック管理方針
 
 - **分類/機能ベースのルールブック（`ADLAIRE_*_RULEBOOK.md`）が正式な仕様管理方式**である。
 - 技術仕様の参照・変更は分類ベースルールブックに対して行うこと。
-- バージョンベースのルールブック（`RULEBOOK_Ver1.md`, `RULEBOOK_Ver2.md`）は**廃止・削除済み**。
-- リリース計画・セットアップ仕様等は `CHARTER.md` に統合。
+- リリース計画・セットアップ仕様・アップデート仕様は `CHARTER.md` §8-11 に統合。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
 
 ## 技術規約

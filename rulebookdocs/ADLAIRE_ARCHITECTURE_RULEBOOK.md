@@ -6,7 +6,7 @@
 - 対象製品: Adlaire Platform
 - 文書種別: アーキテクチャ・ファイル構成・ビルド・セキュリティを定義する技術規範文書
 - 文書目的: Adlaire のコアアーキテクチャ、ファイル構成、TypeScript/JS 規約、ビルドプロセス、セキュリティ基盤を恒常的規範として定義する
-- 移行元: `RULEBOOK_Ver1.md` §1-2, `RULEBOOK_Ver2.md` §2.1/3.3/3.4
+- 移行元: 旧 `RULEBOOK_Ver1.md` §1-2, 旧 `RULEBOOK_Ver2.md` §2.1/3.3/3.4（統合済み・削除済み）
 
 ---
 
