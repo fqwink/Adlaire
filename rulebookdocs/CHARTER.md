@@ -22,7 +22,9 @@
 | `LIFECYCLE_SYSTEM_RULEBOOK.md` | 分類ベース | ライフサイクルシステム（Setup/Update統合基盤） |
 | `ARCHITECTURE_RULEBOOK.md` | 分類ベース | アーキテクチャ（ファイル構成・ビルド・セキュリティ） |
 | `API_RULEBOOK.md` | 分類ベース | API・データ（REST API・PHP API・データ仕様・TS モジュール・管理UI） |
+| `GENERATOR_RULEBOOK.md` | 分類ベース | 静的サイト生成（ビルド・出力・差分ビルド） |
 | `RELEASE_PLAN_RULEBOOK.md` | 分類ベース | リリース計画・リリース履歴 |
+| `REVISION_HISTORY.md` | 管理 | 全ルールブック改訂履歴（統合管理） |
 
 ## 3. バージョン管理方針
 
@@ -36,7 +38,7 @@
 - ドキュメントファイル名は**正式名称を大文字**で記述する。
 - 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
 - バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
-- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`
 
 ## 5. バージョン規則
 
@@ -78,9 +80,9 @@
 | Step | 画面 | 処理内容 |
 |:----:|------|---------|
 | 0 | Welcome / Release Check | `release-manifest.json` 検証、`VERSION` 表示、バンドル整合性確認 |
-| 1 | Environment Check | PHP 8.3+ 確認、`files/` 書き込み権限、必須ファイル存在確認、セッション利用可否 |
+| 1 | Environment Check | PHP 8.3+ 確認、`data/` 書き込み権限、必須ファイル存在確認、セッション利用可否 |
 | 2 | Site Configuration | サイト名、デフォルト言語（ja/en）、管理者パスワード入力、パスワード確認 |
-| 3 | Install Execution | `files/` ディレクトリ生成、`config.json` 保存、管理者作成（bcrypt）、`install.lock` 生成 |
+| 3 | Install Execution | `data/` ディレクトリ生成、`config.json` 保存、管理者作成（bcrypt）、`install.lock` 生成 |
 | 4 | Finish / Security Notice | 完了通知、`?login` / `?admin` 導線、インストーラー削除案内 |
 
 ### 8.3 入力項目
@@ -101,7 +103,7 @@
 
 **Step 1 — 環境チェック**:
 - `PHP_VERSION >= 8.3` を検証。不足時は停止
-- `files/` ディレクトリの書き込み可否を検証。不可なら作成を試行
+- `data/` ディレクトリの書き込み可否を検証。不可なら作成を試行
 - `password_hash()` 関数の存在を確認
 - HTTPS 未使用時は警告表示（停止はしない）
 
@@ -113,7 +115,7 @@
 - `FileStorage::ensureDirectories()` でディレクトリ生成
 - `config.json` にサイト名、言語を保存（`FileStorage::writeConfig()`）
 - 管理者パスワードを `password_hash()` で bcrypt 化して保存
-- `files/system/install.lock` を生成（JSON形式、`installed_at` タイムスタンプ付き）
+- `data/system/install.lock` を生成（JSON形式、`installed_at` タイムスタンプ付き）
 - 処理失敗時はエラー表示して停止（部分的初期化のロールバックは行わない）
 
 **Step 4 — 完了**:
@@ -152,8 +154,8 @@ bundle-installer.php
 
 ### 8.8 既存コードとの連携
 
-- `helpers.php` の `esc()`, `csrf_token()`, `csrf_verify()` ヘルパー関数を利用する
-- `core.php` の `FileStorage` クラスを直接利用する
+- `Core/helpers.php` の `esc()`, `csrf_token()`, `csrf_verify()` ヘルパー関数を利用する
+- `Core/core.php` の `FileStorage` クラスを直接利用する
 - セットアップ完了後は通常の `index.php` が動作する
 
 ---
@@ -183,7 +185,7 @@ bundle-installer.php
 ```json
 {
     "product": "Adlaire",
-    "version": "2.0.0",
+    "version": "(現在のバージョン)",
     "installed": true,
     "installed_at": "ISO 8601"
 }
