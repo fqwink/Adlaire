@@ -45,7 +45,7 @@ function renderMarkdownToHtml(string $md): string
 
     // Code blocks
     $html = preg_replace_callback('/```(\w+)?\n([\s\S]*?)```/', function ($m) {
-        $cls = $m[1] ? ' class="language-' . $m[1] . '"' : '';
+        $cls = $m[1] ? ' class="language-' . esc($m[1]) . '"' : '';
         return '<pre><code' . $cls . '>' . trim($m[2]) . '</code></pre>';
     }, $html) ?? $html;
 
@@ -57,8 +57,16 @@ function renderMarkdownToHtml(string $md): string
     $html = preg_replace('/\*\*\*(.+?)\*\*\*/', '<strong><em>$1</em></strong>', $html) ?? $html;
     $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html) ?? $html;
     $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html) ?? $html;
-    $html = preg_replace('/!\[([^\]]*)\]\(([^)]+)\)/', '<img src="$2" alt="$1">', $html) ?? $html;
-    $html = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2">$1</a>', $html) ?? $html;
+    $html = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function ($m) {
+        $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
+        if (preg_match('/^\s*javascript\s*:/i', $url)) { return esc($m[0]); }
+        return '<img src="' . esc($url) . '" alt="' . $m[1] . '">';
+    }, $html) ?? $html;
+    $html = preg_replace_callback('/\[([^\]]+)\]\(([^)]+)\)/', function ($m) {
+        $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
+        if (preg_match('/^\s*javascript\s*:/i', $url)) { return esc($m[0]); }
+        return '<a href="' . esc($url) . '">' . $m[1] . '</a>';
+    }, $html) ?? $html;
     $html = preg_replace('/^\- (.+)$/m', '<li>$1</li>', $html) ?? $html;
     $html = preg_replace('/((?:<li>.*?<\/li>\n?)+)/', '<ul>$1</ul>', $html) ?? $html;
     $html = preg_replace('/^&gt; (.+)$/m', '<blockquote>$1</blockquote>', $html) ?? $html;

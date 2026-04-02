@@ -8,7 +8,7 @@
 // --- Helper: attach Backspace handler to any contentEditable block ---
 function attachBackspaceHandler(el) {
     el.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && el.textContent === '') {
+        if (e.key === 'Backspace' && (el.textContent?.trim() === '')) {
             e.preventDefault();
             const editor = el.closest('.ce-editor')?.__editor;
             if (!editor)
@@ -37,7 +37,17 @@ function attachListItemHandlers(li) {
 }
 // --- Sanitize: strip script tags from block content ---
 function sanitizeHtml(html) {
-    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    // Remove dangerous tags
+    let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+    s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
+    s = s.replace(/<embed\b[^>]*\/?>/gi, '');
+    s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+    // Remove event handler attributes (on*)
+    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    // Remove javascript: URLs in href/src attributes
+    s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    return s;
 }
 // --- Built-in Block Tools ---
 const builtinTools = {
@@ -94,7 +104,7 @@ const builtinTools = {
                 items.forEach(item => {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
-                    li.innerHTML = item;
+                    li.innerHTML = sanitizeHtml(item);
                     attachListItemHandlers(li);
                     el.appendChild(li);
                 });
@@ -161,16 +171,18 @@ const builtinTools = {
                 const wrap = document.createElement('figure');
                 wrap.className = 'ce-image';
                 const img = document.createElement('img');
-                img.src = data.url || '';
+                const initialUrl = data.url || '';
+                img.src = /^\s*javascript\s*:/i.test(initialUrl) ? '' : initialUrl;
                 img.alt = '';
                 // URL input for editing
                 const urlInput = document.createElement('input');
                 urlInput.type = 'text';
                 urlInput.className = 'ce-image__url';
                 urlInput.placeholder = 'Image URL...';
-                urlInput.value = data.url || '';
+                urlInput.value = initialUrl;
                 urlInput.addEventListener('input', () => {
-                    img.src = urlInput.value;
+                    const val = urlInput.value;
+                    img.src = /^\s*javascript\s*:/i.test(val) ? '' : val;
                 });
                 const cap = document.createElement('figcaption');
                 cap.contentEditable = 'true';
@@ -218,7 +230,12 @@ class InlineToolbar {
                 }
             });
         });
-        document.addEventListener('selectionchange', () => this.update());
+        this.selectionHandler = () => this.update();
+        document.addEventListener('selectionchange', this.selectionHandler);
+    }
+    destroy() {
+        document.removeEventListener('selectionchange', this.selectionHandler);
+        this.el.remove();
     }
     update() {
         const sel = window.getSelection();
@@ -433,7 +450,8 @@ class Editor {
                 let defaultData = {};
                 if (type === 'heading') {
                     const level = prompt('Heading level (1-3):', '2');
-                    defaultData = { level: Math.max(1, Math.min(3, parseInt(level || '2', 10))) };
+                    const parsed = parseInt(level || '2', 10);
+                    defaultData = { level: Math.max(1, Math.min(3, isNaN(parsed) ? 2 : parsed)) };
                 }
                 else if (type === 'list') {
                     const style = confirm('Ordered list? (OK=ordered, Cancel=unordered)') ? 'ordered' : 'unordered';
@@ -471,20 +489,20 @@ function renderBlocks(blocks) {
         const d = block.data;
         switch (block.type) {
             case 'paragraph':
-                return `<p>${d.text || ''}</p>`;
+                return `<p>${escHtml(String(d.text || ''))}</p>`;
             case 'heading': {
                 const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
-                return `<h${lvl}>${d.text || ''}</h${lvl}>`;
+                return `<h${lvl}>${escHtml(String(d.text || ''))}</h${lvl}>`;
             }
             case 'list': {
                 const tag = d.style === 'ordered' ? 'ol' : 'ul';
                 const items = d.items || [];
-                return `<${tag}>${items.map(i => `<li>${i}</li>`).join('')}</${tag}>`;
+                return `<${tag}>${items.map(i => `<li>${escHtml(String(i))}</li>`).join('')}</${tag}>`;
             }
             case 'code':
                 return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
             case 'quote':
-                return `<blockquote>${d.text || ''}</blockquote>`;
+                return `<blockquote>${escHtml(String(d.text || ''))}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
             case 'image': {

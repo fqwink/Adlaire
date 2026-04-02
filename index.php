@@ -51,11 +51,12 @@ $app = App::getInstance();
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 // --- Admin UI routing ---
-if (isset($_REQUEST['admin'])) {
+if (isset($_GET['admin'])) {
     if (!$app->isLoggedIn()) {
         header('Location: ?login');
         exit;
     }
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
     require __DIR__ . '/admin-ui.php';
     ob_end_flush();
     exit;

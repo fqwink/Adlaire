@@ -52,9 +52,9 @@ function fieldSave(key: string, val: string): void {
         if (!el) { changing = false; return; }
 
         if (val === '') {
-            el.innerHTML = el.getAttribute('title') || '';
+            el.textContent = el.getAttribute('title') || '';
         } else {
-            el.innerHTML = data;
+            el.textContent = data;
         }
         changing = false;
     })
@@ -83,7 +83,7 @@ function plainTextEdit(span: HTMLElement): void {
 
     const content = isMarkdown
         ? span.innerHTML
-        : span.innerHTML.replace(/<br\s*\/?>/gi, '');
+        : (span.textContent || '');
 
     const textarea = document.createElement('textarea');
     textarea.name = 'textarea';
@@ -106,7 +106,7 @@ function plainTextEdit(span: HTMLElement): void {
     span.textContent = '';
     span.appendChild(textarea);
     textarea.focus();
-    autosize(textarea);
+    if (typeof autosize === 'function') { autosize(textarea); }
 }
 
 function richTextHook(span: HTMLElement): void {
@@ -119,7 +119,7 @@ function renderMarkdownContent(): void {
     document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
         const b64 = el.dataset.rawB64;
         const raw = b64 ? atob(b64) : (el.textContent || '');
-        el.innerHTML = markdownToHtml(raw);
+        if (typeof markdownToHtml === 'function') { el.innerHTML = markdownToHtml(raw); }
     });
 }
 
@@ -161,7 +161,8 @@ function initBlockEditor(): void {
             blocks: blocks.length > 0 ? blocks : [{ type: 'paragraph', data: { text: '' } }],
         };
 
-        activeEditor = Editor.create(wrapper, { data: editorData });
+        const editorInstance = Editor.create(wrapper, { data: editorData });
+        activeEditor = editorInstance;
 
         // Auto-save on focusout from the editor
         let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -172,8 +173,8 @@ function initBlockEditor(): void {
             // Debounce to avoid saving while user clicks between blocks
             if (saveTimer) clearTimeout(saveTimer);
             saveTimer = setTimeout(() => {
-                if (!activeEditor) return;
-                const saved = activeEditor.save();
+                if (!editorInstance) return;
+                const saved = editorInstance.save();
                 const slug = wrapper.id;
                 if (!slug) return;
 
@@ -278,13 +279,15 @@ function switchFormat(slug: string, newFormat: string): void {
         api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
             location.reload();
         }).catch(() => {
-            // Revert on failure
+            alert('Format switch failed. Reloading to recover.');
+            location.reload();
         });
     } else {
         api.savePage(slug, currentContent, newFormat).then(() => {
             location.reload();
         }).catch(() => {
-            // Revert on failure
+            alert('Format switch failed. Reloading to recover.');
+            location.reload();
         });
     }
 }
@@ -296,11 +299,16 @@ function initEditInplace(): void {
     renderMarkdownContent();
     renderBlocksContent();
 
-    // Initialize block editor for admin (blocks-format pages)
-    initBlockEditor();
-
-    // Initialize format switcher for admin
-    initFormatSwitcher();
+    // Wait for i18n to be ready before initializing editor UI
+    const initEditorUI = (): void => {
+        initBlockEditor();
+        initFormatSwitcher();
+    };
+    if (typeof i18n !== 'undefined' && i18n.ready) {
+        i18n.ready.then(initEditorUI);
+    } else {
+        initEditorUI();
+    }
 
     // Editable text spans (HTML and Markdown formats)
     document.querySelectorAll<HTMLElement>('span.editText').forEach(span => {

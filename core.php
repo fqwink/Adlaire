@@ -97,7 +97,8 @@ final class FileStorage
 
         // Migrate page files to JSON format in pages/ subdirectory
         $skipFiles = array_merge(self::CONFIG_KEYS, [
-            'config.json', 'pages.meta.json', '.htaccess',
+            'config.json', 'pages.meta.json', 'pages.index.json',
+            '.htaccess', '.config.lock', 'install.lock',
         ]);
         $files = glob($this->basePath . '/*');
         if (is_array($files)) {
@@ -307,8 +308,11 @@ final class FileStorage
      */
     public function listPages(): array
     {
-        // Try cache first
+        // Try index cache first (metadata only, used as slug list)
         $cacheFile = $this->basePath . '/pages.index.json';
+        $useCachedSlugs = false;
+        $cachedSlugs = [];
+
         if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
             $cacheMtime = filemtime($cacheFile);
             $dirMtime = filemtime($this->pagesDir);
@@ -317,31 +321,50 @@ final class FileStorage
                 if ($cached !== false) {
                     $data = json_decode($cached, true);
                     if (is_array($data)) {
-                        return $data;
+                        $cachedSlugs = array_keys($data);
+                        $useCachedSlugs = true;
                     }
                 }
             }
         }
 
-        // Build from files
-        $files = glob($this->pagesDir . '/*.json');
+        // Build full data from files
         $pages = [];
 
-        if (is_array($files)) {
-            foreach ($files as $file) {
-                if (is_dir($file)) {
-                    continue;
-                }
-                $slug = basename($file, '.json');
+        if ($useCachedSlugs) {
+            foreach ($cachedSlugs as $slug) {
                 $data = $this->readPageData($slug);
                 if ($data !== false) {
                     $pages[$slug] = $data;
                 }
             }
-        }
+        } else {
+            $files = glob($this->pagesDir . '/*.json');
+            if (is_array($files)) {
+                foreach ($files as $file) {
+                    if (is_dir($file)) {
+                        continue;
+                    }
+                    $slug = basename($file, '.json');
+                    $data = $this->readPageData($slug);
+                    if ($data !== false) {
+                        $pages[$slug] = $data;
+                    }
+                }
+            }
 
-        // Write cache
-        $this->atomicWrite($cacheFile, json_encode($pages, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            // Write index cache (metadata only — excludes content/blocks for performance)
+            $cacheSummary = [];
+            foreach ($pages as $slug => $data) {
+                $cacheSummary[$slug] = [
+                    'format'     => $data['format'] ?? 'blocks',
+                    'status'     => $data['status'] ?? 'published',
+                    'created_at' => $data['created_at'] ?? '',
+                    'updated_at' => $data['updated_at'] ?? '',
+                ];
+            }
+            $this->atomicWrite($cacheFile, json_encode($cacheSummary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
 
         return $pages;
     }

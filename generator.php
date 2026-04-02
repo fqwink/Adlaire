@@ -102,7 +102,7 @@ function handleApiGenerate(FileStorage $storage): void
 
     // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
-        if ($lastBuildTime !== '' && ($data['updated_at'] ?? '') <= $lastBuildTime) {
+        if ($lastBuildTime !== '' && strtotime($data['updated_at'] ?? '') <= strtotime($lastBuildTime)) {
             continue; // Skip unchanged pages in diff build
         }
         $format = $data['format'] ?? 'blocks';
@@ -171,7 +171,8 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
 
     // Build menu
     $menuHtml = '<ul>';
-    $items = explode("<br />\n", $c['menu']);
+    $menu = str_replace("\r\n", "\n", $c['menu']);
+    $items = explode("<br />\n", $menu);
     foreach ($items as $item) {
         $item = trim($item);
         if ($item === '') continue;
@@ -182,7 +183,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     }
     $menuHtml .= '</ul>';
 
-    $sideContent = $c['subside'] ?? '';
+    $sideContent = esc((string) ($c['subside'] ?? ''));
 
     return <<<HTML
     <!doctype html>
