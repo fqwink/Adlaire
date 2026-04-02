@@ -281,5 +281,5 @@ Adlaire のエディタは、大規模分離を行わず、最小限の基盤改
 | `API_RULEBOOK.md` §5.3 | エディタ TypeScript モジュール仕様（ブロック型・API・UI） |
 | `API_RULEBOOK.md` §6.3 | 管理 UI ページ編集画面仕様 |
 | `ARCHITECTURE_RULEBOOK.md` | Core ファイル構成（editor.ts / editInplace.ts 配置） |
-| `RELEASE_PLAN_RULEBOOK.md` §4.5 | Ver.2.8 エディタ高度化計画 |
+| `RELEASE_PLAN_RULEBOOK.md` §4.2 | Ver.2.8 エディタ高度化計画 |
 | `REVISION_HISTORY.md` | 全ルールブック改訂履歴 |

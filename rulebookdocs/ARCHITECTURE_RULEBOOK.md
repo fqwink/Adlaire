@@ -65,6 +65,7 @@
 
 ```php
 require 'Core/helpers.php';    // esc, csrf（依存なし）
+require 'Core/license.php';   // ライセンス検証（helpers に依存）
 require 'Core/core.php';       // FileStorage（helpers に依存）
 require 'Core/app.php';        // App クラス（helpers, core に依存）
 require 'Core/renderer.php';   // 描画関数（helpers に依存）
@@ -100,7 +101,8 @@ data/
 ├── revisions/{slug}/          # リビジョン履歴（最大30世代）
 ├── backups/                   # 設定バックアップ（最大9世代）
 └── system/
-    └── install.lock           # インストール済みフラグ
+    ├── install.lock           # インストール済みフラグ
+    └── license.key            # API キーファイル
 ```
 
 ## 3.2 アクセス制御
