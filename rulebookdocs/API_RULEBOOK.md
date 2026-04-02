@@ -3,7 +3,7 @@
 - 文書名: Adlaire API RULEBOOK
 - 文書バージョン: Ver.1.1
 - 作成日: 2026-04-02
-- 対象製品: Adlaire Platform
+- 対象製品: Adlaire Static CMS
 - 文書種別: データ仕様・PHP API・REST API・TypeScript モジュール・管理 UI を定義する技術規範文書
 - 文書目的: Adlaire の全 API インターフェース、データスキーマ、TypeScript モジュール仕様、管理 UI 仕様を恒常的規範として定義する
 - 移行元: 旧 RULEBOOK_Ver1/Ver2 から移行（統合・削除済み）
@@ -14,7 +14,7 @@
 
 ## 1.1 位置づけ
 
-本 RULEBOOK は、Adlaire Platform の API・データ・フロントエンドインターフェースに関する恒常的規範文書である。
+本 RULEBOOK は、Adlaire Static CMS の API・データ・フロントエンドインターフェースに関する恒常的規範文書である。
 特定バージョンに従属せず、すべての開発判断に適用される。
 
 ## 1.2 認証方式
@@ -380,7 +380,7 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 
 # 7. 機能仕様（Core 機能）
 
-> Core 機能は Adlaire Platform の基本構成要素であり、常に利用可能でなければならない。
+> Core 機能は Adlaire Static CMS の基本構成要素であり、常に利用可能でなければならない。
 
 ## 7.1 コンテンツ管理
 

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Entry Point
+ * Adlaire Static CMS - Entry Point
  *
  * Version: Ver.{Major}.{Minor}-{Build}
  *   Major  - Incremented on breaking changes. Resets Minor to 0.

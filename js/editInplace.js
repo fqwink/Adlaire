@@ -1,6 +1,6 @@
 "use strict";
 /**
- * EditInplace - Inline content editing for Adlaire Platform.
+ * EditInplace - Inline content editing for Adlaire Static CMS.
  *
  * Provides unified inplace editing for page formats:
  * - Blocks: block editor with auto-save on focusout (default)

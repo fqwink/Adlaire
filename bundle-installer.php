@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Bundle Installer (Setup Tool)
+ * Adlaire Static CMS - Bundle Installer (Setup Tool)
  *
  * Public release ZIP setup tool. Single-file, no Node.js required.
  * Spec: rulebookdocs/RULEBOOK_Ver2.md Section 2.2
@@ -265,7 +265,7 @@ $csrf = security_csrf_token();
 </head>
 <body>
 <div class="wrap">
-    <h1>Adlaire Platform Setup</h1>
+    <h1>Adlaire Static CMS Setup</h1>
     <p class="version">Version: <?= esc($version) ?></p>
 
     <div class="steps">

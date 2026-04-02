@@ -1,5 +1,5 @@
 /**
- * Editor - Block-based content editor for Adlaire Platform.
+ * Editor - Block-based content editor for Adlaire Static CMS.
  * Editor.js-like architecture implemented in pure TypeScript.
  *
  * Spec: RULEBOOK.md Section 6.3

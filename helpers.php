@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Helpers
+ * Adlaire Static CMS - Helpers
  *
  * Utility functions: escaping, CSRF, rate limiting.
  * No dependencies.
