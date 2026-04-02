@@ -14,9 +14,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 1;
-    public const VERSION_BUILD = 32;
-    public const VERSION = 'Ver.2.1-32';
+    public const VERSION_MINOR = 2;
+    public const VERSION_BUILD = 33;
+    public const VERSION = 'Ver.2.2-33';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -169,6 +169,15 @@ final class App
 
     private function handleAuth(): void
     {
+        // Session timeout: 30 minutes inactivity
+        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+            session_destroy();
+            session_start();
+        }
+        if (isset($_SESSION['l'])) {
+            $_SESSION['last_activity'] = time();
+        }
+
         if (isset($_SESSION['l']) && $_SESSION['l'] === $this->config['password']) {
             $this->config['loggedin'] = true;
         }
@@ -339,6 +348,13 @@ final class App
 
         $newPass = $_POST['new'] ?? '';
         if ($newPass !== '') {
+            if (strlen($newPass) < 8) {
+                return $this->t('password_too_short');
+            }
+            $weak = ['admin', 'password', '12345678', 'adlaire'];
+            if (in_array(strtolower($newPass), $weak, true)) {
+                return $this->t('password_too_weak');
+            }
             $newHash = $this->savePassword($newPass);
             $this->config['password'] = $newHash;
             session_regenerate_id(true);
@@ -348,6 +364,7 @@ final class App
 
         session_regenerate_id(true);
         $_SESSION['l'] = $this->config['password'];
+        $_SESSION['last_activity'] = time();
         header('Location: ./');
         exit;
     }
@@ -863,18 +880,29 @@ function handleApiGenerate(FileStorage $storage): void
 
     $app = App::getInstance();
     $distDir = __DIR__ . '/dist';
+    $force = ($_POST['force'] ?? $_REQUEST['force'] ?? '') === 'true';
+    $buildStateFile = $distDir . '/.build_state.json';
+    $lastBuildTime = '';
 
-    // Clean and recreate dist directory
-    if (is_dir($distDir)) {
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($distDir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
-        foreach ($files as $file) {
-            if ($file->isDir()) {
-                rmdir($file->getRealPath());
-            } else {
-                unlink($file->getRealPath());
+    // Read previous build state for diff build
+    if (!$force && file_exists($buildStateFile)) {
+        $state = json_decode((string) file_get_contents($buildStateFile), true);
+        $lastBuildTime = is_array($state) ? ($state['built_at'] ?? '') : '';
+    }
+
+    // Full rebuild: clean dist directory
+    if ($force || $lastBuildTime === '') {
+        if (is_dir($distDir)) {
+            $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($distDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $file) {
+                if ($file->isDir()) {
+                    rmdir($file->getRealPath());
+                } else {
+                    unlink($file->getRealPath());
+                }
             }
         }
     }
@@ -897,8 +925,8 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Copy JS
-    $jsSrc = __DIR__ . '/js/dist';
-    $jsDst = $distDir . '/js/dist';
+    $jsSrc = __DIR__ . '/js';
+    $jsDst = $distDir . '/js';
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
             mkdir($jsDst, 0755, true);
@@ -926,8 +954,11 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
 
-    // Generate each page
+    // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
+        if ($lastBuildTime !== '' && ($data['updated_at'] ?? '') <= $lastBuildTime) {
+            continue; // Skip unchanged pages in diff build
+        }
         $format = $data['format'] ?? 'blocks';
         $contentHtml = '';
 
@@ -968,6 +999,12 @@ function handleApiGenerate(FileStorage $storage): void
     }
     $xml .= '</urlset>';
     file_put_contents($distDir . '/sitemap.xml', $xml);
+
+    // Save build state for diff builds
+    file_put_contents($distDir . '/.build_state.json', json_encode([
+        'built_at' => date('c'),
+        'pages' => $count,
+    ], JSON_PRETTY_PRINT));
 
     echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
 }

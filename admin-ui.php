@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 /**
  * Adlaire Platform - Admin UI Template

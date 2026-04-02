@@ -265,7 +265,9 @@ final class FileStorage
         }
 
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        return $this->atomicWrite($path, $json);
+        $result = $this->atomicWrite($path, $json);
+        if ($result) { $this->invalidatePageCache(); }
+        return $result;
     }
 
     public function deletePage(string $slug): bool
@@ -296,6 +298,7 @@ final class FileStorage
             rmdir($revDir);
         }
 
+        $this->invalidatePageCache();
         return true;
     }
 
@@ -304,6 +307,23 @@ final class FileStorage
      */
     public function listPages(): array
     {
+        // Try cache first
+        $cacheFile = $this->basePath . '/pages.index.json';
+        if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
+            $cacheMtime = filemtime($cacheFile);
+            $dirMtime = filemtime($this->pagesDir);
+            if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
+                $cached = $this->lockedRead($cacheFile);
+                if ($cached !== false) {
+                    $data = json_decode($cached, true);
+                    if (is_array($data)) {
+                        return $data;
+                    }
+                }
+            }
+        }
+
+        // Build from files
         $files = glob($this->pagesDir . '/*.json');
         $pages = [];
 
@@ -320,7 +340,21 @@ final class FileStorage
             }
         }
 
+        // Write cache
+        $this->atomicWrite($cacheFile, json_encode($pages, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
         return $pages;
+    }
+
+    /**
+     * Invalidate the page index cache.
+     */
+    private function invalidatePageCache(): void
+    {
+        $cacheFile = $this->basePath . '/pages.index.json';
+        if (file_exists($cacheFile)) {
+            unlink($cacheFile);
+        }
     }
 
     /**
@@ -342,7 +376,9 @@ final class FileStorage
 
         $path = $this->pagesDir . '/' . $slug . '.json';
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        return $this->atomicWrite($path, $json);
+        $result = $this->atomicWrite($path, $json);
+        if ($result) { $this->invalidatePageCache(); }
+        return $result;
     }
 
     /**

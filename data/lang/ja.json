@@ -49,5 +49,7 @@
     "admin_generate": "静的サイト生成",
     "admin_export": "エクスポート",
     "admin_import": "インポート",
-    "confirm_format_switch": "Format を :format に変更しますか？\nコンテンツが変換されます。"
+    "confirm_format_switch": "Format を :format に変更しますか？\nコンテンツが変換されます。",
+    "password_too_short": "パスワードは8文字以上にしてください。",
+    "password_too_weak": "そのパスワードは弱すぎます。別のパスワードを選んでください。"
 }
