@@ -13,10 +13,10 @@ declare(strict_types=1);
 
 final class App
 {
-    public const VERSION_MAJOR = 1;
-    public const VERSION_MINOR = 9;
-    public const VERSION_BUILD = 30;
-    public const VERSION = 'Ver.1.9-30';
+    public const VERSION_MAJOR = 2;
+    public const VERSION_MINOR = 0;
+    public const VERSION_BUILD = 31;
+    public const VERSION = 'Ver.2.0-31';
 
     /** @var array<string, mixed> */
     public array $config = [];

@@ -1,0 +1,16 @@
+{
+    "product": "Adlaire",
+    "channel": "release",
+    "version": "2.0.0",
+    "bundle_format": 1,
+    "required_files": [
+        "index.php",
+        "core.php",
+        "admin.php",
+        "admin-ui.php",
+        ".htaccess",
+        "themes",
+        "data/lang",
+        "js"
+    ]
+}

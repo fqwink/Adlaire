@@ -12,6 +12,12 @@ RewriteRule .* - [F,L]
 <Files "admin-ui.php">
     Require all denied
 </Files>
+<Files "release-manifest.json">
+    Require all denied
+</Files>
+<Files "VERSION">
+    Require all denied
+</Files>
 ErrorDocument 403 &nbsp;
 RewriteEngine on
 Options -Indexes
