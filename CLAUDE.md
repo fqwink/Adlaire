@@ -20,14 +20,13 @@
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
-  - `docs/RELEASENOTES.md` — リリースノート
 
 ## ドキュメント命名規則
 
 - ドキュメントファイル名は**正式名称を大文字**で記述する。
 - 区切り文字は**アンダースコア（_）のみ許可**。ハイフン等その他の記号は使用禁止。
 - バージョン付きファイルは `Ver` を使用する（`V` 単体は禁止）。
-- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`, `RELEASENOTES.md`
+- 例: `CLAUDE.md`, `README.md`, `CHARTER.md`, `CHANGES.md`
 
 ## ルールブック管理方針
 

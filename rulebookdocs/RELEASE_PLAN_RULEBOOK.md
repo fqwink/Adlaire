@@ -12,7 +12,7 @@
 ## 1. 基本宣言
 
 本 RULEBOOK は、Adlaire Platform のリリース計画と履歴に関する規範文書である。
-リリースの詳細な変更履歴は `docs/CHANGES.md` を、リリースノートは `docs/RELEASENOTES.md` を参照。
+リリースの詳細な変更履歴は `docs/CHANGES.md` を参照。
 
 ---
 
@@ -189,4 +189,3 @@ Ver.3.0 系はブログ機能の新規追加とエディタ機能の強化改良
 |------|------|
 | `CHARTER.md` | ルールブック憲章（最上位原則） |
 | `docs/CHANGES.md` | 詳細な変更履歴 |
-| `docs/RELEASENOTES.md` | リリースノート |
