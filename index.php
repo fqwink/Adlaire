@@ -31,6 +31,12 @@ require __DIR__ . '/admin.php';
 
 // --- Bootstrap ---
 
+// Redirect to installer if not yet set up
+if (!file_exists(__DIR__ . '/files/system/install.lock') && file_exists(__DIR__ . '/bundle-installer.php')) {
+    header('Location: bundle-installer.php');
+    exit;
+}
+
 handleApi();
 handleEdit();
 

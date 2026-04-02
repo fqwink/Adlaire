@@ -170,6 +170,26 @@ function renderAdminDashboard(App $app): void
     echo '}';
     echo '</script>';
 
+    // --- System Info ---
+    echo '<section class="admin-section">';
+    echo '<h2>System</h2>';
+    $versionFile = __DIR__ . '/VERSION';
+    $fileVersion = file_exists($versionFile) ? esc(trim((string) file_get_contents($versionFile))) : '—';
+    $appVersion = esc(App::VERSION);
+    $lockFile = __DIR__ . '/files/system/install.lock';
+    $installedAt = '—';
+    if (file_exists($lockFile)) {
+        $lock = json_decode((string) file_get_contents($lockFile), true);
+        $installedAt = esc(substr($lock['installed_at'] ?? '', 0, 19));
+    }
+    echo "<table class='admin-table'>";
+    echo "<tr><th>Release Version</th><td>{$fileVersion}</td></tr>";
+    echo "<tr><th>App Version</th><td>{$appVersion}</td></tr>";
+    echo "<tr><th>Installed</th><td>{$installedAt}</td></tr>";
+    echo "<tr><th>PHP</th><td>" . esc(PHP_VERSION) . "</td></tr>";
+    echo "</table>";
+    echo '</section>';
+
     echo '</section>';
 }
 

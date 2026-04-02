@@ -265,11 +265,10 @@ $csrf = security_csrf_token();
     <p class="version">Version: <?= esc($version) ?></p>
 
     <div class="steps">
-        <span class="<?= $step === 0 ? 'active' : '' ?>">Welcome</span>
+        <span class="<?= $step <= 0 ? 'active' : '' ?>">Welcome</span>
         <span class="<?= $step === 1 ? 'active' : '' ?>">Check</span>
         <span class="<?= $step === 2 ? 'active' : '' ?>">Config</span>
-        <span class="<?= $step === 3 ? 'active' : '' ?>">Install</span>
-        <span class="<?= $step === 4 ? 'active' : '' ?>">Done</span>
+        <span class="<?= $step === 4 ? 'active' : '' ?>">Complete</span>
     </div>
 
     <hr>

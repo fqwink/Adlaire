@@ -506,7 +506,7 @@ function handleApi(): void
     $storage = new FileStorage('files');
     $method = $_SERVER['REQUEST_METHOD'];
 
-    // Sitemap uses XML content type — handle before JSON header
+    // Non-JSON endpoints
     if ($endpoint === 'sitemap') {
         handleApiSitemap($storage);
         exit;
@@ -523,6 +523,10 @@ function handleApi(): void
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
         handleApiSearch($storage);
+        exit;
+    }
+    if ($endpoint === 'version') {
+        handleApiVersion();
         exit;
     }
 
@@ -1088,6 +1092,30 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     </body>
     </html>
     HTML;
+}
+
+// --- Version API ---
+
+function handleApiVersion(): void
+{
+    $versionFile = __DIR__ . '/VERSION';
+    $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
+
+    $lockFile = __DIR__ . '/files/system/install.lock';
+    $installed = file_exists($lockFile);
+    $installedAt = '';
+    if ($installed) {
+        $lock = json_decode((string) file_get_contents($lockFile), true);
+        $installedAt = $lock['installed_at'] ?? '';
+    }
+
+    echo json_encode([
+        'product' => 'Adlaire',
+        'version' => $version,
+        'app_version' => App::VERSION,
+        'installed' => $installed,
+        'installed_at' => $installedAt,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiError(int $code, string $message): void
