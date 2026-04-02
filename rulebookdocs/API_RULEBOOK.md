@@ -1,7 +1,7 @@
 # Adlaire API RULEBOOK
 
 - 文書名: Adlaire API RULEBOOK
-- 文書バージョン: Ver.1.1
+- 文書バージョン: Ver.1.2
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: データ仕様・PHP API・REST API・TypeScript モジュール・管理 UI を定義する技術規範文書

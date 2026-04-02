@@ -1,7 +1,7 @@
 # Adlaire Direction RULEBOOK
 
 - 文書名: Adlaire Direction RULEBOOK
-- 文書バージョン: Ver.1.1
+- 文書バージョン: Ver.1.2
 - 作成日: 2026-04-01
 - 対象製品: Adlaire Static CMS
 - 文書種別: 製品方向性・採用判断・優先順位を定義する上位規範文書
