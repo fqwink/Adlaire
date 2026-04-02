@@ -3,7 +3,7 @@
 - 文書名: Adlaire Editor RULEBOOK
 - 文書バージョン: Ver.1.2
 - 作成日: 2026-04-01
-- 対象製品: Adlaire Platform
+- 対象製品: Adlaire Static CMS
 - 対象領域: Editor / Block Editor / Markdown 連携 / Revision / Draft-Publish / Publish Quality Check / Editor UI
 - 文書種別: エディタ設計・改良・保守方針を定義する上位規範文書
 - 文書目的: Adlaire のエディタに関する開発範囲、禁止事項、必須要件、互換性方針、安定化条件を 1 ファイル原則で統合定義する

@@ -3,7 +3,7 @@
 - 文書名: Adlaire Generator RULEBOOK
 - 文書バージョン: Ver.1.0
 - 作成日: 2026-04-02
-- 対象製品: Adlaire Platform
+- 対象製品: Adlaire Static CMS
 - 文書種別: 静的サイト生成の仕様を定義する技術規範文書
 - 文書目的: Adlaire の静的サイト生成機能に関する設計・API・制約を恒常的規範として定義する
 
@@ -13,7 +13,7 @@
 
 ## 1.1 位置づけ
 
-本 RULEBOOK は、Adlaire Platform の静的サイト生成機能に関する恒常的規範文書である。
+本 RULEBOOK は、Adlaire Static CMS の静的サイト生成機能に関する恒常的規範文書である。
 特定バージョンに従属せず、すべての開発判断に適用される。
 
 ## 1.2 設計原則

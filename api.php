@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - API
+ * Adlaire Static CMS - API
  *
  * REST API handlers and admin edit handler.
  * Depends on: helpers.php, core.php, app.php, renderer.php

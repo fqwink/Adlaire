@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - App
+ * Adlaire Static CMS - App
  *
  * Application class: configuration, authentication, translation, rendering.
  * Depends on: helpers.php, core.php

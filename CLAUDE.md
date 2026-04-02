@@ -1,4 +1,4 @@
-# Adlaire Platform - 開発規約
+# Adlaire Static CMS - 開発規約
 
 > **`RULEBOOK`（ルールブック / 仕様書）は絶対原則である。**
 > すべての実装は RULEBOOK の仕様に基づいて行うこと。

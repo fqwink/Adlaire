@@ -1,5 +1,5 @@
 /**
- * I18n - Internationalization module for Adlaire Platform.
+ * I18n - Internationalization module for Adlaire Static CMS.
  * Loads translation strings from JSON files and provides a t() helper.
  *
  * Supported languages: 'ja', 'en'

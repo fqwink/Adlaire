@@ -1,5 +1,5 @@
 /**
- * API - REST API client for Adlaire Platform.
+ * API - REST API client for Adlaire Static CMS.
  * Provides typed methods for page CRUD and revision management.
  *
  * Requires: csrfToken global variable set by PHP.

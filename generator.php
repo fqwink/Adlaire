@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Generator
+ * Adlaire Static CMS - Generator
  *
  * Static site generator: diff builds, HTML generation.
  * Depends on: helpers.php, core.php, app.php, renderer.php

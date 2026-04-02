@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Core
+ * Adlaire Static CMS - Core
  *
  * FileStorage data management layer and utility functions.
  *

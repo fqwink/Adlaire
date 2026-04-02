@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Adlaire Platform - Renderer
+ * Adlaire Static CMS - Renderer
  *
  * Server-side rendering: blocks-to-HTML and Markdown-to-HTML conversion.
  * Depends on: helpers.php
