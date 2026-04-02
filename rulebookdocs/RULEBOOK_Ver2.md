@@ -30,23 +30,8 @@ Ver.1.x のアーキテクチャ仕様（セクション1）を継承する。
 
 ### 2.1 ファイル構成
 
-Ver.2.3 現行アーキテクチャ（10ファイル Core 基盤）:
-
-| ファイル | 役割 | 直接HTTPアクセス | 備考 |
-|---------|------|:---:|------|
-| `index.php` | エントリーポイント + ルーティング | 許可 | |
-| `helpers.php` | ヘルパー関数（esc, csrf, rate_limit） | **禁止** | Ver.2.3 で core.php から分離 |
-| `core.php` | FileStorage クラス（データ層） | **禁止** | |
-| `app.php` | App クラス（設定, 認証, 翻訳, 描画） | **禁止** | Ver.2.3 で admin.php から分離 |
-| `renderer.php` | サーバーサイド描画（blocks→HTML, markdown→HTML） | **禁止** | Ver.2.3 で admin.php から分離 |
-| `api.php` | REST API ハンドラー + handleEdit | **禁止** | Ver.2.3 で admin.php から分離 |
-| `generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） | **禁止** | Ver.2.3 で admin.php から分離 |
-| `admin-ui.php` | 管理 UI テンプレート | **禁止** | |
-| `bundle-installer.php` | セットアップツール（初期導入後に削除） | 許可（初回のみ） | Ver.2.0 新規 |
-| `release-manifest.json` | 配布バンドル整合性検証用マニフェスト | **禁止** | Ver.2.0 新規 |
-| `VERSION` | バージョン情報ファイル | **禁止** | Ver.2.0 新規 |
-
-> **廃止**: `admin.php` は Ver.2.3 で廃止。上記6ファイルに完全移行済み。
+> 現行ファイル構成は `ADLAIRE_ARCHITECTURE_RULEBOOK.md` §2.2 を参照。
+> Ver.2.3 で admin.php を廃止し、9ファイル Core 基盤に移行済み。
 
 ### 2.2 セットアップツール（bundle-installer.php）
 

@@ -18,7 +18,7 @@
 | ファイル | 種別 | 内容 |
 |---------|------|------|
 | `rulebookdocs/CHARTER.md` | 憲章 | **本ファイル** — 全バージョン共通の最上位原則 |
-| `rulebookdocs/RULEBOOK_Ver1.md` | バージョンベース | Ver.1.x 系（凍結 — Ver.1.9-30） |
+| `rulebookdocs/RULEBOOK_Ver1.md` | バージョンベース | Ver.1.x 系（**削除予定** — 技術仕様は分類ベースに移行済み） |
 | `rulebookdocs/RULEBOOK_Ver2.md` | バージョンベース | Ver.2.x 系（現行 — Ver.2.3 実装完了） |
 | `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` | 分類ベース | 製品方向性（ポジション・ターゲット・採用方針） |
 | `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` | 分類ベース | エディタ（設計原則・開発範囲・禁止事項） |
@@ -52,7 +52,7 @@
 ## 3. バージョン管理方針
 
 - メジャーバージョンごとにルールブックファイルを新設する。
-- 旧バージョンのルールブックは**凍結保存**し、変更しない。
+- 技術仕様が分類ベースルールブックに完全移行された旧バージョンのルールブックは**削除**する。
 - 新バージョンのルールブックは旧版を基盤として策定し、差分を明記する。
 - 現行開発バージョンのルールブックのみ編集可能。
 
@@ -79,20 +79,9 @@
 
 ## 7. 開発基盤（全バージョン共通）
 
-### 7.1 PHP
+> 詳細は `ADLAIRE_ARCHITECTURE_RULEBOOK.md` を参照。以下は要約。
 
-- **PHP バージョンは 8.3 以上を必須**（`declare(strict_types=1)` 使用）。
-
-### 7.2 TypeScript
-
-- **TypeScript を全面的に採用**。JavaScript の直接記述は禁止。
-- **TypeScript バージョンは 5 系に固定**（`~5.8`）。
-- すべての JavaScript は TypeScript からのコンパイル生成を義務化。
-- ソース: `ts/` → 出力: `js/`。
-
-### 7.3 ビルド
-
-```bash
-npm install       # 初回のみ
-npm run build     # TypeScript → JavaScript コンパイル
-```
+- **PHP 8.3 以上必須**（`declare(strict_types=1)`）
+- **TypeScript 5 系固定**（`~5.8`）、JavaScript 直接記述禁止
+- ソース: `ts/` → 出力: `js/`
+- ビルド: `npm install` → `npm run build`（`tsc`）
