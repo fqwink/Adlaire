@@ -11,8 +11,6 @@
 - `README.md` — プロジェクト説明（プロジェクトルート）
 - `rulebookdocs/` — ルールブックドキュメントフォルダ（プロジェクトルート）
   - `rulebookdocs/CHARTER.md` — ルールブック憲章（全バージョン共通の最上位原則）
-  - `rulebookdocs/RULEBOOK_Ver1.md` — ルールブック Ver.1.x 系（凍結）
-  - `rulebookdocs/RULEBOOK_Ver2.md` — ルールブック Ver.2.x 系（現行）
   - `rulebookdocs/ADLAIRE_DIRECTION_RULEBOOK.md` — 製品方向性ルールブック
   - `rulebookdocs/ADLAIRE_EDITOR_RULEBOOK.md` — エディタルールブック
   - `rulebookdocs/ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` — ライフサイクルシステムルールブック
@@ -34,8 +32,8 @@
 
 - **分類/機能ベースのルールブック（`ADLAIRE_*_RULEBOOK.md`）が正式な仕様管理方式**である。
 - 技術仕様の参照・変更は分類ベースルールブックに対して行うこと。
-- バージョンベースのルールブック（`RULEBOOK_Ver2.md`）は**リリース計画の管理のみ**に使用する。
-- 移行完了後の旧バージョンルールブックは削除する。
+- バージョンベースのルールブック（`RULEBOOK_Ver1.md`, `RULEBOOK_Ver2.md`）は**廃止・削除済み**。
+- リリース計画・セットアップ仕様等は `CHARTER.md` に統合。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
 
 ## 技術規約
