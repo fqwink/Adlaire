@@ -2,17 +2,27 @@
 
 **現行バージョン**: Ver.2.0-30（策定中）
 **最終更新**: 2026-04-01
-**状態**: **策定中** — 策定完了まで実装に着手しない。
+**状態**: **Ver.2.0 策定完了** — 実装着手可。
 
 > 上位原則は `CHARTER.md`（ルールブック憲章）を参照。
 > Ver.1.x 系（`RULEBOOK_Ver1.md`）を基盤とし、差分を以下に記載する。
 
 ---
 
-## 1. 開発規約（Ver.1.x から継承）
+## 1. 開発規約・上位規範
 
 Ver.1.x のアーキテクチャ仕様（セクション1）を継承する。
 ドキュメント命名規則、廃止ポリシー、バージョン規則は `CHARTER.md` に定義。
+
+### 上位規範ルールブック（全バージョン共通）
+
+| ファイル | 内容 |
+|---------|------|
+| `ADLAIRE_DIRECTION_RULEBOOK.md` | 製品方向性 — ポジション、ターゲットユーザー、採用/非採用方針 |
+| `ADLAIRE_EDITOR_RULEBOOK.md` | エディタ規範 — 開発範囲、禁止事項、安定化原則 |
+| `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` | ライフサイクルシステム — Setup/Update 統合基盤、検証駆動原則 |
+
+上記ルールブックは特定バージョンに従属しない恒常的規範として、すべての開発判断に適用される。
 
 ---
 
@@ -34,27 +44,100 @@ Ver.1.x からの継承 + Ver.2.0 追加ファイル:
 
 ### 2.2 セットアップツール（bundle-installer.php）
 
-> 詳細仕様は今後策定する。
+> 上位原則は `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` に従う。
 
-**概要**: 公式リリースZIP専用の検証付き初期セットアップツール。1ファイルで完結。
+#### 2.2.1 概要
 
-**画面フロー**:
-1. Welcome / Release Check — バンドル検証、バージョン表示
-2. Environment Check — PHP 8.3+、`files/` 書き込み権限、必須ファイル確認
-3. Site Configuration — サイト名、言語、タイムゾーン、管理者アカウント作成
-4. Install Execution — 設定保存、管理者作成、install.lock 生成
-5. Finish / Security Notice — 完了通知、`?login` / `?admin` 導線、削除案内
+公式リリースZIP専用の検証付き初期セットアップツール。PHP単一ファイルで完結する。
+本番環境に Node.js ビルドを持ち込まない。ビルド済みリリース物が配置済みであることを前提とする。
 
-**セキュリティ要件**:
-- CSRF対策（全POSTステップ）
-- パスワードは bcrypt ハッシュ保存
-- HTML出力はエスケープ
-- install.lock による再実行防止
-- 完了後のインストーラー削除案内
+#### 2.2.2 画面フロー
+
+| Step | 画面 | 処理内容 |
+|:----:|------|---------|
+| 0 | Welcome / Release Check | `release-manifest.json` 検証、`VERSION` 表示、バンドル整合性確認 |
+| 1 | Environment Check | PHP 8.3+ 確認、`files/` 書き込み権限、必須ファイル存在確認、セッション利用可否 |
+| 2 | Site Configuration | サイト名、デフォルト言語（ja/en）、管理者パスワード入力、パスワード確認 |
+| 3 | Install Execution | `files/` ディレクトリ生成、`config.json` 保存、管理者作成（bcrypt）、`install.lock` 生成 |
+| 4 | Finish / Security Notice | 完了通知、`?login` / `?admin` 導線、インストーラー削除案内 |
+
+#### 2.2.3 入力項目
+
+| 項目 | キー | 型 | 必須 | 備考 |
+|-----|-----|-----|:----:|------|
+| サイト名 | `site_name` | string | Yes | 空不可 |
+| デフォルト言語 | `default_locale` | enum | Yes | `ja` / `en` |
+| 管理者パスワード | `admin_password` | string | Yes | 最低8文字 |
+| パスワード確認 | `admin_password_confirm` | string | Yes | 一致必須 |
+
+#### 2.2.4 処理仕様
+
+**Step 0 — バンドル検証**:
+- `release-manifest.json` が存在しなければ即停止
+- `required_files` に記載されたファイルの存在を検証
+- 検証失敗時は不足ファイル一覧を表示して停止
+
+**Step 1 — 環境チェック**:
+- `PHP_VERSION >= 8.3` を検証。不足時は停止
+- `files/` ディレクトリの書き込み可否を検証。不可なら作成を試行
+- `password_hash()` 関数の存在を確認
+- HTTPS 未使用時は警告表示（停止はしない）
+
+**Step 2 — 設定入力**:
+- 各ステップで CSRF トークンを検証（`csrf_token()` / `csrf_verify()` を利用）
+- バリデーション失敗時は再入力画面を表示
+
+**Step 3 — インストール実行**:
+- `FileStorage::ensureDirectories()` でディレクトリ生成
+- `config.json` にサイト名、言語を保存（`FileStorage::writeConfig()`）
+- 管理者パスワードを `password_hash()` で bcrypt 化して保存
+- `files/system/install.lock` を生成（JSON形式、`installed_at` タイムスタンプ付き）
+- 処理失敗時はエラー表示して停止（部分的初期化のロールバックは行わない）
+
+**Step 4 — 完了**:
+- `?login` と `?admin` のリンクを表示
+- `bundle-installer.php` の削除案内を表示
+- 自己削除を試行（`unlink(__FILE__)`）。失敗時は手動削除方法を表示
+
+#### 2.2.5 再実行防止
+
+- `install.lock` が存在する場合、セットアップを即停止する
+- 「既にインストール済みです」メッセージを表示
+
+#### 2.2.6 セキュリティ要件
+
+| 要件 | 優先度 |
+|------|:------:|
+| 全 POST ステップで CSRF 対策 | MUST |
+| パスワードは bcrypt ハッシュ保存（平文保存禁止） | MUST |
+| HTML 出力はエスケープ（`htmlspecialchars`） | MUST |
+| `install.lock` による再実行防止 | MUST |
+| 完了後のインストーラー削除案内 | MUST |
+| HTTPS 未使用時の警告表示 | SHOULD |
+| エラーやログに機密値を出力しない | MUST |
+
+#### 2.2.7 内部構成（1ファイル内）
+
+```
+bundle-installer.php
+├── detect_*()    — 環境検査関数群
+├── load_*()      — manifest / version 読込関数群
+├── validate_*()  — 入力検証関数群
+├── install_*()   — 初期化処理関数群
+├── render_*()    — HTML描画関数群
+└── security_*()  — CSRF / escape / password 関数群
+```
+
+#### 2.2.8 既存コードとの連携
+
+- `core.php` の `FileStorage` クラスを直接利用する（`require __DIR__ . '/core.php'`）
+- `esc()`, `csrf_token()`, `csrf_verify()` ヘルパー関数を利用する
+- セットアップ完了後は通常の `index.php` が動作する
 
 ### 2.3 アップデートシステム
 
-> 詳細未定。Ver.2.0 MVP 後に策定予定。
+> 上位原則は `ADLAIRE_LIFECYCLE_SYSTEM_RULEBOOK.md` に従う。
+> **Ver.2.0 MVP には含めない。** Ver.2.0 リリース後に詳細を策定する。
 
 **方針**（暫定）:
 - 管理 UI (`?admin`) からバージョン確認・更新を実行
@@ -118,7 +201,7 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 
 | # | 新機能 | 状態 |
 |---|--------|:----:|
-| 1 | セットアップツール（`bundle-installer.php`） | 詳細未定 |
+| 1 | セットアップツール（`bundle-installer.php`） | **仕様策定完了** |
 | 2 | アップデートシステム（バージョン更新機能） | 方針策定済（詳細はMVP後） |
 
 ### 3.2 Ver.2.1 — Ver.2.0 機能改良・バグ修正
@@ -138,6 +221,9 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 ### 3.4 Ver.2.3 — アーキテクチャ刷新
 
 > 検討中。Ver.2.2 リリース後に再検討。
+> **Ver.2.3 以降、ルールブックは分類/機能ベースに移行する。**
+> バージョンベースのルールブック（本ファイル含む）はいずれ廃止予定。
+> 詳細は `CHARTER.md` セクション 2.2「ルールブック移行方針」を参照。
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
@@ -148,6 +234,8 @@ Ver.1.x のデータ仕様を継承し、以下を追加:
 | 12 | イベントフック基盤の刷新（EventDispatcher） | 再検討予定 |
 
 ### 3.5 Ver.2.4 — エディタ高度化
+
+> 上位原則は `ADLAIRE_EDITOR_RULEBOOK.md` に従う。
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
