@@ -100,19 +100,19 @@ function renderAdminDashboard(App $app): void
         $value = esc((string) ($app->config[$key] ?? ''));
         $default = esc((string) ($app->defaults[$key] ?? ''));
         echo "<label>{$label}</label>";
-        echo "<input type='text' value='{$value}' placeholder='{$default}' onchange='fieldSave(\"{$key}\", this.value)'>";
+        echo "<input type='text' value='{$value}' placeholder='{$default}' data-action='field-save' data-field='" . esc($key) . "'>";
     }
 
     // Menu
     $menuLabel = esc($app->t('settings_menu'));
     $menuVal = esc($app->config['menu'] ?? '');
     echo "<label>{$menuLabel}</label>";
-    echo "<textarea onchange='fieldSave(\"menu\", this.value)'>{$menuVal}</textarea>";
+    echo "<textarea data-action='field-save' data-field='menu'>{$menuVal}</textarea>";
 
     // Theme
     $themeLabel = esc($app->t('settings_theme'));
     echo "<label>{$themeLabel}</label>";
-    echo "<select onchange='fieldSave(\"themeSelect\", this.value)'>";
+    echo "<select data-action='field-save' data-field='themeSelect'>";
     $themesDir = dirname(__DIR__) . '/themes';
     if (is_dir($themesDir)) {
         $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
@@ -129,7 +129,7 @@ function renderAdminDashboard(App $app): void
     // Language
     $langLabel = esc($app->t('settings_language'));
     echo "<label>{$langLabel}</label>";
-    echo "<select onchange='fieldSave(\"language\", this.value)'>";
+    echo "<select data-action='field-save' data-field='language'>";
     foreach (['ja' => '日本語', 'en' => 'English'] as $code => $label) {
         $selected = ($code === $app->language) ? ' selected' : '';
         echo "<option value='{$code}'{$selected}>{$label}</option>";
@@ -141,37 +141,47 @@ function renderAdminDashboard(App $app): void
     // Export/Import/Generate
     echo '<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">';
     echo '<a class="admin-btn admin-btn--outline" href="?api=export">Export</a>';
-    echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">Import <input type="file" accept=".json" style="display:none;" onchange="importSite(this)"></label>';
-    echo '<button class="admin-btn" onclick="generateSite()">Generate Static Site</button>';
+    echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">Import <input type="file" accept=".json" style="display:none;" data-action="import-site"></label>';
+    echo '<button class="admin-btn" data-action="generate-site">Generate Static Site</button>';
     echo '</div>';
     echo '<div id="import-result" style="margin-top:4px;font-size:13px;"></div>';
     echo '<div id="generate-result" style="margin-top:8px;font-size:13px;"></div>';
     echo '<script>';
-    echo 'function importSite(input){';
-    echo 'var file=input.files[0];if(!file)return;';
+    echo 'document.addEventListener("change",function(e){';
+    echo 'var el=e.target;';
+    echo 'if(el.matches("[data-action=\\"field-save\\"]")){fieldSave(el.getAttribute("data-field"),el.value);}';
+    echo 'if(el.matches("[data-action=\\"import-site\\"]")){';
+    echo 'var file=el.files[0];if(!file)return;';
     echo 'var reader=new FileReader();reader.onload=function(){';
     echo 'api.importSite(reader.result).then(function(r){';
     echo 'document.getElementById("import-result").textContent="Imported: config="+r.config+", pages="+r.pages;';
     echo 'document.getElementById("import-result").style.color="#0a0";';
     echo 'setTimeout(function(){location.reload();},1500);';
-    echo '}).catch(function(e){document.getElementById("import-result").textContent="Error: "+e.message;document.getElementById("import-result").style.color="#c00";});';
+    echo '}).catch(function(err){document.getElementById("import-result").textContent="Error: "+err.message;document.getElementById("import-result").style.color="#c00";});';
     echo '};reader.readAsText(file);}';
-    echo 'function generateSite(){';
+    echo '});';
+    echo 'document.addEventListener("click",function(e){';
+    echo 'var btn=e.target.closest("[data-action=\\"generate-site\\"]");';
+    echo 'if(!btn)return;';
     echo 'var el=document.getElementById("generate-result");';
     echo 'el.textContent="Generating...";el.style.color="#f90";';
     echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
     echo 'fetch("index.php?api=generate",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
     echo '.then(function(r){return r.json();})';
     echo '.then(function(d){if(d.status==="ok"){el.textContent="Generated "+d.pages+" pages to "+d.output;el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
-    echo '.catch(function(e){el.textContent="Error: "+e.message;el.style.color="#c00";});';
-    echo '}';
+    echo '.catch(function(err){el.textContent="Error: "+err.message;el.style.color="#c00";});';
+    echo '});';
     echo '</script>';
 
     echo '<script>';
-    echo 'function deletePage(slug){';
+    echo 'document.addEventListener("click",function(e){';
+    echo 'var btn=e.target.closest("[data-action=\\"delete\\"]");';
+    echo 'if(!btn)return;';
+    echo 'e.preventDefault();';
+    echo 'var slug=JSON.parse(btn.getAttribute("data-slug"));';
     echo 'if(!confirm("Delete page: "+slug+"?"))return;';
-    echo 'api.deletePage(slug).then(function(){location.reload();}).catch(function(e){alert("Error: "+e.message);});';
-    echo '}';
+    echo 'api.deletePage(slug).then(function(){location.reload();}).catch(function(err){alert("Error: "+err.message);});';
+    echo '});';
     echo '</script>';
 
     // --- System Info ---
@@ -290,18 +300,19 @@ function renderAdminNewPage(App $app): void
     echo "<label>Format</label>";
     echo "<select id='new-format'><option value='blocks'>Blocks</option><option value='markdown'>Markdown</option></select>";
     echo "<br><br>";
-    echo "<button onclick='createNewPage()'>Create Page</button>";
+    echo "<button data-action='create-page'>Create Page</button>";
     echo "</div>";
     echo "<script>";
-    echo "function createNewPage(){";
+    echo "document.addEventListener('click',function(e){";
+    echo "if(!e.target.closest('[data-action=\"create-page\"]'))return;";
     echo "var slug=document.getElementById('new-slug').value.toLowerCase().replace(/\\s+/g,'-');";
     echo "var fmt=document.getElementById('new-format').value;";
     echo "if(!slug){alert('Slug is required');return;}";
     echo "var content=fmt==='blocks'?JSON.stringify([{type:'paragraph',data:{text:''}}]):'';";
     echo "api.savePage(slug,content,fmt).then(function(){";
     echo "location.href='?admin=edit&page='+encodeURIComponent(slug);";
-    echo "}).catch(function(e){alert('Error: '+e.message);});";
-    echo "}";
+    echo "}).catch(function(err){alert('Error: '+err.message);});";
+    echo "});";
     echo "</script>";
     echo "</section>";
 }

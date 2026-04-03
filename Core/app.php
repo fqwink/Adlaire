@@ -38,6 +38,9 @@ final class App
     /** @var array<string, string> */
     private array $translations = [];
 
+    /** @var string[]|null */
+    private ?array $menuItems = null;
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -67,21 +70,22 @@ final class App
             ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
             : '';
 
-        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $httpHost = filter_input(INPUT_SERVER, 'HTTP_HOST') ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
         if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
             $httpHost = 'localhost';
         }
 
-        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'] ?? '/')) ?? '/';
+        $rawUri = $_SERVER['REQUEST_URI'] ?? '/';
+        $parsedPath = parse_url($rawUri, PHP_URL_PATH);
+        $uri = is_string($parsedPath) ? (preg_replace('#/+#', '/', urldecode($parsedPath)) ?? '/') : '/';
 
         $host = ($rp !== '' && str_contains($uri, $rp))
             ? $httpHost . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
             : $httpHost . '/' . $uri;
 
-        $host = explode('?', $host)[0];
         $host = '//' . preg_replace('#/+#', '/', $host);
 
-        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp) ?? '';
         $rp = trim($rp, '/');
 
         return [$host, $rp];
@@ -323,7 +327,9 @@ final class App
 
     public function login(): string
     {
-        csrf_verify();
+        if (!csrf_verify()) {
+            return $this->t('csrf_error');
+        }
 
         if (!login_rate_check()) {
             return $this->t('login_rate_limited');
@@ -332,27 +338,8 @@ final class App
         $stored = $this->config['password'];
         $input = $_POST['password'] ?? '';
 
-        $md5Migrated = false;
-        $isBcrypt = str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2b$');
-        if (!$isBcrypt && strlen($stored) === 32 && ctype_xdigit($stored)) {
-            $valid = hash_equals($stored, md5($input));
-            if ($valid) {
-                $this->config['password'] = $this->savePassword($input);
-                $md5Migrated = true;
-            }
-        } else {
-            $valid = password_verify($input, $stored);
-        }
-
-        if (!$valid) {
+        if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
-        }
-
-        if ($md5Migrated) {
-            session_regenerate_id(true);
-            $_SESSION['l'] = $this->config['password'];
-            $_SESSION['last_activity'] = time();
-            return $this->t('password_migrated');
         }
 
         $newPass = $_POST['new'] ?? '';
@@ -374,7 +361,7 @@ final class App
         session_regenerate_id(true);
         $_SESSION['l'] = $this->config['password'];
         $_SESSION['last_activity'] = time();
-        header('Location: ./');
+        header('Location: ' . $this->host);
         exit;
     }
 
@@ -440,8 +427,11 @@ final class App
 
     public function menu(): void
     {
-        $menu = str_replace("\r\n", "\n", $this->config['menu']);
-        $items = explode("<br />\n", $menu);
+        if ($this->menuItems === null) {
+            $menu = str_replace("\r\n", "\n", $this->config['menu']);
+            $this->menuItems = explode("<br />\n", $menu);
+        }
+        $items = $this->menuItems;
         echo '<ul>';
         foreach ($items as $item) {
             $item = trim($item);

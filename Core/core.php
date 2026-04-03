@@ -25,6 +25,7 @@ final class FileStorage
     private string $pagesDir;
     private string $backupsDir;
     private string $revisionsDir;
+    private bool $migrated = false;
 
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
@@ -54,7 +55,9 @@ final class FileStorage
         // Auto-migrate from legacy files/ to data/ directory
         $legacyDir = dirname($this->basePath) . '/files';
         if ($this->basePath === 'data' && !is_dir($this->basePath) && is_dir($legacyDir)) {
-            rename($legacyDir, $this->basePath);
+            if (!rename($legacyDir, $this->basePath)) {
+                error_log('Adlaire: Failed to rename legacy directory: ' . $legacyDir);
+            }
         }
 
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
@@ -90,9 +93,11 @@ final class FileStorage
      */
     public function migrate(): void
     {
-        if (file_exists($this->configFile)) {
+        if ($this->migrated || file_exists($this->configFile)) {
+            $this->migrated = true;
             return;
         }
+        $this->migrated = true;
 
         $config = [];
         foreach (self::CONFIG_KEYS as $key) {
@@ -332,10 +337,8 @@ final class FileStorage
      */
     public function listPages(): array
     {
-        // Try index cache first (metadata only, used as slug list)
         $cacheFile = $this->basePath . '/pages.index.json';
-        $useCachedSlugs = false;
-        $cachedSlugs = [];
+        $cachedIndex = null;
 
         if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
             $cacheMtime = filemtime($cacheFile);
@@ -343,20 +346,18 @@ final class FileStorage
             if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
                 $cached = $this->lockedRead($cacheFile);
                 if ($cached !== false) {
-                    $data = json_decode($cached, true);
-                    if (is_array($data)) {
-                        $cachedSlugs = array_keys($data);
-                        $useCachedSlugs = true;
+                    $decoded = json_decode($cached, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $cachedIndex = $decoded;
                     }
                 }
             }
         }
 
-        // Build full data from files
         $pages = [];
 
-        if ($useCachedSlugs) {
-            foreach ($cachedSlugs as $slug) {
+        if ($cachedIndex !== null) {
+            foreach ($cachedIndex as $slug => $meta) {
                 $data = $this->readPageData($slug);
                 if ($data !== false) {
                     $pages[$slug] = $data;

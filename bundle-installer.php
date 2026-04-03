@@ -203,7 +203,7 @@ function security_csrf_verify(): bool
 
 // --- Router ---
 
-$step = (int) ($_REQUEST['step'] ?? 0);
+$step = max(0, min(4, (int) ($_REQUEST['step'] ?? 0)));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!security_csrf_verify()) {
@@ -243,7 +243,7 @@ $csrf = security_csrf_token();
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Adlaire Setup — Step <?= $step ?></title>
+    <title>Adlaire Setup — Step <?= (int) $step ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <style>

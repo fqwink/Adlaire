@@ -19,10 +19,7 @@ function esc(string $value): string
 
 function csrf_token(): string
 {
-    if (!isset($_SESSION['csrf']) || $_SESSION['csrf'] === '') {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf'];
+    return $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 }
 
 function csrf_verify(): bool

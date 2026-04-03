@@ -70,7 +70,9 @@ function handleApiGenerate(FileStorage $storage): void
         mkdir($cssDir, 0755, true);
     }
     if (is_file($themePath . '/style.css')) {
-        copy($themePath . '/style.css', $cssDir . '/style.css');
+        if (!copy($themePath . '/style.css', $cssDir . '/style.css')) {
+            error_log('Adlaire: Failed to copy theme CSS');
+        }
     }
 
     // Copy JS
@@ -83,7 +85,9 @@ function handleApiGenerate(FileStorage $storage): void
         $jsFiles = glob($jsSrc . '/*.js');
         if (is_array($jsFiles)) {
             foreach ($jsFiles as $jsFile) {
-                copy($jsFile, $jsDst . '/' . basename($jsFile));
+                if (!copy($jsFile, $jsDst . '/' . basename($jsFile))) {
+                    error_log('Adlaire: Failed to copy JS file: ' . basename($jsFile));
+                }
             }
         }
     }
@@ -98,7 +102,9 @@ function handleApiGenerate(FileStorage $storage): void
         $langFiles = glob($langSrc . '/*.json');
         if (is_array($langFiles)) {
             foreach ($langFiles as $langFile) {
-                copy($langFile, $langDst . '/' . basename($langFile));
+                if (!copy($langFile, $langDst . '/' . basename($langFile))) {
+                    error_log('Adlaire: Failed to copy lang file: ' . basename($langFile));
+                }
             }
         }
     }

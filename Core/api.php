@@ -148,9 +148,9 @@ function handleApiPages(FileStorage $storage, string $method): void
 function apiPageList(FileStorage $storage): void
 {
     $pages = $storage->listPages();
-    // Strip content from listing for efficiency
     $summary = [];
     foreach ($pages as $slug => $data) {
+        unset($data['content'], $data['blocks']);
         $summary[$slug] = [
             'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
@@ -323,7 +323,11 @@ function handleApiSearch(FileStorage $storage): void
     }
 
     $query = mb_strtolower($rawQuery, 'UTF-8');
-    $pages = $storage->listPublishedPages();
+    static $cachedPages = null;
+    if ($cachedPages === null) {
+        $cachedPages = $storage->listPublishedPages();
+    }
+    $pages = $cachedPages;
     $results = [];
 
     foreach ($pages as $slug => $data) {
@@ -435,8 +439,19 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    if ($contentType !== '' && !str_contains($contentType, 'application/json') && !str_contains($contentType, 'application/x-www-form-urlencoded')) {
+        apiError(400, 'Unsupported Content-Type');
+        return;
+    }
+
+    if (mb_detect_encoding($input, 'UTF-8', true) === false) {
+        apiError(400, 'Input must be valid UTF-8');
+        return;
+    }
+
     $data = json_decode($input, true);
-    if (!is_array($data)) {
+    if (!is_array($data) || json_last_error() !== JSON_ERROR_NONE) {
         apiError(400, 'Invalid JSON');
         return;
     }

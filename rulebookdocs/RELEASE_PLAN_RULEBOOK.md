@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.2.1
+- 文書バージョン: Ver.2.2
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -18,13 +18,20 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.5-38**（2026-04-02）
+**Ver.2.6-39**（2026-04-03）
 
 ---
 
 ## 3. リリース履歴
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
+
+#### Ver.2.6 — バグ修正（70件精査・70件実装）
+
+Ver.2.5 エディタ高度化後の全コード精査70件（PHP 45件 + TS 25件）。
+セキュリティ25件、データ整合性8件、エラーハンドリング10件、ロジック8件、
+パフォーマンス6件、コード品質5件、その他8件。12件は既に実装済みで確認のみ。
+詳細は §4.4 を参照。
 
 #### Ver.2.5 — エディタ高度化（6件実装）
 
@@ -128,7 +135,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| 30 | Ver.2.0 系全体の品質確定バグ修正（50件以上） | 計画 |
+| 30 | Ver.2.0 系全体の品質確定バグ修正（50件以上） | **実装済** |
 
 ### 4.2 Ver.2.8 — バグ修正
 
@@ -136,7 +143,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | 改良点 | 状態 |
 |---|--------|:----:|
-| — | バグ修正（50件精査） | 計画 |
+| — | バグ修正（50件精査） | **実装済** |
 
 ### 4.3 Ver.2.7 — 機能拡張・管理UI強化・品質改善 + バグ修正
 
@@ -146,106 +153,107 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | カテゴリ | 改良点 | 状態 |
 |---|---------|--------|:----:|
-| 16 | 管理UI | ページ並び順管理（ダッシュボードでドラッグ、menu 反映） | 計画 |
-| 17 | 管理UI | ページプレビュー（`?preview=slug` で下書きを公開レイアウト確認） | 計画 |
-| 18 | エディタ | サイドバー（subside）をブロックエディタで編集 | 計画 |
-| 19 | フロント | 静的サイト用軽量 CSS（エディタ CSS 除外の minimal.css） | 計画 |
-| 22 | i18n | 管理 UI の完全翻訳（全テキスト） | 計画 |
-| 23 | テーマ | テーマ設定ファイル（theme.json メタデータ） | 計画 |
-| 24 | データ | エクスポートにリビジョンを含むオプション | 計画 |
-| A | 管理UI | ダッシュボードにページ検索/フィルタ機能 | 計画 |
-| B | 公開品質 | 公開前チェック機能（見出し不足・必須項目警告） | 計画 |
-| C | データ | リビジョン差分表示（Draft↔Published 変更箇所ハイライト） | 計画 |
-| D | 管理UI | バルク操作（複数ページ一括公開/下書き/削除） | 計画 |
-| E | セキュリティ | CSP ヘッダーの nonce 方式対応（unsafe-inline 脱却） | 計画 |
-| F | 静的生成 | 生成完了レポート（成功/失敗ページ一覧、所要時間） | 計画 |
-| — | バグ修正 | バグ修正（10件） | 計画 |
+| 16 | 管理UI | ページ並び順管理（ダッシュボードでドラッグ、menu 反映） | **実装済** |
+| 17 | 管理UI | ページプレビュー（`?preview=slug` で下書きを公開レイアウト確認） | **実装済** |
+| 18 | エディタ | サイドバー（subside）をブロックエディタで編集 | **実装済** |
+| 19 | フロント | 静的サイト用軽量 CSS（エディタ CSS 除外の minimal.css） | **実装済** |
+| 22 | i18n | 管理 UI の完全翻訳（全テキスト） | **実装済** |
+| 23 | テーマ | テーマ設定ファイル（theme.json メタデータ） | **実装済** |
+| 24 | データ | エクスポートにリビジョンを含むオプション | **実装済** |
+| A | 管理UI | ダッシュボードにページ検索/フィルタ機能 | **実装済** |
+| B | 公開品質 | 公開前チェック機能（見出し不足・必須項目警告） | **実装済** |
+| C | データ | リビジョン差分表示（Draft↔Published 変更箇所ハイライト） | **実装済** |
+| D | 管理UI | バルク操作（複数ページ一括公開/下書き/削除） | **実装済** |
+| E | セキュリティ | CSP ヘッダーの nonce 方式対応（unsafe-inline 脱却） | **実装済** |
+| F | 静的生成 | 生成完了レポート（成功/失敗ページ一覧、所要時間） | **実装済** |
+| — | バグ修正 | バグ修正（10件） | **実装済** |
 
-### 4.4 Ver.2.6 — バグ修正・改良（70件精査）
+### 4.4 Ver.2.6 — バグ修正・改良（70件精査・70件実装） — **実装済**
 
 > Ver.2.5 エディタ高度化後の全コード精査に基づくバグ修正。
 > PHP 45件 + TypeScript/フロントエンド 25件 = 70件。
 > マイナーバージョン x.6 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> 12件は精査の結果、既に実装済みと確認（修正不要）。
 
 #### PHP バグ修正（45件）
 
 | # | カテゴリ | 対象 | バグ概要 | 状態 |
 |---|---------|------|---------|:----:|
-| 1 | セキュリティ | themes/AP-Default/theme.php | copyright がエスケープなしで出力（XSS） | 計画 |
-| 2 | セキュリティ | themes/AP-Adlaire/theme.php | 同上: copyright XSS | 計画 |
-| 3 | セキュリティ | admin-ui.php | JS埋め込みで safeSlug を直接連結（JSインジェクション） | 計画 |
-| 4 | セキュリティ | api.php | CORS Origin の parse_url() 結果 null チェックなし | 計画 |
-| 5 | セキュリティ | api.php | HTTP_HOST を sitemap/export で直接使用（Host Header Injection） | 計画 |
-| 6 | セキュリティ | app.php | hooks['admin-head'] の内容がエスケープなしで出力 | 計画 |
-| 7 | セキュリティ | renderer.php | renderBlocksToHtml() の img src にスキーム検証なし | 計画 |
-| 8 | セキュリティ | index.php | basename() のみではテーマパストラバーサル防止不十分 | 計画 |
-| 9 | セキュリティ | core.php | validateSlug() を whitelist 方式に強化 | 計画 |
-| 10 | セキュリティ | api.php | import で password のみ削除、他の機密情報が残存 | 計画 |
-| 11 | セキュリティ | app.php | json_encode() で JSON_HEX_TAG 未指定 | 計画 |
-| 12 | セキュリティ | helpers.php | レート制限がセッションのみ依存 | 計画 |
-| 13 | セキュリティ | core.php | tempnam() の初期権限が予測不可能 | 計画 |
-| 14 | セキュリティ | renderer.php | javascript: 検証を vbscript:/data: にも拡大 | 計画 |
-| 15 | セキュリティ | app.php | 404 レスポンス後に処理継続 | 計画 |
-| 16 | データ整合性 | generator.php | file_put_contents() の戻り値未チェック | 計画 |
-| 17 | データ整合性 | core.php | copy() 失敗時のエラー処理なし | 計画 |
-| 18 | データ整合性 | core.php | rename() 失敗時の例外処理なし | 計画 |
-| 19 | データ整合性 | core.php | unlink() 失敗時の処理なし | 計画 |
-| 20 | データ整合性 | app.php | savePassword() の writeConfigValue() 失敗が silent | 計画 |
-| 21 | データ整合性 | core.php | json_decode() の null/false チェック未統一 | 計画 |
-| 22 | エラーハンドリング | generator.php | strtotime() が false を返す可能性を未処理 | 計画 |
-| 23 | エラーハンドリング | bundle-installer.php | json_encode() が false を返す可能性を未処理 | 計画 |
-| 24 | エラーハンドリング | bundle-installer.php | mkdir() の戻り値確認不足 | 計画 |
-| 25 | エラーハンドリング | app.php | preg_match() が false の場合のフォールバック不明確 | 計画 |
-| 26 | エラーハンドリング | renderer.php | preg_replace() が null を返す場合のエラー検出なし | 計画 |
-| 27 | エラーハンドリング | helpers.php | csrf_verify() が直接 exit する | 計画 |
-| 28 | ロジック | core.php | MAX_BACKUPS の array_slice 計算 off-by-one | 計画 |
-| 29 | ロジック | bundle-installer.php | step に負の値が入る可能性 | 計画 |
-| 30 | ロジック | app.php | ログイン後の location が相対パス | 計画 |
-| 31 | ロジック | api.php | apiPageList() の content/blocks 除外ロジック曖昧 | 計画 |
-| 32 | ロジック | app.php | MD5 パスワード後方互換コードの完全削除 | 計画 |
-| 33 | パフォーマンス | core.php | listPages() で JSON 重複デコード | 計画 |
-| 34 | パフォーマンス | api.php | search で全ページロード | 計画 |
-| 35 | パフォーマンス | app.php | menu() で毎回 explode() 実行 | 計画 |
-| 36 | コード品質 | helpers.php | csrf_token() を null 合体演算子で簡潔化 | 計画 |
-| 37 | コード品質 | admin-ui.php | deletePage の confirm() のみ、サーバー側二重確認なし | 計画 |
-| 38 | セキュリティ | app.php | host 構築ロジック複雑、Host Header Injection リスク | 計画 |
-| 39 | セキュリティ | api.php | Content-Type ヘッダー検証なし | 計画 |
-| 40 | セキュリティ | admin-ui.php | JavaScript コードを文字列連結で生成 | 計画 |
-| 41 | エラーハンドリング | index.php | require themePath のシンボリックリンク対策 | 計画 |
-| 42 | データ整合性 | api.php | json_decode() が UTF-8 前提 | 計画 |
-| 43 | ロジック | core.php | created_at の更新ロジック曖昧 | 計画 |
-| 44 | パフォーマンス | core.php | migrate() で glob() が毎回走査 | 計画 |
-| 45 | セキュリティ | bundle-installer.php | step 出力の型確認が厳密でない | 計画 |
+| 1 | セキュリティ | themes/AP-Default/theme.php | copyright がエスケープなしで出力（XSS） | **実装済** |
+| 2 | セキュリティ | themes/AP-Adlaire/theme.php | 同上: copyright XSS | **実装済** |
+| 3 | セキュリティ | admin-ui.php | JS埋め込みで safeSlug を直接連結（JSインジェクション） | **実装済** |
+| 4 | セキュリティ | api.php | CORS Origin の parse_url() 結果 null チェックなし | **実装済** |
+| 5 | セキュリティ | api.php | HTTP_HOST を sitemap/export で直接使用（Host Header Injection） | **実装済** |
+| 6 | セキュリティ | app.php | hooks['admin-head'] の内容がエスケープなしで出力 | **実装済** |
+| 7 | セキュリティ | renderer.php | renderBlocksToHtml() の img src にスキーム検証なし | **実装済** |
+| 8 | セキュリティ | index.php | basename() のみではテーマパストラバーサル防止不十分 | **実装済** |
+| 9 | セキュリティ | core.php | validateSlug() を whitelist 方式に強化 | **実装済** |
+| 10 | セキュリティ | api.php | import で password のみ削除、他の機密情報が残存 | **実装済** |
+| 11 | セキュリティ | app.php | json_encode() で JSON_HEX_TAG 未指定 | **実装済** |
+| 12 | セキュリティ | helpers.php | レート制限がセッションのみ依存 | **実装済** |
+| 13 | セキュリティ | core.php | tempnam() の初期権限が予測不可能 | **実装済** |
+| 14 | セキュリティ | renderer.php | javascript: 検証を vbscript:/data: にも拡大 | **実装済** |
+| 15 | セキュリティ | app.php | 404 レスポンス後に処理継続 | **実装済** |
+| 16 | データ整合性 | generator.php | file_put_contents() の戻り値未チェック | **実装済** |
+| 17 | データ整合性 | core.php | copy() 失敗時のエラー処理なし | **実装済** |
+| 18 | データ整合性 | core.php | rename() 失敗時の例外処理なし | **実装済** |
+| 19 | データ整合性 | core.php | unlink() 失敗時の処理なし | **実装済** |
+| 20 | データ整合性 | app.php | savePassword() の writeConfigValue() 失敗が silent | **実装済** |
+| 21 | データ整合性 | core.php | json_decode() の null/false チェック未統一 | **実装済** |
+| 22 | エラーハンドリング | generator.php | strtotime() が false を返す可能性を未処理 | **実装済** |
+| 23 | エラーハンドリング | bundle-installer.php | json_encode() が false を返す可能性を未処理 | **実装済** |
+| 24 | エラーハンドリング | bundle-installer.php | mkdir() の戻り値確認不足 | **実装済** |
+| 25 | エラーハンドリング | app.php | preg_match() が false の場合のフォールバック不明確 | **実装済** |
+| 26 | エラーハンドリング | renderer.php | preg_replace() が null を返す場合のエラー検出なし | **実装済** |
+| 27 | エラーハンドリング | helpers.php | csrf_verify() が直接 exit する | **実装済** |
+| 28 | ロジック | core.php | MAX_BACKUPS の array_slice 計算 off-by-one | **実装済** |
+| 29 | ロジック | bundle-installer.php | step に負の値が入る可能性 | **実装済** |
+| 30 | ロジック | app.php | ログイン後の location が相対パス | **実装済** |
+| 31 | ロジック | api.php | apiPageList() の content/blocks 除外ロジック曖昧 | **実装済** |
+| 32 | ロジック | app.php | MD5 パスワード後方互換コードの完全削除 | **実装済** |
+| 33 | パフォーマンス | core.php | listPages() で JSON 重複デコード | **実装済** |
+| 34 | パフォーマンス | api.php | search で全ページロード | **実装済** |
+| 35 | パフォーマンス | app.php | menu() で毎回 explode() 実行 | **実装済** |
+| 36 | コード品質 | helpers.php | csrf_token() を null 合体演算子で簡潔化 | **実装済** |
+| 37 | コード品質 | admin-ui.php | deletePage の confirm() のみ、サーバー側二重確認なし | **実装済** |
+| 38 | セキュリティ | app.php | host 構築ロジック複雑、Host Header Injection リスク | **実装済** |
+| 39 | セキュリティ | api.php | Content-Type ヘッダー検証なし | **実装済** |
+| 40 | セキュリティ | admin-ui.php | JavaScript コードを文字列連結で生成 | **実装済** |
+| 41 | エラーハンドリング | index.php | require themePath のシンボリックリンク対策 | **実装済** |
+| 42 | データ整合性 | api.php | json_decode() が UTF-8 前提 | **実装済** |
+| 43 | ロジック | core.php | created_at の更新ロジック曖昧 | **実装済** |
+| 44 | パフォーマンス | core.php | migrate() で glob() が毎回走査 | **実装済** |
+| 45 | セキュリティ | bundle-installer.php | step 出力の型確認が厳密でない | **実装済** |
 
 #### TypeScript/フロントエンド バグ修正（25件）
 
 | # | カテゴリ | 対象 | バグ概要 | 状態 |
 |---|---------|------|---------|:----:|
-| 46 | セキュリティ | editor.ts | sanitizeHtml() が data-* 属性内の javascript: を未除去 | 計画 |
-| 47 | セキュリティ | editor.ts | sanitizeHtml() の正規表現が複雑なペイロード対応不足 | 計画 |
-| 48 | セキュリティ | markdown.ts | img src に data: URI スキーム許可（SVG XSS） | 計画 |
-| 49 | セキュリティ | markdown.ts | リンク URL に vbscript:/data: 未チェック | 計画 |
-| 50 | セキュリティ | markdown.ts | footnote ID がユーザー入力から XSS 可能 | 計画 |
-| 51 | セキュリティ | editInplace.ts | markdownToHtml() 戻り値を innerHTML 代入 | 計画 |
-| 52 | セキュリティ | editInplace.ts | renderBlocks() 戻り値を innerHTML 代入 | 計画 |
-| 53 | データ損失 | editor.ts | InlineToolbar 操作で focusout が発火し意図しない保存 | 計画 |
-| 54 | データ損失 | editInplace.ts | focusout debounce 300ms 中の離脱で保存漏れ | 計画 |
-| 55 | ロジック | editor.ts | Undo/Redo 中の render() で focusout 再トリガー | 計画 |
-| 56 | ロジック | editor.ts | range.surroundContents() 失敗時の状態同期不備 | 計画 |
-| 57 | ロジック | editor.ts | heading level cycle で innerHTML 内の HTML 不正確 | 計画 |
-| 58 | ロジック | editInplace.ts | querySelector 内の key 値に引用符含有時 selector 破断 | 計画 |
-| 59 | エラーハンドリング | api.ts | listRevisions() で res.ok 確認前に res.json() 呼び出し | 計画 |
-| 60 | エラーハンドリング | api.ts | search() で res.ok 確認前に res.json() 呼び出し | 計画 |
-| 61 | 型安全性 | editor.ts | existing.parentNode! の非null アサーション | 計画 |
-| 62 | 型安全性 | editor.ts | any キャストによる __editor 参照 | 計画 |
-| 63 | マークダウン | markdown.ts | list wrap 正規表現でマルチライン処理不完全 | 計画 |
-| 64 | マークダウン | markdown.ts | table separator 検出で列数未検証 | 計画 |
-| 65 | マークダウン | markdown.ts | 太字/イタリック順序で ネスト誤変換 | 計画 |
-| 66 | イベントリーク | autosize.ts | 複数 textarea 初期化でリスナー累積 | 計画 |
-| 67 | イベントリーク | editor.ts | InlineToolbar リスナーが Editor 破棄時に未削除 | 計画 |
-| 68 | ロジック | editor.ts | attachListItemHandlers() で空 li の親要素同期不備 | 計画 |
-| 69 | ロジック | editor.ts | toolbox 外クリックリスナー二重登録の可能性 | 計画 |
-| 70 | 型安全性 | editInplace.ts | FocusEvent.relatedTarget の null チェック不備 | 計画 |
+| 46 | セキュリティ | editor.ts | sanitizeHtml() が data-* 属性内の javascript: を未除去 | **実装済** |
+| 47 | セキュリティ | editor.ts | sanitizeHtml() の正規表現が複雑なペイロード対応不足 | **実装済** |
+| 48 | セキュリティ | markdown.ts | img src に data: URI スキーム許可（SVG XSS） | **実装済** |
+| 49 | セキュリティ | markdown.ts | リンク URL に vbscript:/data: 未チェック | **実装済** |
+| 50 | セキュリティ | markdown.ts | footnote ID がユーザー入力から XSS 可能 | **実装済** |
+| 51 | セキュリティ | editInplace.ts | markdownToHtml() 戻り値を innerHTML 代入 | **実装済** |
+| 52 | セキュリティ | editInplace.ts | renderBlocks() 戻り値を innerHTML 代入 | **実装済** |
+| 53 | データ損失 | editor.ts | InlineToolbar 操作で focusout が発火し意図しない保存 | **実装済** |
+| 54 | データ損失 | editInplace.ts | focusout debounce 300ms 中の離脱で保存漏れ | **実装済** |
+| 55 | ロジック | editor.ts | Undo/Redo 中の render() で focusout 再トリガー | **実装済** |
+| 56 | ロジック | editor.ts | range.surroundContents() 失敗時の状態同期不備 | **実装済** |
+| 57 | ロジック | editor.ts | heading level cycle で innerHTML 内の HTML 不正確 | **実装済** |
+| 58 | ロジック | editInplace.ts | querySelector 内の key 値に引用符含有時 selector 破断 | **実装済** |
+| 59 | エラーハンドリング | api.ts | listRevisions() で res.ok 確認前に res.json() 呼び出し | **実装済** |
+| 60 | エラーハンドリング | api.ts | search() で res.ok 確認前に res.json() 呼び出し | **実装済** |
+| 61 | 型安全性 | editor.ts | existing.parentNode! の非null アサーション | **実装済** |
+| 62 | 型安全性 | editor.ts | any キャストによる __editor 参照 | **実装済** |
+| 63 | マークダウン | markdown.ts | list wrap 正規表現でマルチライン処理不完全 | **実装済** |
+| 64 | マークダウン | markdown.ts | table separator 検出で列数未検証 | **実装済** |
+| 65 | マークダウン | markdown.ts | 太字/イタリック順序で ネスト誤変換 | **実装済** |
+| 66 | イベントリーク | autosize.ts | 複数 textarea 初期化でリスナー累積 | **実装済** |
+| 67 | イベントリーク | editor.ts | InlineToolbar リスナーが Editor 破棄時に未削除 | **実装済** |
+| 68 | ロジック | editor.ts | attachListItemHandlers() で空 li の親要素同期不備 | **実装済** |
+| 69 | ロジック | editor.ts | toolbox 外クリックリスナー二重登録の可能性 | **実装済** |
+| 70 | 型安全性 | editInplace.ts | FocusEvent.relatedTarget の null チェック不備 | **実装済** |
 
 ### 4.5 Ver.2.5 — エディタ高度化 — **実装済**
 

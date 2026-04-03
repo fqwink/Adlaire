@@ -92,10 +92,10 @@ const api = {
      */
     async listRevisions(slug) {
         const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            return [];
         }
+        const json = await res.json();
         return json.revisions;
     },
     /**
@@ -121,10 +121,10 @@ const api = {
      */
     async search(query) {
         const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            return [];
         }
+        const json = await res.json();
         return json.results;
     },
     /**

@@ -66,7 +66,7 @@ function fieldSave(key, val) {
     });
 }
 function showFieldFeedback(key, success) {
-    const el = document.querySelector(`[onchange*="fieldSave(\\"${key}\\""]`)
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${CSS.escape(key)}\\""]`)
         || document.getElementById(key);
     if (!el)
         return;
@@ -117,7 +117,7 @@ function renderMarkdownContent() {
         const b64 = el.dataset.rawB64;
         const raw = b64 ? atob(b64) : (el.textContent || '');
         if (typeof markdownToHtml === 'function') {
-            el.innerHTML = markdownToHtml(raw);
+            el.innerHTML = sanitizeHtml(markdownToHtml(raw));
         }
     });
 }
@@ -135,7 +135,7 @@ function renderBlocksContent() {
             return;
         try {
             const blocks = JSON.parse(raw);
-            el.innerHTML = renderBlocks(blocks);
+            el.innerHTML = sanitizeHtml(renderBlocks(blocks));
         }
         catch {
             // Leave content as-is on parse failure
@@ -170,27 +170,37 @@ function initBlockEditor() {
         activeEditor = editorInstance;
         // Auto-save on focusout from the editor
         let saveTimer = null;
+        let lastSavedJson = '';
+        const flushSave = () => {
+            if (!editorInstance)
+                return;
+            const saved = editorInstance.save();
+            const json = JSON.stringify(saved.blocks);
+            const slug = wrapper.id;
+            if (!slug || json === lastSavedJson)
+                return;
+            lastSavedJson = json;
+            showSaveIndicator(wrapper, 'saving');
+            api.savePage(slug, json, 'blocks').then(() => {
+                showSaveIndicator(wrapper, 'saved');
+            }).catch(() => {
+                showSaveIndicator(wrapper, 'error');
+            });
+        };
         wrapper.addEventListener('focusout', (e) => {
             const related = e.relatedTarget;
             if (related && wrapper.contains(related))
                 return;
-            // Debounce to avoid saving while user clicks between blocks
             if (saveTimer)
                 clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => {
-                if (!editorInstance)
-                    return;
-                const saved = editorInstance.save();
-                const slug = wrapper.id;
-                if (!slug)
-                    return;
-                showSaveIndicator(wrapper, 'saving');
-                api.savePage(slug, JSON.stringify(saved.blocks), 'blocks').then(() => {
-                    showSaveIndicator(wrapper, 'saved');
-                }).catch(() => {
-                    showSaveIndicator(wrapper, 'error');
-                });
-            }, 300);
+            saveTimer = setTimeout(flushSave, 300);
+        });
+        window.addEventListener('beforeunload', () => {
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+                saveTimer = null;
+            }
+            flushSave();
         });
     });
 }
