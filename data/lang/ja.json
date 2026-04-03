@@ -1,4 +1,5 @@
 {
+    "_language_name": "日本語",
     "login": "ログイン",
     "logout": "ログアウト",
     "login_submit": "ログイン",
@@ -67,5 +68,6 @@
     "admin_bulk_status": "一括ステータス変更",
     "admin_bulk_delete": "一括削除",
     "confirm_bulk_delete": "選択したページを一括削除しますか？",
-    "preview_draft_notice": "これはプレビューです。このページはまだ公開されていません。"
+    "preview_draft_notice": "これはプレビューです。このページはまだ公開されていません。",
+    "admin_import_result": "インポート完了"
 }

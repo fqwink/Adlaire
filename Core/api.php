@@ -29,9 +29,16 @@ function handleEdit(): void
         exit;
     }
 
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        header('HTTP/1.1 401 Unauthorized');
+        exit;
+    }
+
     $storage = new FileStorage('data');
     $config = $storage->readConfig();
-    if (!isset($_SESSION['l']) || !hash_equals($config['password'] ?? '', $_SESSION['l'])) {
+    $storedPassword = $config['password'] ?? '';
+    $sessionToken = $_SESSION['l'] ?? '';
+    if ($storedPassword === '' || $sessionToken === '' || !hash_equals($storedPassword, $sessionToken)) {
         header('HTTP/1.1 401 Unauthorized');
         exit;
     }
@@ -64,7 +71,10 @@ function handleEdit(): void
 
     // Return new CSRF token for subsequent requests (one-time token)
     header('Content-Type: text/plain; charset=UTF-8');
-    header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
+    $csrfValue = $_SESSION['csrf'] ?? '';
+    if ($csrfValue !== '') {
+        header('X-CSRF-Token: ' . $csrfValue);
+    }
     echo $content;
     exit;
 }
@@ -98,7 +108,10 @@ function handleApi(): void
             header('Access-Control-Allow-Origin: ' . $origin);
         }
     }
-    header('X-CSRF-Token: ' . ($_SESSION['csrf'] ?? ''));
+    $apiCsrf = $_SESSION['csrf'] ?? '';
+    if ($apiCsrf !== '') {
+        header('X-CSRF-Token: ' . $apiCsrf);
+    }
 
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
@@ -110,9 +123,10 @@ function handleApi(): void
         exit;
     }
 
-    // Authenticated endpoints
     $config = $storage->readConfig();
-    if (!isset($_SESSION['l']) || !hash_equals($config['password'] ?? '', $_SESSION['l'])) {
+    $apiPassword = $config['password'] ?? '';
+    $apiSession = $_SESSION['l'] ?? '';
+    if ($apiPassword === '' || $apiSession === '' || !hash_equals($apiPassword, $apiSession)) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
@@ -408,7 +422,8 @@ function handleApiSearch(FileStorage $storage): void
         ];
     }
 
-    echo json_encode(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    $searchJson = json_encode(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    echo $searchJson !== false ? $searchJson : '{"results":[]}';
 }
 
 // --- Sitemap API ---
@@ -419,7 +434,8 @@ function handleApiSitemap(FileStorage $storage): void
 
     $app = App::getInstance();
     $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
-    $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
+    $rawHost = rtrim($app->host, '/');
+    $host = ($isHttps ? 'https' : 'http') . ':' . $rawHost;
 
     $pages = $storage->listPublishedPages();
 
@@ -761,7 +777,11 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         } elseif ($b1 !== null && $b2 === null) {
             $removed[] = ['index' => $i, 'block' => $b1];
         } elseif ($b1 !== null && $b2 !== null && $b1 !== $b2) {
-            $changed[] = ['index' => $i, 'before' => $b1, 'after' => $b2];
+            $changeEntry = ['index' => $i, 'before' => $b1, 'after' => $b2];
+            if (($b1['type'] ?? '') !== ($b2['type'] ?? '')) {
+                $changeEntry['type_changed'] = true;
+            }
+            $changed[] = $changeEntry;
         }
     }
 

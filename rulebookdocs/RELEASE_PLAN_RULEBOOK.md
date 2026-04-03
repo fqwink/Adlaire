@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.2.3
+- 文書バージョン: Ver.2.4
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書

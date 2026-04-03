@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 $c = $app->config;
 $adminAction = $_REQUEST['admin'] ?? 'dashboard';
+if (!is_string($adminAction) || !in_array($adminAction, ['dashboard', '', 'edit', 'new'], true)) {
+    $adminAction = 'dashboard';
+}
 $n = $app->nonce !== '' ? " nonce=\"{$app->nonce}\"" : '';
 ?>
 <!doctype html>
@@ -75,10 +78,18 @@ function renderAdminDashboard(App $app, string $n): void
             }
         }
         $unordered = array_diff_key($pages, array_flip($pageOrder));
-        uasort($unordered, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+        uasort($unordered, function ($a, $b) {
+            $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
+            $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
+            return $ta <=> $tb;
+        });
         $pages = $ordered;
     } else {
-        uasort($pages, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+        uasort($pages, function ($a, $b) {
+            $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
+            $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
+            return $ta <=> $tb;
+        });
     }
 
     // --- Page List ---
@@ -162,9 +173,25 @@ function renderAdminDashboard(App $app, string $n): void
     $langLabel = esc($app->t('settings_language'));
     echo "<label>{$langLabel}</label>";
     echo "<select data-action='field-save' data-field='language'>";
-    foreach (['ja' => '日本語', 'en' => 'English'] as $code => $label) {
+    $langDir = dirname(__DIR__) . '/data/lang';
+    $langOptions = [];
+    if (is_dir($langDir)) {
+        $langFiles = glob($langDir . '/*.json');
+        if (is_array($langFiles)) {
+            foreach ($langFiles as $langFile) {
+                $code = basename($langFile, '.json');
+                $langData = json_decode((string) file_get_contents($langFile), true);
+                $label = is_array($langData) && isset($langData['_language_name']) ? $langData['_language_name'] : $code;
+                $langOptions[$code] = $label;
+            }
+        }
+    }
+    if ($langOptions === []) {
+        $langOptions = ['ja' => '日本語', 'en' => 'English'];
+    }
+    foreach ($langOptions as $code => $label) {
         $selected = ($code === $app->language) ? ' selected' : '';
-        echo "<option value='{$code}'{$selected}>{$label}</option>";
+        echo "<option value='" . esc($code) . "'{$selected}>" . esc($label) . "</option>";
     }
     echo "</select>";
 
@@ -192,7 +219,7 @@ function renderAdminDashboard(App $app, string $n): void
     echo 'var file=el.files[0];if(!file)return;';
     echo 'var reader=new FileReader();reader.onload=function(){';
     echo 'api.importSite(reader.result).then(function(r){';
-    echo 'document.getElementById("import-result").textContent="Imported: config="+r.config+", pages="+r.pages;';
+    echo 'document.getElementById("import-result").textContent=i18n.t("admin_import_result")+": config="+r.config+", pages="+r.pages;';
     echo 'document.getElementById("import-result").style.color="#0a0";';
     echo 'setTimeout(function(){location.reload();},1500);';
     echo '}).catch(function(err){document.getElementById("import-result").textContent="Error: "+err.message;document.getElementById("import-result").style.color="#c00";});';
@@ -270,8 +297,11 @@ function renderAdminDashboard(App $app, string $n): void
     $lockFile = dirname(__DIR__) . '/data/system/install.lock';
     $installedAt = '—';
     if (file_exists($lockFile)) {
-        $lock = json_decode((string) file_get_contents($lockFile), true);
-        $installedAt = is_array($lock) ? esc(substr($lock['installed_at'] ?? '', 0, 19)) : '—';
+        $lockRaw = file_get_contents($lockFile);
+        $lock = ($lockRaw !== false) ? json_decode($lockRaw, true) : null;
+        if (is_array($lock) && isset($lock['installed_at']) && is_string($lock['installed_at'])) {
+            $installedAt = esc(substr($lock['installed_at'], 0, 19));
+        }
     }
     echo "<table class='admin-table'>";
     echo "<tr><th>Release Version</th><td>{$fileVersion}</td></tr>";

@@ -8,10 +8,11 @@
  *
  * Requires: csrfToken global variable set by PHP.
  */
+// #33: グローバル変数を直接更新
 function updateCsrfFromResponse(res) {
     const newToken = res.headers.get('X-CSRF-Token');
     if (newToken) {
-        window.csrfToken = newToken;
+        csrfToken = newToken;
     }
 }
 const api = {

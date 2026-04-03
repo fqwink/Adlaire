@@ -1,4 +1,5 @@
 {
+    "_language_name": "English",
     "login": "Login",
     "logout": "Logout",
     "login_submit": "Login",
@@ -67,5 +68,6 @@
     "admin_bulk_status": "Bulk Status",
     "admin_bulk_delete": "Bulk Delete",
     "confirm_bulk_delete": "Delete all selected pages?",
-    "preview_draft_notice": "This is a preview. This page is not yet published."
+    "preview_draft_notice": "This is a preview. This page is not yet published.",
+    "admin_import_result": "Imported"
 }

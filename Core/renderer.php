@@ -43,10 +43,10 @@ function renderMarkdownToHtml(string $md): string
 {
     $html = htmlspecialchars($md, ENT_QUOTES, 'UTF-8');
 
-    // Code blocks
     $html = preg_replace_callback('/```(\w+)?\n([\s\S]*?)```/', function ($m) {
         $cls = $m[1] ? ' class="language-' . esc($m[1]) . '"' : '';
-        return '<pre><code' . $cls . '>' . trim($m[2]) . '</code></pre>';
+        $code = htmlspecialchars(htmlspecialchars_decode(trim($m[2]), ENT_QUOTES), ENT_QUOTES, 'UTF-8');
+        return '<pre><code' . $cls . '>' . $code . '</code></pre>';
     }, $html) ?? $html;
 
     $html = preg_replace('/`([^`]+)`/', '<code>$1</code>', $html) ?? $html;
