@@ -421,6 +421,7 @@ class InlineToolbar {
         `;
         this.el.style.display = 'none';
         document.body.appendChild(this.el);
+        // #32: AbortControllerで多重登録防止
         this.selectionAc = new AbortController();
 
         this.el.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
@@ -450,11 +451,13 @@ class InlineToolbar {
         });
 
         this.selectionHandler = () => this.update();
-        document.addEventListener('selectionchange', this.selectionHandler);
+        // #32: signal指定でselectionchangeリスナー多重登録防止
+        document.addEventListener('selectionchange', this.selectionHandler, { signal: this.selectionAc.signal });
     }
 
     destroy(): void {
-        document.removeEventListener('selectionchange', this.selectionHandler);
+        // #32: AbortControllerでリスナーを確実に解除
+        this.selectionAc.abort();
         this.el.remove();
     }
 
@@ -573,11 +576,14 @@ class Editor {
     private undoManager = new UndoManager();
     private isUndoRedoing = false;
 
-    // #26: Drag & Drop
+    // #26: Drag & Drop (#78: インスタンス変数として明示宣言)
     private dragSourceIndex: number = -1;
 
-    // #27: Block clipboard
+    // #27: Block clipboard (#79: インスタンス変数として明示宣言)
     private clipboardBlock: BlockData | null = null;
+
+    // #11: ブロック内容変更追跡フラグ
+    private dirty = false;
 
     constructor(container: HTMLElement, tools?: Record<string, BlockToolFactory>) {
         this.container = container;
@@ -607,6 +613,9 @@ class Editor {
             }
         });
 
+        // #11: input/keyupでdirtyフラグを立て、focusoutで未保存チェック
+        this.container.addEventListener('input', () => { this.dirty = true; });
+
         // #25: Save state on content changes (focusout)
         this.container.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
@@ -619,8 +628,10 @@ class Editor {
             )) {
                 return;
             }
-            if (!this.isUndoRedoing) {
+            // #11: dirtyフラグがある場合のみ保存（不要な保存回避）
+            if (!this.isUndoRedoing && this.dirty) {
                 this.saveUndoState();
+                this.dirty = false;
             }
         });
     }

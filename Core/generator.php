@@ -170,7 +170,7 @@ function handleApiGenerate(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = substr($data['updated_at'] ?? '', 0, 10);
+        $lastmod = htmlspecialchars(substr($data['updated_at'] ?? '', 0, 10), ENT_XML1, 'UTF-8');
         $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
     }
     $xml .= '</urlset>';
@@ -218,6 +218,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     $lang = esc($app->language);
     $copyright = esc((string) ($c['copyright'] ?? ''));
     $credit = esc($app->credit);
+    $safeTheme = esc($theme);
 
     // Build menu
     $menuHtml = '<ul>';
@@ -242,11 +243,9 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <meta charset="utf-8">
         <title>{$title} - {$pageTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="themes/{$theme}/style.css">
+        <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
-        <script src="js/markdown.js"></script>
-        <script src="js/editInplace.js"></script>
     </head>
     <body>
         <nav id="nav">

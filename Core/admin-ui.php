@@ -15,7 +15,7 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
 if (!is_string($adminAction) || !in_array($adminAction, ['dashboard', '', 'edit', 'new'], true)) {
     $adminAction = 'dashboard';
 }
-$n = $app->nonce !== '' ? " nonce=\"{$app->nonce}\"" : '';
+$n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
 ?>
 <!doctype html>
 <html lang="<?= esc($app->language) ?>">
@@ -115,8 +115,8 @@ function renderAdminDashboard(App $app, string $n): void
         echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
         echo "<td>{$format}</td>";
-        echo "<td class='{$statusClass}'>{$status}</td>";
-        echo "<td>{$updated}</td>";
+        echo "<td class='{$statusClass}'>" . esc($status) . "</td>";
+        echo "<td>" . esc($updated) . "</td>";
         $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
         echo "</tr>";
@@ -373,7 +373,7 @@ function renderAdminEditor(App $app, string $n): void
     // Editor area
     if ($format === 'blocks') {
         echo "<div class='admin-editor-area'>";
-        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='{$blocksB64}'></div>";
+        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         echo "</div>";
     } elseif ($format === 'markdown') {
         echo "<div class='admin-editor-area'>";

@@ -214,7 +214,7 @@ final class App
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
-            $nonceAttr = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
+            $nonceAttr = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
@@ -413,7 +413,7 @@ final class App
         $safeToken = json_encode($token, $jsonFlags);
         $safeLang = json_encode($this->language, $jsonFlags);
         $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', $jsonFlags);
-        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
+        $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
@@ -464,7 +464,7 @@ final class App
         } else {
             $scripts = ['markdown', 'editInplace'];
         }
-        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
+        $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         foreach ($scripts as $name) {
             echo "\t<script{$n} src=\"js/{$name}.js\"></script>\n";
         }

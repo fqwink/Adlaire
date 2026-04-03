@@ -70,14 +70,21 @@ function sanitizeHtml(html) {
     s = s.replace(/<meta\b[^>]*\/?>/gi, '');
     s = s.replace(/<base\b[^>]*\/?>/gi, '');
     s = s.replace(/<link\b[^>]*\/?>/gi, '');
-    // #6: 属性値内の改行/タブを除去してからイベントハンドラを検出
+    // #1: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
+    s = s.replace(/\\u(00[0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    s = s.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // #2: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
     s = s.replace(/(<[^>]*?)[\r\n\t]+/gi, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
+    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    // #2: 属性値内改行/タブ除去後のon*再チェック（二重パス）
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
     // #8: javascript:プロトコルフィルタにユニコードエスケープ対応
     const jsProtoPattern = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
     s = s.replace(jsProtoPattern, '$1=""');
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    // #4: about: / data: プロトコルフィルタ追加
+    s = s.replace(/(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi, '$1=""');
     s = s.replace(/\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '');
     return s;
 }
@@ -363,6 +370,8 @@ class InlineToolbar {
         `;
         this.el.style.display = 'none';
         document.body.appendChild(this.el);
+        // #32: AbortControllerで多重登録防止
+        this.selectionAc = new AbortController();
         this.el.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -385,16 +394,21 @@ class InlineToolbar {
                         catch {
                             return; // 無効なURLは無視
                         }
+                        // #4: about:/data:/javascript: プロトコル拒否
+                        if (/^\s*(javascript|data|about|vbscript)\s*:/i.test(url))
+                            return;
                         this.wrapWithLink(url);
                     }
                 }
             });
         });
         this.selectionHandler = () => this.update();
-        document.addEventListener('selectionchange', this.selectionHandler);
+        // #32: signal指定でselectionchangeリスナー多重登録防止
+        document.addEventListener('selectionchange', this.selectionHandler, { signal: this.selectionAc.signal });
     }
     destroy() {
-        document.removeEventListener('selectionchange', this.selectionHandler);
+        // #32: AbortControllerでリスナーを確実に解除
+        this.selectionAc.abort();
         this.el.remove();
     }
     toggleInlineTag(tagName) {
@@ -403,8 +417,11 @@ class InlineToolbar {
             return;
         const range = sel.getRangeAt(0);
         let node = range.commonAncestorContainer;
+        // #57: TEXT_NODEの場合はparentElementで安全にHTMLElementを取得
         if (node.nodeType === Node.TEXT_NODE)
-            node = node.parentNode;
+            node = node.parentElement;
+        if (!node || !(node instanceof HTMLElement))
+            return;
         const existing = node.closest?.(tagName);
         if (existing && existing.closest('.ce-editor')) {
             if (!existing.parentNode)
@@ -418,6 +435,11 @@ class InlineToolbar {
         else {
             const wrapper = document.createElement(tagName);
             const savedRange = range.cloneRange();
+            // #3: surroundContents失敗時のHTML構造復元 - 親要素のHTML保存
+            const ancestor = range.commonAncestorContainer;
+            const restoreTarget = ancestor.nodeType === Node.TEXT_NODE
+                ? ancestor.parentElement : ancestor;
+            const restoreHtml = restoreTarget?.innerHTML ?? '';
             try {
                 range.surroundContents(wrapper);
             }
@@ -428,7 +450,10 @@ class InlineToolbar {
                     range.insertNode(wrapper);
                 }
                 catch {
-                    // #23: finally で状態復元保証 (catch内のフォールバック)
+                    // #3: HTML構造復元 - extractContentsも失敗した場合に元のHTMLを復元
+                    if (restoreTarget) {
+                        restoreTarget.innerHTML = restoreHtml;
+                    }
                     sel.removeAllRanges();
                     sel.addRange(savedRange);
                 }
@@ -499,10 +524,12 @@ class Editor {
         // #25: Undo/Redo
         this.undoManager = new UndoManager();
         this.isUndoRedoing = false;
-        // #26: Drag & Drop
+        // #26: Drag & Drop (#78: インスタンス変数として明示宣言)
         this.dragSourceIndex = -1;
-        // #27: Block clipboard
+        // #27: Block clipboard (#79: インスタンス変数として明示宣言)
         this.clipboardBlock = null;
+        // #11: ブロック内容変更追跡フラグ
+        this.dirty = false;
         this.container = container;
         this.tools = { ...builtinTools, ...tools };
         this.container.classList.add('ce-editor');
@@ -530,6 +557,8 @@ class Editor {
                 }
             }
         });
+        // #11: input/keyupでdirtyフラグを立て、focusoutで未保存チェック
+        this.container.addEventListener('input', () => { this.dirty = true; });
         // #25: Save state on content changes (focusout)
         this.container.addEventListener('focusout', (e) => {
             const related = e.relatedTarget;
@@ -540,8 +569,10 @@ class Editor {
                 related.closest?.('.ce-block__toolbar'))) {
                 return;
             }
-            if (!this.isUndoRedoing) {
+            // #11: dirtyフラグがある場合のみ保存（不要な保存回避）
+            if (!this.isUndoRedoing && this.dirty) {
                 this.saveUndoState();
+                this.dirty = false;
             }
         });
     }
