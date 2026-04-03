@@ -31,7 +31,6 @@
 
 | キー | 型 | 説明 |
 |-----|-----|------|
-| `password` | string | bcrypt ハッシュ化された管理者パスワード |
 | `themeSelect` | string | 現在のテーマ名 |
 | `language` | string | 言語コード（`ja` / `en`） |
 | `menu` | string | メニュー項目（`<br />\n` 区切り） |
@@ -108,9 +107,20 @@
 ```json
 {
     "users": {
-        "username": {
+        "main_admin": {
             "password": "bcrypt hash",
             "role": "master",
+            "is_main": true,
+            "created_at": "ISO 8601",
+            "last_login": "ISO 8601"
+        },
+        "sub_user_1": {
+            "password": "bcrypt hash",
+            "role": "master",
+            "is_main": false,
+            "token": "bcrypt hash of token",
+            "enabled": true,
+            "created_by": "main_admin",
             "created_at": "ISO 8601",
             "last_login": "ISO 8601"
         }
@@ -119,10 +129,17 @@
 }
 ```
 
-- **ロール**: `master` のみ。全管理操作の権限を持つ。
+- **ユーザー種別**: メインマスター管理者（1名・固定）+ サブマスター管理者（最大2名）。
+- **ロール**: `master` のみ。全管理操作の権限を持つ。ただしユーザー管理操作はメインマスターのみ。
 - **最大ユーザー数**: 3名まで。
+- **メインマスター認証**: ログインID + パスワード（ユーザー自身が設定）。
+- **サブマスター認証**: ログインID + パスワード + トークン（3要素、全てメインマスターがランダム生成。合計73文字hex）。
 - **パスワード**: PHP `password_hash(PASSWORD_DEFAULT)` で bcrypt ハッシュ化。
-- **マイグレーション**: config.json の `password` キーから users.json への自動移行を行う。移行後 config.json の `password` キーは削除する。
+- **トークン**: bcrypt ハッシュで保存。平文は生成時に1回のみ表示+ダウンロード。
+- **サブマスター生成**: メインマスターが認証情報を一括生成。生成結果は1回のみ表示+認証情報ファイルの1回のみダウンロード（同時実行）。画面遷移後は二度と閲覧・ダウンロード不可。
+- **サブマスター無効化**: メインマスターが `enabled: false` に設定。即座にログイン不可。再有効化は不可（空席として再生成）。
+- **メインマスター自己削除**: 不可。最低1名のマスターを維持する。
+- **マイグレーション**: config.json の `password` キーから users.json への強制移行を行う。移行後 config.json の `password` キーは削除する。
 - **単一管理者モード**: 廃止。users.json が存在しない場合は強制マイグレーションを実行する。
 - **ファイルロック**: config.json と同様に排他ロック + アトミック書き込みを使用する。
 - **ファイル権限**: 0600（owner のみ読み書き可）。
@@ -271,6 +288,22 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 |---------|-----|-----------|
 | `GET` | `?api=export` | JSON ファイルダウンロード（config（パスワード除外） + 全ページ） |
 | `POST` | `?api=import` | `{ status: "ok", imported: { config, pages } }` |
+
+## 4.8 ユーザー管理 API
+
+> メインマスター管理者のみ操作可能。
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `GET` | `?api=users` | ユーザー一覧（ログインID・role・is_main・enabled・created_at・last_login） |
+| `POST` | `?api=users&action=generate` | サブマスター生成（ID・パスワード・トークンを自動生成、レスポンスに平文を1回のみ返却） |
+| `POST` | `?api=users&action=disable&user={id}` | サブマスター無効化（enabled=false、即ログイン不可） |
+| `DELETE` | `?api=users&user={id}` | サブマスター削除（メインマスター自身は削除不可） |
+| `POST` | `?api=users&action=password` | メインマスター自身のパスワード変更 |
+
+- 全操作に CSRF + メインマスター認証必須。
+- サブマスター生成時のレスポンスに平文の ID・パスワード・トークンを含む。この情報はサーバー側にハッシュのみ保存され、以後取得不可。
+- クライアント側は生成レスポンス受信時に認証情報ファイルを自動ダウンロード（1回のみ）。
 
 ---
 

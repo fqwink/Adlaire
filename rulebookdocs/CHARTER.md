@@ -83,8 +83,8 @@
 |:----:|------|---------|
 | 0 | Welcome / Release Check | `release-manifest.json` 検証、`VERSION` 表示、バンドル整合性確認 |
 | 1 | Environment Check | PHP 8.3+ 確認、`data/` 書き込み権限、必須ファイル存在確認、セッション利用可否 |
-| 2 | Site Configuration | サイト名、デフォルト言語（ja/en）、マスター管理者ユーザー名、パスワード入力、パスワード確認 |
-| 3 | Install Execution | `data/` ディレクトリ生成、`config.json` 保存、`data/system/users.json` にマスター管理者作成（bcrypt）、`install.lock` 生成 |
+| 2 | Site Configuration | サイト名、デフォルト言語（ja/en）、メインマスター管理者ログインID、パスワード入力、パスワード確認 |
+| 3 | Install Execution | `data/` ディレクトリ生成、`config.json` 保存、`data/system/users.json` にメインマスター管理者作成（bcrypt）、`install.lock` 生成 |
 | 4 | Finish / Security Notice | 完了通知、`?login` / `?admin` 導線、インストーラー削除案内 |
 
 ### 8.3 入力項目
@@ -93,7 +93,7 @@
 |-----|-----|-----|:----:|------|
 | サイト名 | `site_name` | string | Yes | 空不可 |
 | デフォルト言語 | `default_locale` | enum | Yes | `ja` / `en` |
-| マスター管理者ユーザー名 | `master_username` | string | Yes | 英数字・ハイフン・アンダースコアのみ、2-32文字 |
+| マスター管理者ログインID | `master_username` | string | Yes | 英数字・ハイフン・アンダースコアのみ、2-32文字 |
 | 管理者パスワード | `admin_password` | string | Yes | 最低8文字 |
 | パスワード確認 | `admin_password_confirm` | string | Yes | 一致必須 |
 
@@ -117,7 +117,7 @@
 **Step 3 — インストール実行**:
 - `FileStorage::ensureDirectories()` でディレクトリ生成
 - `config.json` にサイト名、言語を保存（`FileStorage::writeConfig()`）。`config.json` にパスワードは保存しない
-- `data/system/users.json` にマスター管理者を作成（ユーザー名をキー、`password_hash()` で bcrypt 化したパスワード、`role: "master"`、`created_at` タイムスタンプ）
+- `data/system/users.json` にメインマスター管理者を作成（ログインIDをキー、`password_hash()` で bcrypt 化したパスワード、`role: "master"`、`is_main: true`、`created_at` タイムスタンプ）
 - `users.json` のファイル権限を 0600 に設定
 - `data/system/install.lock` を生成（JSON形式、`installed_at` タイムスタンプ付き）
 - 処理失敗時はエラー表示して停止（部分的初期化のロールバックは行わない）
