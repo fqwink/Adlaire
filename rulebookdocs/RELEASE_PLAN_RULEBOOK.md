@@ -238,6 +238,36 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | 62 | セッション | app.php | login() is_mainセッション変数設定 | **実装済** |
 | 63 | セキュリティ | app.php | login() サブmasterパスワード変更禁止 | **実装済** |
 
+#### 追加品質確定（360件精査: PHP240件+TS120件）
+
+> 2.0系最終品質確定として全コード超深層精査360件。
+> 致命的13件+重大44件+中程度72件=129件を最優先実装。軽微231件も実装。
+
+| 区分 | PHP | TS | 合計 | 状態 |
+|:----:|:---:|:--:|:----:|:----:|
+| 致命的 | 5 | 8 | 13 | 計画 |
+| 重大 | 32 | 12 | 44 | 計画 |
+| 中程度 | 32 | 40 | 72 | 計画 |
+| 軽微 | 171 | 60 | 231 | 計画 |
+| **合計** | **240** | **120** | **360** | 計画 |
+
+主な致命的・重大項目:
+- PHP#5: index.php 404後のexit確保
+- PHP#25: core.php メモリ超過時listPages()空配列返却修正
+- PHP#26: core.php キャッシュmtime同一秒問題
+- PHP#28: core.php lockedRead() false vs '' 判別
+- PHP#76: generator.php dist削除時.build_state.json保持
+- PHP#42/173: renderer.php image // スキーム許可、プロトコル相対URL攻撃
+- PHP#44/47: renderer.php paragraph/heading/link エスケープ不足
+- PHP#84/154: generator.php contentHTML/menu raw出力XSS
+- PHP#86/100/165: admin-ui.php isMainMaster()チェック不足
+- PHP#58: api.php CORS subdomain bypass
+- PHP#207/213: api.php $_POST汚染対策、importメモリ制限
+- TS#1: editInplace.ts downloadCredentials() XSS
+- TS#2/8: editor.ts surroundContents失敗後のHTML復元/サニタイズ
+- TS#3/7: editInplace.ts beforeunload sendBeacon CSRFトークン問題
+- TS#6: editor.ts 複数エディタでのInlineToolbar競合
+
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 
 > マイナーバージョン x.8 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
