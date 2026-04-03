@@ -219,12 +219,35 @@ function initBlockEditor(): void {
             saveTimer = setTimeout(flushSave, 300);
         });
 
+        // #41: beforeunloadでnavigator.sendBeacon()使用に変更（同期的に送信可能）
         window.addEventListener('beforeunload', () => {
             if (saveTimer) {
                 clearTimeout(saveTimer);
                 saveTimer = null;
             }
-            flushSave();
+            if (!editorInstance) return;
+            const saved = editorInstance.save();
+            const sortedReplacer = (_key: string, value: unknown): unknown => {
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    const sorted: Record<string, unknown> = {};
+                    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+                        sorted[k] = (value as Record<string, unknown>)[k];
+                    }
+                    return sorted;
+                }
+                return value;
+            };
+            const json = JSON.stringify(saved.blocks, sortedReplacer);
+            const slug = wrapper.id;
+            if (!slug || json === lastSavedJson) return;
+            lastSavedJson = json;
+            const body = new URLSearchParams();
+            body.append('slug', slug);
+            body.append('format', 'blocks');
+            body.append('csrf', csrfToken);
+            body.append('blocks', json);
+            body.append('content', '');
+            navigator.sendBeacon('index.php?api=pages', body);
         });
     });
 
@@ -272,12 +295,20 @@ function initBlockEditor(): void {
             sidebarSaveTimer = setTimeout(flushSidebarSave, 300);
         });
 
+        // #41: sidebarもsendBeaconに変更
         window.addEventListener('beforeunload', () => {
             if (sidebarSaveTimer) {
                 clearTimeout(sidebarSaveTimer);
                 sidebarSaveTimer = null;
             }
-            flushSidebarSave();
+            const saved = sidebarEditor.save();
+            const json = JSON.stringify(saved.blocks);
+            if (json === sidebarLastJson) return;
+            sidebarLastJson = json;
+            const body = new URLSearchParams();
+            body.append('blocks', json);
+            body.append('csrf', csrfToken);
+            navigator.sendBeacon('index.php?api=sidebar', body);
         });
     }
 }
@@ -312,7 +343,8 @@ function initFormatSwitcher(): void {
                 const newFormat = btn.dataset.format;
                 if (!newFormat || btn.classList.contains('active')) return;
 
-                if (!confirm(i18n.t('confirm_format_switch', { format: newFormat }))) return;
+                // #42: confirm()ダイアログのformat引数をescHtml()
+                if (!confirm(i18n.t('confirm_format_switch', { format: escHtml(newFormat) }))) return;
                 switchFormat(slug, newFormat);
             });
         });
@@ -357,16 +389,17 @@ function switchFormat(slug: string, newFormat: string): void {
     // Strip HTML tags for clean text when switching to markdown
     if (newFormat === 'markdown') {
         const tmp = document.createElement('div');
-        tmp.innerHTML = currentContent;
+        // #43: sanitizeHtml適用
+        tmp.innerHTML = sanitizeHtml(currentContent);
         currentContent = tmp.textContent || '';
     }
 
     // Save with new format via API
     if (newFormat === 'blocks') {
-        // Convert text content to a single paragraph block
-        const blocks = currentContent.split('\n\n').filter(Boolean).map(text => ({
+        // #44: 段落分割ロジック改善（\n\n分割、連続空行も統一）
+        const blocks = currentContent.split(/\n{2,}/).filter(Boolean).map(text => ({
             type: 'paragraph',
-            data: { text: text.replace(/\n/g, '<br>') },
+            data: { text: sanitizeHtml(text.replace(/\n/g, '<br>')) },
         }));
 
         api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
@@ -394,7 +427,8 @@ function initPageReorder(): void {
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
 
-    let dragRow: HTMLTableRowElement | null = null;
+    // #45: dragRowをクロージャスコープに限定（initPageReorder内のローカル変数）
+    const state: { dragRow: HTMLTableRowElement | null } = { dragRow: null };
 
     tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
         const handle = document.createElement('td');
@@ -404,7 +438,7 @@ function initPageReorder(): void {
         row.insertBefore(handle, row.firstChild);
 
         handle.addEventListener('dragstart', (e) => {
-            dragRow = row;
+            state.dragRow = row;
             row.classList.add('ce-row--dragging');
             e.dataTransfer!.effectAllowed = 'move';
         });
@@ -414,7 +448,7 @@ function initPageReorder(): void {
             tbody.querySelectorAll('.ce-row--dragover').forEach(el =>
                 el.classList.remove('ce-row--dragover')
             );
-            dragRow = null;
+            state.dragRow = null;
         });
 
         row.addEventListener('dragover', (e) => {
@@ -430,14 +464,18 @@ function initPageReorder(): void {
         row.addEventListener('drop', (e) => {
             e.preventDefault();
             row.classList.remove('ce-row--dragover');
-            if (!dragRow || dragRow === row) return;
-            tbody.insertBefore(dragRow, row.nextSibling);
+            if (!state.dragRow || state.dragRow === row) return;
+            tbody.insertBefore(state.dragRow, row.nextSibling);
             const slugs: string[] = [];
             tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(r => {
                 const slug = r.dataset.slug;
                 if (slug) slugs.push(slug);
             });
-            api.reorderPages(slugs).catch(() => { location.reload(); });
+            // #46: catch内でalert表示後にreload
+            api.reorderPages(slugs).catch(() => {
+                alert(i18n.t('reorder_error') || 'Reorder failed');
+                location.reload();
+            });
         });
     });
 
@@ -595,8 +633,14 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
         document.body.appendChild(modal);
     }
 
+    // #48: item型チェック強化
     const renderItems = (items: unknown[], cls: string): string => {
-        return items.map(item => `<div class="${cls}">${escHtml(String(item))}</div>`).join('');
+        if (!Array.isArray(items)) return '';
+        return items.map(item => {
+            if (item === null || item === undefined) return '';
+            const text = typeof item === 'object' ? JSON.stringify(item) : String(item);
+            return `<div class="${cls}">${escHtml(text)}</div>`;
+        }).join('');
     };
 
     modal.innerHTML = `
@@ -650,9 +694,13 @@ function initGenerateReport(): void {
 
     btn.addEventListener('click', () => {
         btn.disabled = true;
+        // #52: Content-Type追加
         fetch('index.php?api=generate', {
             method: 'POST',
-            headers: { 'X-CSRF-Token': csrfToken },
+            headers: {
+                'X-CSRF-Token': csrfToken,
+                'Content-Type': 'application/json',
+            },
         })
         .then(res => {
             updateCsrfFromResponse(res);
@@ -687,7 +735,8 @@ function initEditInplace(): void {
         initRevisionDiff();
         initGenerateReport();
     };
-    if (typeof i18n !== 'undefined' && i18n.ready) {
+    // #36: typeof i18nチェックをより堅牢に
+    if (typeof i18n !== 'undefined' && i18n && typeof i18n.ready?.then === 'function') {
         i18n.ready.then(initEditorUI);
     } else {
         initEditorUI();

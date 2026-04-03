@@ -17,7 +17,10 @@ function markdownToHtml(md: string): string {
     const codeBlocks: string[] = [];
     html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang, code) => {
         const escaped = code.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const cls = lang ? ` class="language-${lang}"` : '';
+        // #50: langをescHtml()でエスケープ
+        const escapeLang = (s: string): string =>
+            s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const cls = lang ? ` class="language-${escapeLang(lang)}"` : '';
         codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
         return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
     });

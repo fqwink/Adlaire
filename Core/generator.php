@@ -47,7 +47,10 @@ function handleApiGenerate(FileStorage $storage): void
                 RecursiveIteratorIterator::CHILD_FIRST
             );
             foreach ($files as $file) {
-                if ($file->isDir()) {
+                $path = $file->getPathname();
+                if (is_link($path)) {
+                    unlink($path);
+                } elseif ($file->isDir()) {
                     rmdir($file->getRealPath());
                 } else {
                     unlink($file->getRealPath());

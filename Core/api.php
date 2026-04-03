@@ -238,10 +238,14 @@ function apiPageSave(FileStorage $storage): void
 
     $warnings = [];
     if ($status === 'published') {
-        if (trim($content) === '' && ($blocks === null || $blocks === [])) {
-            $warnings[] = 'empty_content';
+        $isEmpty = false;
+        if ($format === 'blocks' && trim($content) === '' && ($blocks === null || $blocks === [])) {
+            $isEmpty = true;
         }
         if ($format === 'markdown' && trim($content) === '') {
+            $isEmpty = true;
+        }
+        if ($isEmpty) {
             $warnings[] = 'empty_content';
         }
         if ($format === 'blocks' && is_array($blocks)) {
@@ -659,7 +663,7 @@ function apiSidebar(FileStorage $storage, string $method): void
         }
         $raw = $_POST['blocks'] ?? '';
         $blocks = json_decode($raw, true);
-        if (!is_array($blocks)) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
             apiError(400, 'Invalid blocks JSON');
             return;
         }
