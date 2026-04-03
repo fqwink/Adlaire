@@ -64,11 +64,18 @@ if (isset($_GET['admin'])) {
 
 // --- Public page rendering ---
 $theme = basename($app->config['themeSelect']);
-$themePath = 'themes/' . $theme . '/theme.php';
-if (!is_file($themePath)) {
+$themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
+$realThemePath = is_file($themePath) ? realpath($themePath) : false;
+$themesBase = realpath(__DIR__ . '/themes');
+if ($realThemePath === false || $themesBase === false || !str_starts_with($realThemePath, $themesBase . DIRECTORY_SEPARATOR)) {
     $theme = 'AP-Default';
-    $themePath = 'themes/' . $theme . '/theme.php';
+    $themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
+    $realThemePath = realpath($themePath);
 }
-require $themePath;
+if ($realThemePath === false || !is_file($realThemePath)) {
+    http_response_code(500);
+    exit;
+}
+require $realThemePath;
 
 ob_end_flush();

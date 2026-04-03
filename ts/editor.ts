@@ -28,13 +28,20 @@ interface BlockToolConfig {
 
 type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
 
+// --- Helper: get Editor from element ---
+
+function getEditorFromElement(el: HTMLElement): Editor | null {
+    const editorEl = el.closest('.ce-editor') as HTMLElement | null;
+    return editorEl ? (editorEl as any).__editor ?? null : null;
+}
+
 // --- Helper: attach Backspace handler to any contentEditable block ---
 
 function attachBackspaceHandler(el: HTMLElement): void {
     el.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && (el.textContent?.trim() === '')) {
             e.preventDefault();
-            const editor = (el.closest('.ce-editor') as any)?.__editor;
+            const editor = getEditorFromElement(el);
             if (!editor) return;
             const block = el.closest('.ce-block') as HTMLElement;
             const idx = editor.getBlockIndex(block);
@@ -57,6 +64,10 @@ function attachListItemHandlers(li: HTMLLIElement): void {
             attachListItemHandlers(newLi);
             li.after(newLi);
             newLi.focus();
+            const editor = getEditorFromElement(li);
+            if (editor) {
+                (editor as any).saveUndoState();
+            }
         }
     });
 }
@@ -69,8 +80,15 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
     s = s.replace(/<embed\b[^>]*\/?>/gi, '');
     s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+    s = s.replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, '');
+    s = s.replace(/<input\b[^>]*\/?>/gi, '');
+    s = s.replace(/<button\b[^>]*>[\s\S]*?<\/button>/gi, '');
+    s = s.replace(/<meta\b[^>]*\/?>/gi, '');
+    s = s.replace(/<base\b[^>]*\/?>/gi, '');
+    s = s.replace(/<link\b[^>]*\/?>/gi, '');
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    s = s.replace(/\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '');
     return s;
 }
 
@@ -116,7 +134,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 el.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        const editor = (el.closest('.ce-editor') as any)?.__editor;
+                        const editor = getEditorFromElement(el);
                         if (editor) {
                             const idx = editor.getBlockIndex(el.closest('.ce-block') as HTMLElement);
                             editor.insertBlock('paragraph', {}, idx + 1);
@@ -155,12 +173,12 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 levelBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const text = headingEl.innerHTML;
+                    const text = headingEl.textContent || '';
                     level = level >= 3 ? 1 : level + 1;
                     const newEl = document.createElement(`h${level}`);
                     newEl.contentEditable = 'true';
                     newEl.className = 'ce-heading';
-                    newEl.innerHTML = text;
+                    newEl.textContent = text;
                     attachBackspaceHandler(newEl);
                     headingEl.replaceWith(newEl);
                     headingEl = newEl;
@@ -383,7 +401,8 @@ class InlineToolbar {
         const existing = (node as HTMLElement).closest?.(tagName);
 
         if (existing && existing.closest('.ce-editor')) {
-            const parent = existing.parentNode!;
+            if (!existing.parentNode) return;
+            const parent = existing.parentNode;
             while (existing.firstChild) {
                 parent.insertBefore(existing.firstChild, existing);
             }
@@ -393,9 +412,15 @@ class InlineToolbar {
             try {
                 range.surroundContents(wrapper);
             } catch {
-                const contents = range.extractContents();
-                wrapper.appendChild(contents);
-                range.insertNode(wrapper);
+                const savedRange = range.cloneRange();
+                try {
+                    const contents = range.extractContents();
+                    wrapper.appendChild(contents);
+                    range.insertNode(wrapper);
+                } catch {
+                    sel.removeAllRanges();
+                    sel.addRange(savedRange);
+                }
             }
         }
     }
@@ -446,6 +471,7 @@ class Editor {
     private blockTools: BlockToolConfig[] = [];
     private blockTypes: string[] = [];
     private static inlineToolbar: InlineToolbar | null = null;
+    private static inlineToolbarRefCount = 0;
 
     // #25: Undo/Redo
     private undoManager = new UndoManager();
@@ -466,6 +492,7 @@ class Editor {
         if (!Editor.inlineToolbar) {
             Editor.inlineToolbar = new InlineToolbar();
         }
+        Editor.inlineToolbarRefCount++;
 
         // #25: Keyboard shortcuts for Undo/Redo + #27: Copy/Paste
         this.container.addEventListener('keydown', (e) => {
@@ -485,7 +512,11 @@ class Editor {
         });
 
         // #25: Save state on content changes (focusout)
-        this.container.addEventListener('focusout', () => {
+        this.container.addEventListener('focusout', (e) => {
+            const related = (e as FocusEvent).relatedTarget as Node | null;
+            if (related && (this.container.contains(related) || (related as HTMLElement).closest?.('.ce-inline-toolbar'))) {
+                return;
+            }
             if (!this.isUndoRedoing) {
                 this.saveUndoState();
             }
@@ -532,6 +563,12 @@ class Editor {
         this.clear();
         this.container.classList.remove('ce-editor');
         delete (this.container as any).__editor;
+        Editor.inlineToolbarRefCount--;
+        if (Editor.inlineToolbarRefCount <= 0 && Editor.inlineToolbar) {
+            Editor.inlineToolbar.destroy();
+            Editor.inlineToolbar = null;
+            Editor.inlineToolbarRefCount = 0;
+        }
     }
 
     insertBlock(type: string, data: Record<string, unknown>, index: number): void {
@@ -621,16 +658,22 @@ class Editor {
         const state = this.undoManager.undo();
         if (!state) return;
         this.isUndoRedoing = true;
-        this.render(state);
-        this.isUndoRedoing = false;
+        try {
+            this.render(state);
+        } finally {
+            this.isUndoRedoing = false;
+        }
     }
 
     private redo(): void {
         const state = this.undoManager.redo();
         if (!state) return;
         this.isUndoRedoing = true;
-        this.render(state);
-        this.isUndoRedoing = false;
+        try {
+            this.render(state);
+        } finally {
+            this.isUndoRedoing = false;
+        }
     }
 
     // --- #27: Block Copy & Paste ---
@@ -810,19 +853,21 @@ class Editor {
                 }
                 this.insertBlock(type, defaultData, idx + 1);
                 toolbox.remove();
+                ac.abort();
             });
             toolbox.appendChild(btn);
         });
 
-        refBlock.after(toolbox);
+        const ac = new AbortController();
 
+        refBlock.after(toolbox);
         const close = (e: MouseEvent) => {
             if (!toolbox.contains(e.target as Node)) {
                 toolbox.remove();
-                document.removeEventListener('click', close);
+                ac.abort();
             }
         };
-        setTimeout(() => document.addEventListener('click', close), 0);
+        setTimeout(() => document.addEventListener('click', close, { signal: ac.signal }), 0);
     }
 
     private clear(): void {

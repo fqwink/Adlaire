@@ -256,10 +256,11 @@ final class App
             return;
         }
 
-        header('HTTP/1.1 404 Not Found');
+        http_response_code(404);
         $this->config['content'] = $this->isLoggedIn()
             ? $this->defaults['new_page']['admin']
             : $this->defaults['new_page']['visitor'];
+        return;
     }
 
     private function loadPlugins(): void
@@ -395,12 +396,12 @@ final class App
         }
         $token = csrf_token();
         $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $safeLang = json_encode($this->language);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks');
+        $safeLang = json_encode($this->language, JSON_HEX_TAG | JSON_HEX_AMP);
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', JSON_HEX_TAG | JSON_HEX_AMP);
         echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
-            echo "\t{$tag}\n";
+            echo "\t" . esc($tag) . "\n";
         }
     }
 
@@ -426,7 +427,7 @@ final class App
         if ($isBlocks) {
             $blocksB64 = '';
             if (isset($this->config['pageBlocks'])) {
-                $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
+                $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP));
             }
             echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         } elseif ($isMarkdown) {

@@ -34,15 +34,17 @@ function markdownToHtml(md: string): string {
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes: Record<string, string> = {};
     html = html.replace(/^\[\^(\w+)\]:\s*(.+)$/gm, (_m, id, text) => {
-        footnotes[id] = text;
+        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        footnotes[safeId] = text;
         return '';
     });
 
     // Footnote references: [^id] → superscript link (unique IDs per occurrence)
     let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
+        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
         fnRefCount++;
-        return `<sup><a href="#fn-${id}" id="fnref-${id}-${fnRefCount}">${id}</a></sup>`;
+        return `<sup><a href="#fn-${safeId}" id="fnref-${safeId}-${fnRefCount}">${safeId}</a></sup>`;
     });
 
     // Headings (### > ## > #)
@@ -59,10 +61,16 @@ function markdownToHtml(md: string): string {
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
     // Images ![alt](url) — must come before links
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, url: string) => {
+        if (/^\s*(javascript|data|vbscript)\s*:/i.test(url)) return `<img src="" alt="${alt}">`;
+        return `<img src="${url}" alt="${alt}">`;
+    });
 
     // Links [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, url: string) => {
+        if (/^\s*(javascript|vbscript|data)\s*:/i.test(url)) return `<a href="">${text}</a>`;
+        return `<a href="${url}">${text}</a>`;
+    });
 
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
@@ -77,6 +85,8 @@ function markdownToHtml(md: string): string {
         // Check if row 2 is separator (|---|---|)
         const sep = rows[1];
         if (!/^\|[\s\-:|]+\|$/.test(sep)) return tableBlock;
+        const sepCols = sep.split('|').slice(1, -1);
+        if (sepCols.length !== headerCells.length) return tableBlock;
 
         let tableHtml = '<table><thead><tr>';
         headerCells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });

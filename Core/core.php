@@ -81,7 +81,7 @@ final class FileStorage
         if ($slug === '' || $slug !== basename($slug)) {
             return false;
         }
-        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', $slug);
+        return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $slug);
     }
 
     /**
@@ -437,10 +437,11 @@ final class FileStorage
         if ($tmp === false) {
             return false;
         }
+        chmod($tmp, 0600);
 
         $written = file_put_contents($tmp, $content, LOCK_EX);
         if ($written === false) {
-            unlink($tmp);
+            @unlink($tmp);
             return false;
         }
 

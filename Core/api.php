@@ -89,7 +89,7 @@ function handleApi(): void
     $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
     if ($origin !== '' && $allowedHost !== '') {
         $parsed = parse_url($origin, PHP_URL_HOST);
-        if ($parsed === $allowedHost) {
+        if (is_string($parsed) && $parsed === $allowedHost) {
             header('Access-Control-Allow-Origin: ' . $origin);
         }
     }
@@ -343,12 +343,9 @@ function handleApiSitemap(FileStorage $storage): void
 {
     header('Content-Type: application/xml; charset=UTF-8');
 
+    $app = App::getInstance();
     $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
-    $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-    $basePath = dirname($_SERVER['SCRIPT_NAME']);
-    if ($basePath === '/') {
-        $basePath = '';
-    }
+    $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
 
     $pages = $storage->listPublishedPages();
 
@@ -356,14 +353,14 @@ function handleApiSitemap(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
     // Home page
-    $homeLoc = htmlspecialchars("{$host}{$basePath}/", ENT_XML1, 'UTF-8');
+    $homeLoc = htmlspecialchars("{$host}/", ENT_XML1, 'UTF-8');
     $xml .= "  <url>\n";
     $xml .= "    <loc>{$homeLoc}</loc>\n";
     $xml .= "    <changefreq>weekly</changefreq>\n";
     $xml .= "  </url>\n";
 
     foreach ($pages as $slug => $data) {
-        $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
+        $loc = htmlspecialchars("{$host}/{$slug}", ENT_XML1, 'UTF-8');
         $lastmod = substr($data['updated_at'], 0, 10); // YYYY-MM-DD
         $xml .= "  <url>\n";
         $xml .= "    <loc>{$loc}</loc>\n";
@@ -428,22 +425,24 @@ function handleApiImport(FileStorage $storage): void
 
     $imported = ['config' => false, 'pages' => 0];
 
-    // Import config
+    // Import config (whitelist keys only)
+    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language'];
     if (isset($data['config']) && is_array($data['config'])) {
-        // Don't overwrite password on import
-        unset($data['config']['password']);
-        if ($data['config'] !== []) {
-            $storage->writeConfig($data['config']);
+        $filteredConfig = array_intersect_key($data['config'], array_flip($allowedConfigKeys));
+        if ($filteredConfig !== []) {
+            $storage->writeConfig($filteredConfig);
             $imported['config'] = true;
         }
     }
 
-    // Import pages
+    // Import pages (whitelist keys only)
+    $allowedPageKeys = ['content', 'format', 'blocks', 'status', 'created_at', 'updated_at'];
     if (isset($data['pages']) && is_array($data['pages'])) {
         foreach ($data['pages'] as $slug => $pageData) {
-            if (!FileStorage::validateSlug($slug) || !isset($pageData['content'])) {
+            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($pageData) || !isset($pageData['content'])) {
                 continue;
             }
+            $pageData = array_intersect_key($pageData, array_flip($allowedPageKeys));
             $format = $pageData['format'] ?? 'blocks';
             $blocks = $pageData['blocks'] ?? null;
             $status = $pageData['status'] ?? 'published';

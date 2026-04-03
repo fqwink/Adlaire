@@ -79,7 +79,8 @@ function renderAdminDashboard(App $app): void
         echo "<td>{$format}</td>";
         echo "<td class='{$statusClass}'>{$status}</td>";
         echo "<td>{$updated}</td>";
-        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>Edit</a><a href='{$safeSlug}' target='_blank'>View</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' onclick='deletePage(\"{$safeSlug}\");return false;'>Delete</a></td>";
+        $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>Edit</a><a href='{$safeSlug}' target='_blank'>View</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>Delete</a></td>";
         echo "</tr>";
     }
     if (empty($pages)) {
@@ -240,10 +241,11 @@ function renderAdminEditor(App $app): void
     echo "<option value='draft'{$draftSelected}>Draft</option>";
     echo "</select>";
     echo "<button class='admin-btn' id='save-status-btn' style='font-size:12px;padding:4px 12px;'>Save Status</button>";
+    $jsonSafeSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo "<script>document.getElementById('save-status-btn').addEventListener('click',function(){";
     echo "var s=document.getElementById('status-select').value;";
     echo "var body=new URLSearchParams();";
-    echo "body.append('slug','{$safeSlug}');body.append('status',s);body.append('csrf',csrfToken);";
+    echo "body.append('slug',{$jsonSafeSlug});body.append('status',s);body.append('csrf',csrfToken);";
     echo "fetch('index.php?api=pages&action=status',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
     echo ".then(function(r){return r.json();}).then(function(){location.reload();});";
     echo "});</script>";

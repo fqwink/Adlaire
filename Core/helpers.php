@@ -45,16 +45,44 @@ function login_rate_check(): bool
     $windowSeconds = 300;
     $now = time();
 
-    $_SESSION['login_attempts'] ??= [];
-    $_SESSION['login_attempts'] = array_values(array_filter(
-        $_SESSION['login_attempts'],
-        fn(int $t) => ($now - $t) < $windowSeconds
-    ));
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $rateDir = __DIR__ . '/../data/system';
+    if (!is_dir($rateDir)) {
+        @mkdir($rateDir, 0755, true);
+    }
+    $rateFile = $rateDir . '/rate_' . md5($ip) . '.json';
 
-    if (count($_SESSION['login_attempts']) >= $maxAttempts) {
+    $attempts = [];
+    if (is_file($rateFile)) {
+        $fp = fopen($rateFile, 'r');
+        if ($fp !== false) {
+            flock($fp, LOCK_SH);
+            $raw = stream_get_contents($fp);
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            $decoded = json_decode($raw ?: '[]', true);
+            if (is_array($decoded)) {
+                $attempts = $decoded;
+            }
+        }
+    }
+
+    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < $windowSeconds));
+
+    if (count($attempts) >= $maxAttempts) {
         return false;
     }
 
-    $_SESSION['login_attempts'][] = $now;
+    $attempts[] = $now;
+    $fp = fopen($rateFile, 'c');
+    if ($fp !== false) {
+        flock($fp, LOCK_EX);
+        ftruncate($fp, 0);
+        fwrite($fp, json_encode($attempts));
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        @chmod($rateFile, 0600);
+    }
+
     return true;
 }
