@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 4;
-    public const VERSION_BUILD = 37;
-    public const VERSION = 'Ver.2.4-37';
+    public const VERSION_MINOR = 7;
+    public const VERSION_BUILD = 40;
+    public const VERSION = 'Ver.2.7-40';
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -32,11 +32,15 @@ final class App
     public readonly string $requestPage;
     public string $credit;
     public readonly string $language;
+    public string $nonce = '';
 
     public readonly FileStorage $storage;
 
     /** @var array<string, string> */
     private array $translations = [];
+
+    /** @var string[]|null */
+    private ?array $menuItems = null;
 
     private static ?self $instance = null;
 
@@ -63,26 +67,30 @@ final class App
 
     private function parseHost(): array
     {
-        $rp = isset($_REQUEST['page'])
-            ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
+        $rpRaw = isset($_REQUEST['page'])
+            ? preg_replace('#/+#', '/', urldecode($_REQUEST['page']))
             : '';
+        $rp = is_string($rpRaw) ? $rpRaw : '';
 
-        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (!preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost)) {
+        $httpHost = filter_input(INPUT_SERVER, 'HTTP_HOST') ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
+        if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
             $httpHost = 'localhost';
         }
 
-        $uri = preg_replace('#/+#', '/', urldecode($_SERVER['REQUEST_URI'] ?? '/')) ?? '/';
+        $rawUri = $_SERVER['REQUEST_URI'] ?? '/';
+        $parsedPath = parse_url($rawUri, PHP_URL_PATH);
+        $uriResult = is_string($parsedPath) ? preg_replace('#/+#', '/', urldecode($parsedPath)) : null;
+        $uri = is_string($uriResult) ? $uriResult : '/';
 
         $host = ($rp !== '' && str_contains($uri, $rp))
             ? $httpHost . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
             : $httpHost . '/' . $uri;
 
-        $host = explode('?', $host)[0];
-        $host = '//' . preg_replace('#/+#', '/', $host);
+        $hostResult = preg_replace('#/+#', '/', $host);
+        $host = '//' . (is_string($hostResult) ? $hostResult : $host);
 
-        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
-        $rp = trim($rp, '/');
+        $rpResult = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rp = is_string($rpResult) ? trim($rpResult, '/') : '';
 
         return [$host, $rp];
     }
@@ -150,6 +158,8 @@ final class App
 
             if (isset($stored[$key])) {
                 $this->config[$key] = $stored[$key];
+            } elseif (!isset($this->config[$key]) || $this->config[$key] === '') {
+                $this->config[$key] = $this->defaults[$key] ?? $val;
             }
 
             match ($key) {
@@ -169,10 +179,10 @@ final class App
     private function handleAuth(): void
     {
         if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+            session_regenerate_id(true);
             $_SESSION = [];
             session_destroy();
             session_start();
-            session_regenerate_id(true);
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
@@ -204,8 +214,9 @@ final class App
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
+            $nonceAttr = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
             $this->config['content'] = <<<HTML
-                <form action='' method='POST'>
+                <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
                 <input type='password' name='password'>
                 <input type='submit' name='login' value='{$loginLabel}'> {$msg}
@@ -238,7 +249,7 @@ final class App
         if ($pageData !== false) {
             $isDraft = ($pageData['status'] ?? 'published') === 'draft';
             if ($isDraft && !$this->isLoggedIn()) {
-                header('HTTP/1.1 404 Not Found');
+                http_response_code(404);
                 $this->config['content'] = $this->defaults['new_page']['visitor'];
                 return;
             }
@@ -256,20 +267,34 @@ final class App
             return;
         }
 
-        header('HTTP/1.1 404 Not Found');
+        http_response_code(404);
         $this->config['content'] = $this->isLoggedIn()
             ? $this->defaults['new_page']['admin']
             : $this->defaults['new_page']['visitor'];
+        return;
     }
 
     private function loadPlugins(): void
     {
         $pluginsDir = dirname(__DIR__) . '/plugins';
+        $pluginsBase = realpath($pluginsDir);
+        if ($pluginsBase === false) {
+            return;
+        }
         if (is_dir($pluginsDir)) {
             $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
                 foreach ($dirs as $dir) {
-                    require_once $dir . '/index.php';
+                    $pluginFile = $dir . '/index.php';
+                    if (!is_file($pluginFile)) {
+                        continue;
+                    }
+                    $realPluginPath = realpath($pluginFile);
+                    if ($realPluginPath === false || !str_starts_with($realPluginPath, $pluginsBase . DIRECTORY_SEPARATOR)) {
+                        error_log('Adlaire: Plugin path outside plugins directory: ' . $pluginFile);
+                        continue;
+                    }
+                    require_once $realPluginPath;
                 }
             }
         }
@@ -286,7 +311,13 @@ final class App
         if (is_file($file)) {
             $json = file_get_contents($file);
             if ($json !== false) {
-                $this->translations = json_decode($json, true) ?: [];
+                $decoded = json_decode($json, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    error_log('Adlaire: Failed to decode language file: ' . $file . ' - ' . json_last_error_msg());
+                    $this->translations = [];
+                } else {
+                    $this->translations = is_array($decoded) ? $decoded : [];
+                }
             }
         }
     }
@@ -296,8 +327,9 @@ final class App
     {
         $str = $this->translations[$key] ?? $key;
         foreach ($params as $k => $v) {
-            $str = str_replace(':' . $k, $v, $str);
+            $str = str_replace(':' . $k, (string) $v, $str);
         }
+        $str = preg_replace('/:[a-zA-Z_]+/', '', $str) ?? $str;
         return $str;
     }
 
@@ -322,7 +354,9 @@ final class App
 
     public function login(): string
     {
-        csrf_verify();
+        if (!csrf_verify()) {
+            return $this->t('csrf_error');
+        }
 
         if (!login_rate_check()) {
             return $this->t('login_rate_limited');
@@ -331,27 +365,8 @@ final class App
         $stored = $this->config['password'];
         $input = $_POST['password'] ?? '';
 
-        $md5Migrated = false;
-        $isBcrypt = str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2b$');
-        if (!$isBcrypt && strlen($stored) === 32 && ctype_xdigit($stored)) {
-            $valid = hash_equals($stored, md5($input));
-            if ($valid) {
-                $this->config['password'] = $this->savePassword($input);
-                $md5Migrated = true;
-            }
-        } else {
-            $valid = password_verify($input, $stored);
-        }
-
-        if (!$valid) {
+        if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
-        }
-
-        if ($md5Migrated) {
-            session_regenerate_id(true);
-            $_SESSION['l'] = $this->config['password'];
-            $_SESSION['last_activity'] = time();
-            return $this->t('password_migrated');
         }
 
         $newPass = $_POST['new'] ?? '';
@@ -373,7 +388,7 @@ final class App
         session_regenerate_id(true);
         $_SESSION['l'] = $this->config['password'];
         $_SESSION['last_activity'] = time();
-        header('Location: ./');
+        header('Location: ' . $this->host);
         exit;
     }
 
@@ -394,14 +409,52 @@ final class App
             return;
         }
         $token = csrf_token();
-        $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $safeLang = json_encode($this->language);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks');
-        echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
-        echo "\t<script>i18n.init({$safeLang});</script>\n";
+        $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+        $safeToken = json_encode($token, $jsonFlags);
+        $safeLang = json_encode($this->language, $jsonFlags);
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', $jsonFlags);
+        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
+        echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
+        echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
-            echo "\t{$tag}\n";
+            echo "\t" . esc($tag) . "\n";
         }
+    }
+
+    public function loadThemeJson(string $themeName): array
+    {
+        $path = dirname(__DIR__) . '/themes/' . basename($themeName) . '/theme.json';
+        if (is_file($path)) {
+            $json = file_get_contents($path);
+            if ($json !== false) {
+                $data = json_decode($json, true);
+                if (is_array($data)) {
+                    return $data;
+                }
+            }
+        }
+        return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
+    }
+
+    public function getSidebarBlocks(): array
+    {
+        $config = $this->storage->readConfig();
+        $raw = $config['sidebar_blocks'] ?? '';
+        if ($raw === '') {
+            return [];
+        }
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
+
+    public function saveSidebarBlocks(array $blocks): bool
+    {
+        $json = json_encode($blocks, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode sidebar blocks JSON: ' . json_last_error_msg());
+            return false;
+        }
+        return $this->storage->writeConfigValue('sidebar_blocks', $json);
     }
 
     public function scriptTags(bool $adminMode = false): void
@@ -411,8 +464,9 @@ final class App
         } else {
             $scripts = ['markdown', 'editInplace'];
         }
+        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
         foreach ($scripts as $name) {
-            echo "\t<script src=\"js/{$name}.js\"></script>\n";
+            echo "\t<script{$n} src=\"js/{$name}.js\"></script>\n";
         }
     }
 
@@ -426,11 +480,15 @@ final class App
         if ($isBlocks) {
             $blocksB64 = '';
             if (isset($this->config['pageBlocks'])) {
-                $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE));
+                $json = json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+                if ($json !== false) {
+                    $blocksB64 = base64_encode($json);
+                }
             }
             echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         } elseif ($isMarkdown) {
-            $encoded = esc(base64_encode($content));
+            $b64 = base64_encode($content);
+            $encoded = esc($b64 !== false ? $b64 : '');
             echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
         } else {
             echo $content;
@@ -439,8 +497,11 @@ final class App
 
     public function menu(): void
     {
-        $menu = str_replace("\r\n", "\n", $this->config['menu']);
-        $items = explode("<br />\n", $menu);
+        if ($this->menuItems === null) {
+            $menu = str_replace("\r\n", "\n", $this->config['menu']);
+            $this->menuItems = explode("<br />\n", $menu);
+        }
+        $items = $this->menuItems;
         echo '<ul>';
         foreach ($items as $item) {
             $item = trim($item);

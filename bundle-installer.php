@@ -44,11 +44,11 @@ function detect_files_writable(): array
     if (!is_dir($dir)) {
         $created = @mkdir($dir, 0755, true);
         if (!$created) {
-            return ['ok' => false, 'message' => 'Cannot create data/ directory'];
+            return ['ok' => false, 'message' => 'Cannot create files/ directory'];
         }
     }
     $ok = is_writable($dir);
-    return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
+    return ['ok' => $ok, 'message' => $ok ? 'files/ is writable' : 'files/ is not writable (set 755)'];
 }
 
 function detect_session(): array
@@ -114,7 +114,7 @@ function validate_input(array $post): array
         $errors[] = 'Password must be at least 8 characters';
     }
     $weak = ['admin', 'password', '12345678', 'adlaire'];
-    if (in_array(strtolower($password), $weak, true)) {
+    if (in_array(mb_strtolower($password, 'UTF-8'), $weak, true)) {
         $errors[] = 'That password is too weak';
     }
     if ($password !== $confirm) {
@@ -134,7 +134,9 @@ function install_execute(string $siteName, string $locale, string $password): ar
     // Create system directory
     $systemDir = __DIR__ . '/data/system';
     if (!is_dir($systemDir)) {
-        mkdir($systemDir, 0755, true);
+        if (!mkdir($systemDir, 0755, true)) {
+            return ['ok' => false, 'message' => 'Failed to create system directory'];
+        }
     }
 
     // Save config
@@ -164,12 +166,18 @@ function install_execute(string $siteName, string $locale, string $password): ar
         'installer' => 'bundle-installer.php',
         'installer_version' => '1.0.0',
     ];
+    $lockJson = json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($lockJson === false) {
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
+    }
     $lockResult = file_put_contents(
         __DIR__ . '/data/system/install.lock',
-        json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        $lockJson
     );
 
     if ($lockResult === false) {
+        @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
 
@@ -197,7 +205,8 @@ function security_csrf_verify(): bool
 
 // --- Router ---
 
-$step = (int) ($_REQUEST['step'] ?? 0);
+define('INSTALLER_MAX_STEP', 4);
+$step = max(0, min(INSTALLER_MAX_STEP, (int) ($_REQUEST['step'] ?? 0)));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!security_csrf_verify()) {
@@ -237,7 +246,7 @@ $csrf = security_csrf_token();
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Adlaire Setup — Step <?= $step ?></title>
+    <title>Adlaire Setup — Step <?= (int) $step ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <style>

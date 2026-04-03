@@ -47,8 +47,12 @@ handleEdit();
 
 $app = App::getInstance();
 
+$nonce = bin2hex(random_bytes(16));
+$app->nonce = $nonce;
+
 // --- Security headers ---
-header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
+$cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'";
+header($cspHeader);
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -56,19 +60,49 @@ if (isset($_GET['admin'])) {
         header('Location: ?login');
         exit;
     }
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
     require __DIR__ . '/Core/admin-ui.php';
     ob_end_flush();
     exit;
 }
 
+// --- Preview routing ---
+if (isset($_GET['preview'])) {
+    $previewSlug = $_GET['preview'];
+    if (!$app->isLoggedIn()) {
+        header('Location: ?login');
+        exit;
+    }
+    if (is_string($previewSlug) && $previewSlug !== rawurldecode($previewSlug)) {
+        $previewSlug = rawurldecode($previewSlug);
+    }
+    if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
+        $previewData = $app->storage->readPageData($previewSlug);
+        if ($previewData !== false) {
+            $app->config['page'] = $previewSlug;
+            $app->config['content'] = $previewData['content'];
+            $app->config['pageFormat'] = $previewData['format'] ?? 'blocks';
+            $app->config['pageStatus'] = $previewData['status'] ?? 'published';
+            if (isset($previewData['blocks'])) {
+                $app->config['pageBlocks'] = $previewData['blocks'];
+            }
+        }
+    }
+}
+
 // --- Public page rendering ---
 $theme = basename($app->config['themeSelect']);
-$themePath = 'themes/' . $theme . '/theme.php';
-if (!is_file($themePath)) {
+$themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
+$realThemePath = is_file($themePath) ? realpath($themePath) : false;
+$themesBase = realpath(__DIR__ . '/themes');
+if ($realThemePath === false || $themesBase === false || !str_starts_with($realThemePath, $themesBase . DIRECTORY_SEPARATOR)) {
     $theme = 'AP-Default';
-    $themePath = 'themes/' . $theme . '/theme.php';
+    $themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
+    $realThemePath = realpath($themePath);
 }
-require $themePath;
+if ($realThemePath === false || !is_file($realThemePath)) {
+    http_response_code(500);
+    exit;
+}
+require $realThemePath;
 
 ob_end_flush();

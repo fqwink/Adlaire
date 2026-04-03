@@ -1,6 +1,6 @@
 {
   "name": "adlaire-static-cms",
-  "version": "2.5.38",
+  "version": "2.7.40",
   "private": true,
   "scripts": {
     "build": "tsc",

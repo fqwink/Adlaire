@@ -16,7 +16,9 @@ function markdownToHtml(md) {
     const codeBlocks = [];
     html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang, code) => {
         const escaped = code.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const cls = lang ? ` class="language-${lang}"` : '';
+        // #50: langをescHtml()でエスケープ
+        const escapeLang = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const cls = lang ? ` class="language-${escapeLang(lang)}"` : '';
         codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
         return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
     });
@@ -31,14 +33,16 @@ function markdownToHtml(md) {
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes = {};
     html = html.replace(/^\[\^(\w+)\]:\s*(.+)$/gm, (_m, id, text) => {
-        footnotes[id] = text;
+        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        footnotes[safeId] = text;
         return '';
     });
     // Footnote references: [^id] → superscript link (unique IDs per occurrence)
     let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
+        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
         fnRefCount++;
-        return `<sup><a href="#fn-${id}" id="fnref-${id}-${fnRefCount}">${id}</a></sup>`;
+        return `<sup><a href="#fn-${safeId}" id="fnref-${safeId}-${fnRefCount}">${safeId}</a></sup>`;
     });
     // Headings (### > ## > #)
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -51,9 +55,17 @@ function markdownToHtml(md) {
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     // Images ![alt](url) — must come before links
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt, url) => {
+        if (/^\s*(javascript|data|vbscript)\s*:/i.test(url))
+            return `<img src="" alt="${alt}">`;
+        return `<img src="${url}" alt="${alt}">`;
+    });
     // Links [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) => {
+        if (/^\s*(javascript|vbscript|data)\s*:/i.test(url))
+            return `<a href="">${text}</a>`;
+        return `<a href="${url}">${text}</a>`;
+    });
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
         const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
@@ -64,6 +76,9 @@ function markdownToHtml(md) {
         // Check if row 2 is separator (|---|---|)
         const sep = rows[1];
         if (!/^\|[\s\-:|]+\|$/.test(sep))
+            return tableBlock;
+        const sepCols = sep.split('|').slice(1, -1);
+        if (sepCols.length !== headerCells.length)
             return tableBlock;
         let tableHtml = '<table><thead><tr>';
         headerCells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });
@@ -88,10 +103,10 @@ function markdownToHtml(md) {
     // Ordered list items: 1. item
     html = html.replace(/^\d+\. (.+)$/gm, '<li class="ol">$1</li>');
     // Wrap consecutive <li> in <ul> or <ol>
-    html = html.replace(/((?:<li class="ol">.*<\/li>\n?)+)/g, (m) => {
+    html = html.replace(/((?:<li class="ol">[\s\S]*?<\/li>\n?)+)/g, (m) => {
         return '<ol>' + m.replaceAll(' class="ol"', '') + '</ol>';
     });
-    html = html.replace(/((?:<li[\s>].*<\/li>\n?)+)/g, (m) => {
+    html = html.replace(/((?:<li[\s>][\s\S]*?<\/li>\n?)+)/g, (m) => {
         if (m.startsWith('<ol>'))
             return m;
         return '<ul>' + m + '</ul>';

@@ -27,6 +27,10 @@ interface Revision {
     timestamp: string;
 }
 
+interface SavePageResult {
+    warnings?: string[];
+}
+
 interface SearchResult {
     slug: string;
     snippet: string;
@@ -35,9 +39,10 @@ interface SearchResult {
     updated_at: string;
 }
 
+// #33: グローバル変数を直接更新
 function updateCsrfFromResponse(res: Response): void {
     const newToken = res.headers.get('X-CSRF-Token');
-    if (newToken) { (window as any).csrfToken = newToken; }
+    if (newToken) { csrfToken = newToken; }
 }
 
 const api = {
@@ -64,7 +69,7 @@ const api = {
     /**
      * Create or update a page.
      */
-    async savePage(slug: string, content: string, format: string = 'blocks'): Promise<void> {
+    async savePage(slug: string, content: string, format: string = 'blocks'): Promise<SavePageResult> {
         const body = new URLSearchParams();
         body.append('slug', slug);
         body.append('format', format);
@@ -86,6 +91,11 @@ const api = {
             let msg = `API error: ${res.status}`;
             try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
             throw new Error(msg);
+        }
+        try {
+            return await res.json();
+        } catch {
+            return {};
         }
     },
 
@@ -110,8 +120,8 @@ const api = {
      */
     async listRevisions(slug: string): Promise<Revision[]> {
         const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`);
+        if (!res.ok) { return []; }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.revisions;
     },
 
@@ -138,8 +148,8 @@ const api = {
      */
     async search(query: string): Promise<SearchResult[]> {
         const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
+        if (!res.ok) { return []; }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.results;
     },
 
@@ -165,5 +175,76 @@ const api = {
         const json = await res.json();
         if (!res.ok) { throw new Error(json.error); }
         return json.imported;
+    },
+
+    async reorderPages(slugs: string[]): Promise<void> {
+        const res = await fetch('index.php?api=reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ slugs }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    async bulkStatus(slugs: string[], status: string): Promise<void> {
+        const res = await fetch('index.php?api=bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'status', slugs, status }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    async bulkDelete(slugs: string[]): Promise<void> {
+        const res = await fetch('index.php?api=bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'delete', slugs }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    async getRevisionDiff(slug: string, t1: string, t2: string): Promise<{ added: unknown[]; removed: unknown[]; changed: unknown[] }> {
+        const params = new URLSearchParams({ slug, t1, t2 });
+        const res = await fetch(`index.php?api=revisiondiff&${params.toString()}`);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+        return res.json();
+    },
+
+    async saveSidebar(blocks: string): Promise<void> {
+        const body = new URLSearchParams();
+        body.append('blocks', blocks);
+        body.append('csrf', csrfToken);
+
+        const res = await fetch('index.php?api=sidebar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 };

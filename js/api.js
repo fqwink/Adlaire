@@ -8,10 +8,11 @@
  *
  * Requires: csrfToken global variable set by PHP.
  */
+// #33: グローバル変数を直接更新
 function updateCsrfFromResponse(res) {
     const newToken = res.headers.get('X-CSRF-Token');
     if (newToken) {
-        window.csrfToken = newToken;
+        csrfToken = newToken;
     }
 }
 const api = {
@@ -67,6 +68,12 @@ const api = {
             catch { /* non-JSON response */ }
             throw new Error(msg);
         }
+        try {
+            return await res.json();
+        }
+        catch {
+            return {};
+        }
     },
     /**
      * Delete a page.
@@ -92,10 +99,10 @@ const api = {
      */
     async listRevisions(slug) {
         const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            return [];
         }
+        const json = await res.json();
         return json.revisions;
     },
     /**
@@ -121,10 +128,10 @@ const api = {
      */
     async search(query) {
         const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            return [];
         }
+        const json = await res.json();
         return json.results;
     },
     /**
@@ -152,5 +159,90 @@ const api = {
             throw new Error(json.error);
         }
         return json.imported;
+    },
+    async reorderPages(slugs) {
+        const res = await fetch('index.php?api=reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ slugs }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+    async bulkStatus(slugs, status) {
+        const res = await fetch('index.php?api=bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'status', slugs, status }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+    async bulkDelete(slugs) {
+        const res = await fetch('index.php?api=bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'delete', slugs }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+    async getRevisionDiff(slug, t1, t2) {
+        const params = new URLSearchParams({ slug, t1, t2 });
+        const res = await fetch(`index.php?api=revisiondiff&${params.toString()}`);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+        return res.json();
+    },
+    async saveSidebar(blocks) {
+        const body = new URLSearchParams();
+        body.append('blocks', blocks);
+        body.append('csrf', csrfToken);
+        const res = await fetch('index.php?api=sidebar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 };

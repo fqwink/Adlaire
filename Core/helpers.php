@@ -19,21 +19,18 @@ function esc(string $value): string
 
 function csrf_token(): string
 {
-    if (!isset($_SESSION['csrf']) || $_SESSION['csrf'] === '') {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf'];
+    return $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 }
 
-function csrf_verify(): void
+function csrf_verify(): bool
 {
-    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
-        header('HTTP/1.1 403 Forbidden');
-        exit;
+        return false;
     }
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    return true;
 }
 
 /**
@@ -45,16 +42,50 @@ function login_rate_check(): bool
     $windowSeconds = 300;
     $now = time();
 
-    $_SESSION['login_attempts'] ??= [];
-    $_SESSION['login_attempts'] = array_values(array_filter(
-        $_SESSION['login_attempts'],
-        fn(int $t) => ($now - $t) < $windowSeconds
-    ));
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $rateDir = __DIR__ . '/../data/system';
+    if (!is_dir($rateDir)) {
+        if (!@mkdir($rateDir, 0755, true) && !is_dir($rateDir)) {
+            return true;
+        }
+    }
+    $rateFile = $rateDir . '/rate_' . hash('sha256', $ip) . '.json';
 
-    if (count($_SESSION['login_attempts']) >= $maxAttempts) {
+    $attempts = [];
+    if (is_file($rateFile)) {
+        $fp = fopen($rateFile, 'r');
+        if ($fp !== false) {
+            flock($fp, LOCK_SH);
+            $raw = stream_get_contents($fp);
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            $decoded = json_decode($raw ?: '[]', true);
+            if (is_array($decoded)) {
+                $attempts = $decoded;
+            }
+        }
+    }
+
+    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < $windowSeconds));
+    $attemptCount = count($attempts);
+
+    if ($attemptCount >= $maxAttempts) {
         return false;
     }
 
-    $_SESSION['login_attempts'][] = $now;
+    $attempts[] = $now;
+    if (!is_file($rateFile)) {
+        file_put_contents($rateFile, '[]', LOCK_EX);
+    }
+    $fp = fopen($rateFile, 'r+');
+    if ($fp !== false) {
+        flock($fp, LOCK_EX);
+        ftruncate($fp, 0);
+        fwrite($fp, json_encode($attempts));
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        @chmod($rateFile, 0600);
+    }
+
     return true;
 }

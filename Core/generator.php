@@ -22,7 +22,10 @@ function handleApiGenerate(FileStorage $storage): void
         return;
     }
 
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $app = App::getInstance();
     $distDir = dirname(__DIR__) . '/dist';
@@ -44,7 +47,10 @@ function handleApiGenerate(FileStorage $storage): void
                 RecursiveIteratorIterator::CHILD_FIRST
             );
             foreach ($files as $file) {
-                if ($file->isDir()) {
+                $path = $file->getPathname();
+                if (is_link($path)) {
+                    unlink($path);
+                } elseif ($file->isDir()) {
                     rmdir($file->getRealPath());
                 } else {
                     unlink($file->getRealPath());
@@ -60,14 +66,21 @@ function handleApiGenerate(FileStorage $storage): void
     $theme = basename($app->config['themeSelect']);
     $themePath = dirname(__DIR__) . '/themes/' . $theme;
     $count = 0;
+    $skipped = 0;
+    $failed = 0;
+    $details = [];
+    $startTime = hrtime(true);
 
-    // Copy theme CSS
+    // Copy theme CSS (prefer minimal.css for static output)
     $cssDir = $distDir . '/themes/' . $theme;
     if (!is_dir($cssDir)) {
         mkdir($cssDir, 0755, true);
     }
-    if (is_file($themePath . '/style.css')) {
-        copy($themePath . '/style.css', $cssDir . '/style.css');
+    $cssSource = is_file($themePath . '/minimal.css') ? '/minimal.css' : '/style.css';
+    if (is_file($themePath . $cssSource)) {
+        if (!copy($themePath . $cssSource, $cssDir . '/style.css')) {
+            error_log('Adlaire: Failed to copy theme CSS');
+        }
     }
 
     // Copy JS
@@ -80,7 +93,9 @@ function handleApiGenerate(FileStorage $storage): void
         $jsFiles = glob($jsSrc . '/*.js');
         if (is_array($jsFiles)) {
             foreach ($jsFiles as $jsFile) {
-                copy($jsFile, $jsDst . '/' . basename($jsFile));
+                if (!copy($jsFile, $jsDst . '/' . basename($jsFile))) {
+                    error_log('Adlaire: Failed to copy JS file: ' . basename($jsFile));
+                }
             }
         }
     }
@@ -95,21 +110,26 @@ function handleApiGenerate(FileStorage $storage): void
         $langFiles = glob($langSrc . '/*.json');
         if (is_array($langFiles)) {
             foreach ($langFiles as $langFile) {
-                copy($langFile, $langDst . '/' . basename($langFile));
+                if (!copy($langFile, $langDst . '/' . basename($langFile))) {
+                    error_log('Adlaire: Failed to copy lang file: ' . basename($langFile));
+                }
             }
         }
     }
 
     // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
-        if ($lastBuildTime !== '' && strtotime($data['updated_at'] ?? '') <= strtotime($lastBuildTime)) {
-            continue; // Skip unchanged pages in diff build
+        $updatedTime = strtotime($data['updated_at'] ?? '');
+        $buildTime = strtotime($lastBuildTime);
+        if ($lastBuildTime !== '' && $updatedTime !== false && $buildTime !== false && $updatedTime <= $buildTime) {
+            $skipped++;
+            $details[] = ['slug' => $slug, 'result' => 'skipped'];
+            continue;
         }
         $format = $data['format'] ?? 'blocks';
         $contentHtml = '';
 
         if ($format === 'blocks' && isset($data['blocks'])) {
-            // Server-side block rendering
             $contentHtml = renderBlocksToHtml($data['blocks']);
         } elseif ($format === 'markdown') {
             $contentHtml = renderMarkdownToHtml($data['content']);
@@ -119,23 +139,33 @@ function handleApiGenerate(FileStorage $storage): void
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
 
-        // Write to dist
+        $writeFailed = false;
         if ($slug === 'home') {
-            file_put_contents($distDir . '/index.html', $pageHtml);
+            if (file_put_contents($distDir . '/index.html', $pageHtml) === false) {
+                $writeFailed = true;
+            }
         }
         $pageDir = $distDir . '/' . $slug;
         if (!is_dir($pageDir)) {
             mkdir($pageDir, 0755, true);
         }
-        file_put_contents($pageDir . '/index.html', $pageHtml);
-        $count++;
+        if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
+            $writeFailed = true;
+        }
+
+        if ($writeFailed) {
+            $failed++;
+            $details[] = ['slug' => $slug, 'result' => 'failed'];
+        } else {
+            $count++;
+            $details[] = ['slug' => $slug, 'result' => 'generated'];
+        }
     }
 
     // Generate sitemap.xml
     $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
-    $host = ($isHttps ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-    $basePath = dirname($_SERVER['SCRIPT_NAME']);
-    if ($basePath === '/') { $basePath = ''; }
+    $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
+    $basePath = '';
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
@@ -144,15 +174,35 @@ function handleApiGenerate(FileStorage $storage): void
         $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
     }
     $xml .= '</urlset>';
-    file_put_contents($distDir . '/sitemap.xml', $xml);
+    if (file_put_contents($distDir . '/sitemap.xml', $xml) === false) {
+        apiError(500, 'Failed to write sitemap.xml');
+        return;
+    }
 
     // Save build state for diff builds
-    file_put_contents($distDir . '/.build_state.json', json_encode([
+    $buildStateJson = json_encode([
         'built_at' => date('c'),
         'pages' => $count,
-    ], JSON_PRETTY_PRINT));
+    ], JSON_PRETTY_PRINT);
+    if ($buildStateJson === false || file_put_contents($distDir . '/.build_state.json', $buildStateJson) === false) {
+        apiError(500, 'Failed to write build state');
+        return;
+    }
 
-    echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
+    $buildTimeMs = (int) ((hrtime(true) - $startTime) / 1_000_000);
+    $pagesTotal = count($pages);
+
+    echo json_encode([
+        'status' => 'ok',
+        'pages' => $count,
+        'output' => 'dist/',
+        'pages_total' => $pagesTotal,
+        'pages_generated' => $count,
+        'pages_skipped' => $skipped,
+        'pages_failed' => $failed,
+        'build_time_ms' => $buildTimeMs,
+        'details' => $details,
+    ]);
 }
 
 /**

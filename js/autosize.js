@@ -23,22 +23,41 @@ function autosize(textarea) {
     const savedOverflow = textarea.style.overflow;
     textarea.style.overflow = 'hidden';
     textarea.style.resize = 'none';
+    const ac = new AbortController();
     function resize() {
         textarea.style.overflowY = 'hidden';
         textarea.style.height = '0';
         const scrollHeight = textarea.scrollHeight + extra;
         textarea.style.height = Math.max(scrollHeight, minHeight) + 'px';
     }
-    textarea.addEventListener('input', resize);
-    window.addEventListener('resize', resize);
-    // Initial resize
+    textarea.addEventListener('input', resize, { signal: ac.signal });
+    window.addEventListener('resize', resize, { signal: ac.signal });
     resize();
-    // Cleanup on remove (via custom event)
+    // #3: MutationObserver to detect DOM removal and abort listeners
+    const observer = new MutationObserver(() => {
+        if (!textarea.isConnected) {
+            ac.abort();
+            observer.disconnect();
+        }
+    });
+    if (textarea.parentNode) {
+        observer.observe(textarea.parentNode, { childList: true });
+    }
+    // #4: WeakRef-based GC guard for destroy event not firing
+    const weakRef = new WeakRef(textarea);
+    const gcCheckInterval = setInterval(() => {
+        if (!weakRef.deref()) {
+            ac.abort();
+            observer.disconnect();
+            clearInterval(gcCheckInterval);
+        }
+    }, 5000);
     textarea.addEventListener('autosize:destroy', () => {
+        ac.abort();
+        observer.disconnect();
+        clearInterval(gcCheckInterval);
         textarea.style.overflow = savedOverflow;
         textarea.style.resize = '';
-        textarea.removeEventListener('input', resize);
-        window.removeEventListener('resize', resize);
         delete textarea.dataset.autosize;
     }, { once: true });
 }

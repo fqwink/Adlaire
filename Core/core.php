@@ -25,12 +25,13 @@ final class FileStorage
     private string $pagesDir;
     private string $backupsDir;
     private string $revisionsDir;
+    private bool $migrated = false;
 
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
         'password', 'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
-        'language',
+        'language', 'page_order', 'sidebar_blocks',
     ];
 
     /** Maximum number of config backup generations to retain */
@@ -51,24 +52,26 @@ final class FileStorage
 
     public function ensureDirectories(): void
     {
-        // Auto-migrate from legacy files/ to data/ directory
         $legacyDir = dirname($this->basePath) . '/files';
         if ($this->basePath === 'data' && !is_dir($this->basePath) && is_dir($legacyDir)) {
-            rename($legacyDir, $this->basePath);
+            if (is_link($legacyDir) || is_link($this->basePath)) {
+                error_log('Adlaire: Symlink detected during legacy migration, skipping');
+            } elseif (!rename($legacyDir, $this->basePath)) {
+                error_log('Adlaire: Failed to rename legacy directory: ' . $legacyDir);
+            }
         }
 
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
-            if (!is_dir($dir)) {
+            if (!is_dir($dir) && !is_link($dir)) {
                 mkdir($dir, 0755, true);
             }
         }
-        // Ensure system directory exists
         $systemDir = $this->basePath . '/system';
-        if (!is_dir($systemDir)) {
+        if (!is_dir($systemDir) && !is_link($systemDir)) {
             mkdir($systemDir, 0755, true);
         }
         $pluginsDir = dirname($this->basePath) . '/plugins';
-        if (!is_dir($pluginsDir)) {
+        if (!is_dir($pluginsDir) && !is_link($pluginsDir)) {
             mkdir($pluginsDir, 0755, true);
         }
     }
@@ -78,10 +81,10 @@ final class FileStorage
      */
     public static function validateSlug(string $slug): bool
     {
-        if ($slug === '' || $slug !== basename($slug)) {
+        if ($slug === '') {
             return false;
         }
-        return (bool) preg_match('/^[a-zA-Z0-9_\-]+$/', $slug);
+        return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $slug);
     }
 
     /**
@@ -90,14 +93,21 @@ final class FileStorage
      */
     public function migrate(): void
     {
-        if (file_exists($this->configFile)) {
+        if ($this->migrated || file_exists($this->configFile)) {
+            $this->migrated = true;
             return;
+        }
+        $this->migrated = true;
+
+        $realBase = realpath($this->basePath);
+        if ($realBase === false) {
+            $realBase = $this->basePath;
         }
 
         $config = [];
         foreach (self::CONFIG_KEYS as $key) {
-            $legacyFile = $this->basePath . '/' . $key;
-            if (file_exists($legacyFile)) {
+            $legacyFile = $realBase . '/' . $key;
+            if (file_exists($legacyFile) && !is_link($legacyFile)) {
                 $config[$key] = file_get_contents($legacyFile);
             }
         }
@@ -106,15 +116,14 @@ final class FileStorage
             $this->writeConfig($config);
         }
 
-        // Migrate page files to JSON format in pages/ subdirectory
         $skipFiles = array_merge(self::CONFIG_KEYS, [
             'config.json', 'pages.meta.json', 'pages.index.json',
             '.htaccess', '.config.lock', 'install.lock',
         ]);
-        $files = glob($this->basePath . '/*');
+        $files = glob($realBase . '/*');
         if (is_array($files)) {
             foreach ($files as $file) {
-                if (is_dir($file)) {
+                if (is_dir($file) || is_link($file)) {
                     continue;
                 }
                 $name = basename($file);
@@ -136,16 +145,15 @@ final class FileStorage
                         'updated_at' => $mtime,
                     ];
                     $this->atomicWrite($dest, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                    unlink($file);
+                    @unlink($file);
                 }
             }
         }
 
-        // Clean up legacy config files (pages already moved)
         foreach (self::CONFIG_KEYS as $key) {
-            $legacyFile = $this->basePath . '/' . $key;
-            if (file_exists($legacyFile)) {
-                unlink($legacyFile);
+            $legacyFile = $realBase . '/' . $key;
+            if (file_exists($legacyFile) && !is_link($legacyFile)) {
+                @unlink($legacyFile);
             }
         }
     }
@@ -166,6 +174,10 @@ final class FileStorage
         }
 
         $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Adlaire: Failed to parse config.json: ' . json_last_error_msg());
+            return [];
+        }
         return is_array($data) ? $data : [];
     }
 
@@ -180,9 +192,19 @@ final class FileStorage
             return false;
         }
 
-        if (!flock($lockFp, LOCK_EX)) {
-            fclose($lockFp);
-            return false;
+        $locked = false;
+        for ($retry = 0; $retry < 3; $retry++) {
+            if (flock($lockFp, LOCK_EX | LOCK_NB)) {
+                $locked = true;
+                break;
+            }
+            usleep(50000);
+        }
+        if (!$locked) {
+            if (!flock($lockFp, LOCK_EX)) {
+                fclose($lockFp);
+                return false;
+            }
         }
 
         try {
@@ -200,7 +222,10 @@ final class FileStorage
 
             if (file_exists($this->configFile)) {
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
-                copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
+                if (!copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json')) {
+                    error_log('Adlaire: Failed to copy config backup: ' . $backupName);
+                    return false;
+                }
                 $this->rotateBackups();
             }
 
@@ -234,6 +259,9 @@ final class FileStorage
             return false;
         }
         $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return false;
+        }
         return is_array($data) && isset($data['content']) ? $data : false;
     }
 
@@ -294,9 +322,14 @@ final class FileStorage
         }
 
         $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
-        copy($path, $backupPath);
+        if (!copy($path, $backupPath)) {
+            error_log('Adlaire: Failed to copy page backup: ' . $slug);
+        }
 
-        unlink($path);
+        if (!@unlink($path)) {
+            error_log('Adlaire: Failed to delete page file: ' . $path);
+            return false;
+        }
 
         // Clean up revisions for deleted page
         $revDir = $this->revisionsDir . '/' . $slug;
@@ -304,10 +337,12 @@ final class FileStorage
             $revFiles = glob($revDir . '/*.json');
             if (is_array($revFiles)) {
                 foreach ($revFiles as $rf) {
-                    unlink($rf);
+                    @unlink($rf);
                 }
             }
-            rmdir($revDir);
+            if (!@rmdir($revDir)) {
+                error_log('Adlaire: Failed to remove revision directory: ' . $revDir);
+            }
         }
 
         $this->invalidatePageCache();
@@ -319,31 +354,37 @@ final class FileStorage
      */
     public function listPages(): array
     {
-        // Try index cache first (metadata only, used as slug list)
         $cacheFile = $this->basePath . '/pages.index.json';
-        $useCachedSlugs = false;
-        $cachedSlugs = [];
+        $cachedIndex = null;
 
         if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
+            clearstatcache(true, $cacheFile);
+            clearstatcache(true, $this->pagesDir);
             $cacheMtime = filemtime($cacheFile);
             $dirMtime = filemtime($this->pagesDir);
             if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
                 $cached = $this->lockedRead($cacheFile);
                 if ($cached !== false) {
-                    $data = json_decode($cached, true);
-                    if (is_array($data)) {
-                        $cachedSlugs = array_keys($data);
-                        $useCachedSlugs = true;
+                    $decoded = json_decode($cached, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $cachedIndex = $decoded;
                     }
                 }
             }
         }
 
-        // Build full data from files
         $pages = [];
+        $memoryLimit = (int) ini_get('memory_limit');
+        if ($memoryLimit > 0) {
+            $memoryLimitBytes = $memoryLimit * 1024 * 1024;
+            if (memory_get_usage(true) > (int) ($memoryLimitBytes * 0.8)) {
+                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
+                return $pages;
+            }
+        }
 
-        if ($useCachedSlugs) {
-            foreach ($cachedSlugs as $slug) {
+        if ($cachedIndex !== null) {
+            foreach ($cachedIndex as $slug => $meta) {
                 $data = $this->readPageData($slug);
                 if ($data !== false) {
                     $pages[$slug] = $data;
@@ -353,7 +394,7 @@ final class FileStorage
             $files = glob($this->pagesDir . '/*.json');
             if (is_array($files)) {
                 foreach ($files as $file) {
-                    if (is_dir($file)) {
+                    if (is_dir($file) || is_link($file)) {
                         continue;
                     }
                     $slug = basename($file, '.json');
@@ -387,7 +428,7 @@ final class FileStorage
     {
         $cacheFile = $this->basePath . '/pages.index.json';
         if (file_exists($cacheFile)) {
-            unlink($cacheFile);
+            @unlink($cacheFile);
         }
     }
 
@@ -433,22 +474,38 @@ final class FileStorage
     private function atomicWrite(string $path, string $content): bool
     {
         $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
         $tmp = tempnam($dir, '.tmp_');
         if ($tmp === false) {
+            error_log('Adlaire: tempnam() failed for directory: ' . $dir);
             return false;
         }
+
+        $oldUmask = umask(0);
+        chmod($tmp, 0600);
+        umask($oldUmask);
 
         $written = file_put_contents($tmp, $content, LOCK_EX);
         if ($written === false) {
-            unlink($tmp);
+            @unlink($tmp);
             return false;
         }
 
+        $oldUmask = umask(0);
         if (!chmod($tmp, 0644)) {
-            unlink($tmp);
+            umask($oldUmask);
+            @unlink($tmp);
             return false;
         }
-        return rename($tmp, $path);
+        umask($oldUmask);
+        if (!rename($tmp, $path)) {
+            error_log('Adlaire: Failed to rename temp file: ' . $tmp . ' -> ' . $path);
+            @unlink($tmp);
+            return false;
+        }
+        return true;
     }
 
     private function lockedRead(string $path): string|false
@@ -473,13 +530,19 @@ final class FileStorage
     {
         $pattern = $this->backupsDir . '/config.*.json';
         $files = glob($pattern);
-        if (!is_array($files) || count($files) < self::MAX_BACKUPS) {
+        if (!is_array($files) || count($files) <= self::MAX_BACKUPS) {
             return;
         }
-        sort($files);
-        $toRemove = array_slice($files, 0, count($files) - self::MAX_BACKUPS + 1);
+        usort($files, function (string $a, string $b): int {
+            $mtimeA = filemtime($a);
+            $mtimeB = filemtime($b);
+            if ($mtimeA === false) { $mtimeA = 0; }
+            if ($mtimeB === false) { $mtimeB = 0; }
+            return $mtimeA <=> $mtimeB;
+        });
+        $toRemove = array_slice($files, 0, max(0, count($files) - self::MAX_BACKUPS));
         foreach ($toRemove as $old) {
-            unlink($old);
+            @unlink($old);
         }
     }
     // --- Revision management ---
@@ -492,7 +555,10 @@ final class FileStorage
     {
         $dir = $this->revisionsDir . '/' . $slug;
         if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                error_log('Adlaire: Failed to create revision directory: ' . $dir);
+                return;
+            }
         }
 
         $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
@@ -504,7 +570,7 @@ final class FileStorage
             sort($files);
             $toRemove = array_slice($files, 0, count($files) - self::MAX_REVISIONS);
             foreach ($toRemove as $old) {
-                unlink($old);
+                @unlink($old);
             }
         }
     }
@@ -562,7 +628,7 @@ final class FileStorage
         }
 
         $data = json_decode($json, true);
-        if (!is_array($data) || !isset($data['content'])) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || !isset($data['content'])) {
             return false;
         }
 
@@ -570,5 +636,75 @@ final class FileStorage
         $blocks = $data['blocks'] ?? null;
         $status = $data['status'] ?? 'published';
         return $this->writePage($slug, $data['content'], $format, $blocks, $status);
+    }
+
+    public function getPageOrder(): array
+    {
+        $config = $this->readConfig();
+        $raw = $config['page_order'] ?? '';
+        if ($raw === '') {
+            return [];
+        }
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
+
+    public function savePageOrder(array $slugs): bool
+    {
+        return $this->writeConfigValue('page_order', json_encode($slugs, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function listAllRevisions(): array
+    {
+        $result = [];
+        if (!is_dir($this->revisionsDir)) {
+            return $result;
+        }
+        $dirs = glob($this->revisionsDir . '/*', GLOB_ONLYDIR);
+        if (!is_array($dirs)) {
+            return $result;
+        }
+        foreach ($dirs as $dir) {
+            $slug = basename($dir);
+            if (!self::validateSlug($slug)) {
+                continue;
+            }
+            $files = glob($dir . '/*.json');
+            if (!is_array($files)) {
+                continue;
+            }
+            rsort($files);
+            $revs = [];
+            foreach ($files as $file) {
+                $revs[] = ['timestamp' => basename($file, '.json')];
+            }
+            if ($revs !== []) {
+                $result[$slug] = $revs;
+            }
+        }
+        return $result;
+    }
+
+    public function getRevisionData(string $slug, string $timestamp): array|false
+    {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
+            return false;
+        }
+        $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
+        if (!file_exists($revFile)) {
+            return false;
+        }
+        $json = $this->lockedRead($revFile);
+        if ($json === false) {
+            return false;
+        }
+        $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            return false;
+        }
+        return $data;
     }
 }

@@ -36,7 +36,7 @@ $host = $app->host;
 
 	<div class="clear"></div>
 	<footer>
-		<p><?= $c['copyright'] ?> | <?= $app->getLoginStatus() ?> | <?= $app->credit ?></p>
+		<p><?= esc($c['copyright']) ?> | <?= $app->getLoginStatus() ?> | <?= $app->credit ?></p>
 	</footer>
 </body>
 </html>
