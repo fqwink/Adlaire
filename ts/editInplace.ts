@@ -160,7 +160,7 @@ function initBlockEditor(): void {
         }
         let blocks: { type: string; data: Record<string, unknown> }[] = [];
         if (blocksRaw) {
-            try { blocks = JSON.parse(blocksRaw); } catch { /* empty */ }
+            try { blocks = JSON.parse(blocksRaw); } catch (err) { console.warn('Failed to parse blocks:', err); }
         }
 
         const editorData = {
@@ -261,7 +261,7 @@ function initBlockEditor(): void {
         }
         let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
         if (sidebarBlocksRaw) {
-            try { sidebarBlocks = JSON.parse(sidebarBlocksRaw); } catch { /* empty */ }
+            try { sidebarBlocks = JSON.parse(sidebarBlocksRaw); } catch (err) { console.warn('Failed to parse sidebar blocks:', err); }
         }
 
         const sidebarData: EditorData = {
