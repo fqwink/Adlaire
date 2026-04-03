@@ -4,7 +4,7 @@
  */
 
 /** Global variables injected by PHP */
-declare const csrfToken: string;
+declare let csrfToken: string;
 
 /** Global functions from other TS modules */
 declare function autosize(textarea: HTMLTextAreaElement): void;

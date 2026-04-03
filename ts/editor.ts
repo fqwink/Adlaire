@@ -43,6 +43,8 @@ function attachBackspaceHandler(el: HTMLElement): void {
             e.preventDefault();
             const editor = getEditorFromElement(el);
             if (!editor) return;
+            // #12: focusout前の状態保存トリガー
+            (editor as any).saveUndoState();
             const block = el.closest('.ce-block') as HTMLElement;
             const idx = editor.getBlockIndex(block);
             if (idx > 0) {
@@ -109,23 +111,38 @@ class UndoManager {
 
     push(state: EditorData): void {
         const json = JSON.stringify(state);
-        if (this.pointer >= 0 && this.stack[this.pointer] === json) return;
+        // #9: ホワイトスペース正規化で同一チェック
+        const normalized = json.replace(/\s+/g, ' ');
+        if (this.pointer >= 0) {
+            const prevNormalized = this.stack[this.pointer].replace(/\s+/g, ' ');
+            if (prevNormalized === normalized) return;
+        }
         this.stack = this.stack.slice(0, this.pointer + 1);
         this.stack.push(json);
         if (this.stack.length > this.maxSize) this.stack.shift();
         this.pointer = this.stack.length - 1;
     }
 
+    // #10: JSON.parseにtry-catch追加
     undo(): EditorData | null {
         if (this.pointer <= 0) return null;
         this.pointer--;
-        return JSON.parse(this.stack[this.pointer]);
+        try {
+            return JSON.parse(this.stack[this.pointer]);
+        } catch {
+            return null;
+        }
     }
 
+    // #11: JSON.parseにtry-catch追加
     redo(): EditorData | null {
         if (this.pointer >= this.stack.length - 1) return null;
         this.pointer++;
-        return JSON.parse(this.stack[this.pointer]);
+        try {
+            return JSON.parse(this.stack[this.pointer]);
+        } catch {
+            return null;
+        }
     }
 }
 
@@ -223,12 +240,14 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     e.preventDefault();
                     e.stopPropagation();
                     const currentItems: string[] = [];
-                    listEl.querySelectorAll('li').forEach(li => currentItems.push(li.innerHTML));
+                    // #14: li.innerHTMLにsanitizeHtml適用してXSS防止
+                    listEl.querySelectorAll('li').forEach(li => currentItems.push(sanitizeHtml(li.innerHTML)));
 
                     style = style === 'ordered' ? 'unordered' : 'ordered';
                     const newTag = style === 'ordered' ? 'ol' : 'ul';
                     const newEl = document.createElement(newTag);
                     newEl.className = 'ce-list';
+                    // #15: sanitizeHtml後のli内HTML
                     currentItems.forEach(item => {
                         const li = document.createElement('li');
                         li.contentEditable = 'true';
@@ -293,6 +312,13 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 bq.contentEditable = 'true';
                 bq.innerHTML = sanitizeHtml((data.text as string) || '');
                 attachBackspaceHandler(bq);
+                // #17: blockquote focusoutでのセーブ検知改善
+                bq.addEventListener('focusout', () => {
+                    const editor = getEditorFromElement(bq);
+                    if (editor) {
+                        (editor as any).saveUndoState();
+                    }
+                });
                 return bq;
             },
             save(el) {
@@ -323,8 +349,13 @@ const builtinTools: Record<string, BlockToolFactory> = {
 
                 const img = document.createElement('img');
                 const initialUrl = (data.url as string) || '';
-                img.src = /^\s*javascript\s*:/i.test(initialUrl) ? '' : initialUrl;
+                // #18: javascript:, data:, vbscript: プロトコル + protocol-relative URL対策
+                const isDangerousUrl = (url: string): boolean =>
+                    /^\s*(javascript|data|vbscript)\s*:/i.test(url) || /^\s*\/\//.test(url.trim());
+                img.src = isDangerousUrl(initialUrl) ? '' : initialUrl;
                 img.alt = '';
+                // #19: onerror属性をnullに設定
+                img.onerror = null;
 
                 const urlInput = document.createElement('input');
                 urlInput.type = 'text';
@@ -333,7 +364,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 urlInput.value = initialUrl;
                 urlInput.addEventListener('input', () => {
                     const val = urlInput.value;
-                    img.src = /^\s*javascript\s*:/i.test(val) ? '' : val;
+                    img.src = isDangerousUrl(val) ? '' : val;
+                    // #19: URLの割り当て時にonerror属性をnullに設定
+                    img.onerror = null;
                 });
 
                 const cap = document.createElement('figcaption');
@@ -385,7 +418,15 @@ class InlineToolbar {
                     this.toggleInlineTag('em');
                 } else if (action === 'link') {
                     const url = prompt('URL:');
-                    if (url) this.wrapWithLink(url);
+                    if (url) {
+                        // #22: URLバリデーション追加
+                        try {
+                            new URL(url, window.location.href);
+                        } catch {
+                            return; // 無効なURLは無視
+                        }
+                        this.wrapWithLink(url);
+                    }
                 }
             });
         });
@@ -426,7 +467,13 @@ class InlineToolbar {
                     wrapper.appendChild(contents);
                     range.insertNode(wrapper);
                 } catch {
+                    // #23: finally で状態復元保証 (catch内のフォールバック)
                     sel.removeAllRanges();
+                    sel.addRange(savedRange);
+                }
+            } finally {
+                // #23: 状態復元保証 - selectionが失われた場合に復元
+                if (sel.rangeCount === 0) {
                     sel.addRange(savedRange);
                 }
             }
@@ -522,7 +569,13 @@ class Editor {
         // #25: Save state on content changes (focusout)
         this.container.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
-            if (related && (this.container.contains(related) || (related as HTMLElement).closest?.('.ce-inline-toolbar'))) {
+            // #27: toolbar操作時のセーブ遅延改善 - ce-toolbox, ce-inline-toolbar含む
+            if (related && (
+                this.container.contains(related) ||
+                (related as HTMLElement).closest?.('.ce-inline-toolbar') ||
+                (related as HTMLElement).closest?.('.ce-toolbox') ||
+                (related as HTMLElement).closest?.('.ce-block__toolbar')
+            )) {
                 return;
             }
             if (!this.isUndoRedoing) {
@@ -552,7 +605,8 @@ class Editor {
     save(): EditorData {
         const blocks: BlockData[] = [];
         for (let i = 0; i < this.blockElements.length; i++) {
-            const contentEl = this.blockElements[i].querySelector('.ce-block__content')?.firstElementChild as HTMLElement;
+            // #28: セレクタを.ce-block__content > :first-childに限定し確実化
+            const contentEl = this.blockElements[i].querySelector('.ce-block__content > :first-child') as HTMLElement;
             if (contentEl && this.blockTools[i]) {
                 blocks.push({
                     type: this.blockTypes[i],
@@ -571,7 +625,10 @@ class Editor {
         this.clear();
         this.container.classList.remove('ce-editor');
         delete (this.container as any).__editor;
-        Editor.inlineToolbarRefCount--;
+        // #26: refCount<0にならないよう保護
+        if (Editor.inlineToolbarRefCount > 0) {
+            Editor.inlineToolbarRefCount--;
+        }
         if (Editor.inlineToolbarRefCount <= 0 && Editor.inlineToolbar) {
             Editor.inlineToolbar.destroy();
             Editor.inlineToolbar = null;
@@ -580,6 +637,8 @@ class Editor {
     }
 
     insertBlock(type: string, data: Record<string, unknown>, index: number): void {
+        // #29: index負数チェック追加
+        index = Math.max(0, index);
         const factory = this.tools[type];
         if (!factory) return;
 
@@ -694,12 +753,13 @@ class Editor {
         const idx = this.getBlockIndex(blockEl);
         if (idx < 0) return;
 
-        // Only intercept if no text is selected (block-level copy)
+        // #31: テキスト範囲選択時はブラウザのデフォルトコピーを優先
         const sel = window.getSelection();
         if (sel && !sel.isCollapsed) return;
 
         e.preventDefault();
-        const contentEl = blockEl.querySelector('.ce-block__content')?.firstElementChild as HTMLElement;
+        // #28: セレクタを.ce-block__content > :first-childに限定
+        const contentEl = blockEl.querySelector('.ce-block__content > :first-child') as HTMLElement;
         if (contentEl && this.blockTools[idx]) {
             this.clipboardBlock = {
                 type: this.blockTypes[idx],

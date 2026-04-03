@@ -90,7 +90,9 @@ function handleApi(): void
     header('Content-Type: application/json; charset=UTF-8');
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
-    if ($origin !== '' && $allowedHost !== '') {
+    if ($origin === 'null' || $origin === '') {
+        // Reject null and empty origins
+    } elseif ($allowedHost !== '') {
         $parsed = parse_url($origin, PHP_URL_HOST);
         if (is_string($parsed) && $parsed === $allowedHost) {
             header('Access-Control-Allow-Origin: ' . $origin);
@@ -217,7 +219,7 @@ function apiPageSave(FileStorage $storage): void
     $blocks = null;
     if ($format === 'blocks' && isset($_POST['blocks'])) {
         $blocks = json_decode($_POST['blocks'], true);
-        if (!is_array($blocks)) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
             apiError(400, 'Invalid blocks JSON');
             return;
         }
@@ -237,6 +239,9 @@ function apiPageSave(FileStorage $storage): void
     $warnings = [];
     if ($status === 'published') {
         if (trim($content) === '' && ($blocks === null || $blocks === [])) {
+            $warnings[] = 'empty_content';
+        }
+        if ($format === 'markdown' && trim($content) === '') {
             $warnings[] = 'empty_content';
         }
         if ($format === 'blocks' && is_array($blocks)) {
@@ -490,8 +495,12 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
-    $input = file_get_contents('php://input');
-    if ($input === false || $input === '') {
+    static $rawInput = null;
+    if ($rawInput === null) {
+        $rawInput = file_get_contents('php://input');
+    }
+    $input = ($rawInput !== false && $rawInput !== '') ? $rawInput : '';
+    if ($input === '') {
         $input = $_POST['data'] ?? '';
     }
 
@@ -520,7 +529,7 @@ function handleApiImport(FileStorage $storage): void
     $imported = ['config' => false, 'pages' => 0];
 
     // Import config (whitelist keys only)
-    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language'];
+    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language', 'sidebar_blocks', 'page_order'];
     if (isset($data['config']) && is_array($data['config'])) {
         $filteredConfig = array_intersect_key($data['config'], array_flip($allowedConfigKeys));
         if ($filteredConfig !== []) {
@@ -537,6 +546,15 @@ function handleApiImport(FileStorage $storage): void
                 continue;
             }
             $pageData = array_intersect_key($pageData, array_flip($allowedPageKeys));
+            $existingPage = $storage->readPageData($slug);
+            if ($existingPage !== false) {
+                if (isset($existingPage['created_at']) && isset($pageData['created_at'])) {
+                    unset($pageData['created_at']);
+                }
+                if (isset($existingPage['updated_at']) && isset($pageData['updated_at'])) {
+                    unset($pageData['updated_at']);
+                }
+            }
             $format = $pageData['format'] ?? 'blocks';
             $blocks = $pageData['blocks'] ?? null;
             $status = $pageData['status'] ?? 'published';
@@ -561,7 +579,7 @@ function handleApiImport(FileStorage $storage): void
                 }
                 $revFile = $revDir . '/' . $ts . '.json';
                 if (!file_exists($revFile)) {
-                    file_put_contents($revFile, json_encode($revData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                    file_put_contents($revFile, json_encode($revData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
                     $revCount++;
                 }
             }
@@ -746,8 +764,24 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     echo json_encode(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
+function apiResponse(array $data, int $flags = 0): void
+{
+    $json = json_encode($data, $flags);
+    if ($json === false) {
+        http_response_code(500);
+        echo '{"error":"JSON encoding failed"}';
+        return;
+    }
+    echo $json;
+}
+
 function apiError(int $code, string $message): void
 {
     http_response_code($code);
-    echo json_encode(['error' => $message]);
+    $json = json_encode(['error' => $message]);
+    if ($json === false) {
+        echo '{"error":"JSON encoding failed"}';
+        return;
+    }
+    echo $json;
 }

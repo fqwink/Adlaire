@@ -191,9 +191,19 @@ final class FileStorage
             return false;
         }
 
-        if (!flock($lockFp, LOCK_EX)) {
-            fclose($lockFp);
-            return false;
+        $locked = false;
+        for ($retry = 0; $retry < 3; $retry++) {
+            if (flock($lockFp, LOCK_EX | LOCK_NB)) {
+                $locked = true;
+                break;
+            }
+            usleep(50000);
+        }
+        if (!$locked) {
+            if (!flock($lockFp, LOCK_EX)) {
+                fclose($lockFp);
+                return false;
+            }
         }
 
         try {
@@ -213,6 +223,7 @@ final class FileStorage
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
                 if (!copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json')) {
                     error_log('Adlaire: Failed to copy config backup: ' . $backupName);
+                    return false;
                 }
                 $this->rotateBackups();
             }
@@ -344,6 +355,8 @@ final class FileStorage
         $cachedIndex = null;
 
         if (file_exists($cacheFile) && file_exists($this->pagesDir)) {
+            clearstatcache(true, $cacheFile);
+            clearstatcache(true, $this->pagesDir);
             $cacheMtime = filemtime($cacheFile);
             $dirMtime = filemtime($this->pagesDir);
             if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
@@ -358,6 +371,14 @@ final class FileStorage
         }
 
         $pages = [];
+        $memoryLimit = (int) ini_get('memory_limit');
+        if ($memoryLimit > 0) {
+            $memoryLimitBytes = $memoryLimit * 1024 * 1024;
+            if (memory_get_usage(true) > (int) ($memoryLimitBytes * 0.8)) {
+                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
+                return $pages;
+            }
+        }
 
         if ($cachedIndex !== null) {
             foreach ($cachedIndex as $slug => $meta) {
@@ -370,7 +391,7 @@ final class FileStorage
             $files = glob($this->pagesDir . '/*.json');
             if (is_array($files)) {
                 foreach ($files as $file) {
-                    if (is_dir($file)) {
+                    if (is_dir($file) || is_link($file)) {
                         continue;
                     }
                     $slug = basename($file, '.json');
@@ -454,7 +475,10 @@ final class FileStorage
         if ($tmp === false) {
             return false;
         }
+
+        $oldUmask = umask(0);
         chmod($tmp, 0600);
+        umask($oldUmask);
 
         $written = file_put_contents($tmp, $content, LOCK_EX);
         if ($written === false) {
@@ -462,10 +486,13 @@ final class FileStorage
             return false;
         }
 
+        $oldUmask = umask(0);
         if (!chmod($tmp, 0644)) {
+            umask($oldUmask);
             @unlink($tmp);
             return false;
         }
+        umask($oldUmask);
         if (!rename($tmp, $path)) {
             error_log('Adlaire: Failed to rename temp file: ' . $tmp . ' -> ' . $path);
             @unlink($tmp);

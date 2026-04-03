@@ -67,9 +67,10 @@ final class App
 
     private function parseHost(): array
     {
-        $rp = isset($_REQUEST['page'])
-            ? (preg_replace('#/+#', '/', urldecode($_REQUEST['page'])) ?? '')
+        $rpRaw = isset($_REQUEST['page'])
+            ? preg_replace('#/+#', '/', urldecode($_REQUEST['page']))
             : '';
+        $rp = is_string($rpRaw) ? $rpRaw : '';
 
         $httpHost = filter_input(INPUT_SERVER, 'HTTP_HOST') ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
         if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
@@ -78,16 +79,18 @@ final class App
 
         $rawUri = $_SERVER['REQUEST_URI'] ?? '/';
         $parsedPath = parse_url($rawUri, PHP_URL_PATH);
-        $uri = is_string($parsedPath) ? (preg_replace('#/+#', '/', urldecode($parsedPath)) ?? '/') : '/';
+        $uriResult = is_string($parsedPath) ? preg_replace('#/+#', '/', urldecode($parsedPath)) : null;
+        $uri = is_string($uriResult) ? $uriResult : '/';
 
         $host = ($rp !== '' && str_contains($uri, $rp))
             ? $httpHost . '/' . substr($uri, 0, strlen($uri) - strlen($rp))
             : $httpHost . '/' . $uri;
 
-        $host = '//' . preg_replace('#/+#', '/', $host);
+        $hostResult = preg_replace('#/+#', '/', $host);
+        $host = '//' . (is_string($hostResult) ? $hostResult : $host);
 
-        $rp = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp) ?? '';
-        $rp = trim($rp, '/');
+        $rpResult = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rp = is_string($rpResult) ? trim($rpResult, '/') : '';
 
         return [$host, $rp];
     }
@@ -174,10 +177,10 @@ final class App
     private function handleAuth(): void
     {
         if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+            session_regenerate_id(true);
             $_SESSION = [];
             session_destroy();
             session_start();
-            session_regenerate_id(true);
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
@@ -209,8 +212,9 @@ final class App
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
+            $nonceAttr = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
             $this->config['content'] = <<<HTML
-                <form action='' method='POST'>
+                <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
                 <input type='password' name='password'>
                 <input type='submit' name='login' value='{$loginLabel}'> {$msg}
@@ -271,11 +275,24 @@ final class App
     private function loadPlugins(): void
     {
         $pluginsDir = dirname(__DIR__) . '/plugins';
+        $pluginsBase = realpath($pluginsDir);
+        if ($pluginsBase === false) {
+            return;
+        }
         if (is_dir($pluginsDir)) {
             $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
             if (is_array($dirs)) {
                 foreach ($dirs as $dir) {
-                    require_once $dir . '/index.php';
+                    $pluginFile = $dir . '/index.php';
+                    if (!is_file($pluginFile)) {
+                        continue;
+                    }
+                    $realPluginPath = realpath($pluginFile);
+                    if ($realPluginPath === false || !str_starts_with($realPluginPath, $pluginsBase . DIRECTORY_SEPARATOR)) {
+                        error_log('Adlaire: Plugin path outside plugins directory: ' . $pluginFile);
+                        continue;
+                    }
+                    require_once $realPluginPath;
                 }
             }
         }
@@ -292,7 +309,13 @@ final class App
         if (is_file($file)) {
             $json = file_get_contents($file);
             if ($json !== false) {
-                $this->translations = json_decode($json, true) ?: [];
+                $decoded = json_decode($json, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    error_log('Adlaire: Failed to decode language file: ' . $file . ' - ' . json_last_error_msg());
+                    $this->translations = [];
+                } else {
+                    $this->translations = is_array($decoded) ? $decoded : [];
+                }
             }
         }
     }

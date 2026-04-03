@@ -39,9 +39,10 @@ interface SearchResult {
     updated_at: string;
 }
 
+// #33: グローバル変数を直接更新
 function updateCsrfFromResponse(res: Response): void {
     const newToken = res.headers.get('X-CSRF-Token');
-    if (newToken) { (window as any).csrfToken = newToken; }
+    if (newToken) { csrfToken = newToken; }
 }
 
 const api = {

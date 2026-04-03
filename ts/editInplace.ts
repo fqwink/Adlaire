@@ -38,8 +38,9 @@ function fieldSave(key: string, val: string): void {
     .then(response => {
         if (!response.ok) { throw new Error(String(response.status)); }
         // Update CSRF token from response header (one-time token)
+        // #33: グローバル変数を直接更新
         const newToken = response.headers.get('X-CSRF-Token');
-        if (newToken) { (window as any).csrfToken = newToken; }
+        if (newToken) { csrfToken = newToken; }
         return response.text();
     })
     .then(data => {
@@ -109,7 +110,8 @@ function plainTextEdit(span: HTMLElement): void {
     span.textContent = '';
     span.appendChild(textarea);
     textarea.focus();
-    if (typeof autosize === 'function') { autosize(textarea); }
+    // #36: typeof autosize チェックをより堅牢に
+    if (typeof autosize !== 'undefined' && typeof autosize === 'function') { autosize(textarea); }
 }
 
 function richTextHook(span: HTMLElement): void {
@@ -139,8 +141,9 @@ function renderBlocksContent(): void {
         try {
             const blocks = JSON.parse(raw);
             el.innerHTML = sanitizeHtml(renderBlocks(blocks));
-        } catch {
-            // Leave content as-is on parse failure
+        } catch (err) {
+            // #38: JSON.parse失敗時のconsole.warnログ出力
+            console.warn('Failed to parse blocks JSON:', err);
         }
     });
 }
@@ -176,7 +179,18 @@ function initBlockEditor(): void {
         const flushSave = (): void => {
             if (!editorInstance) return;
             const saved = editorInstance.save();
-            const json = JSON.stringify(saved.blocks);
+            // #39: JSON.stringifyでキーソート統一
+            const sortedReplacer = (_key: string, value: unknown): unknown => {
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    const sorted: Record<string, unknown> = {};
+                    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+                        sorted[k] = (value as Record<string, unknown>)[k];
+                    }
+                    return sorted;
+                }
+                return value;
+            };
+            const json = JSON.stringify(saved.blocks, sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson) return;
 
@@ -194,7 +208,12 @@ function initBlockEditor(): void {
 
         wrapper.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
-            if (related && wrapper.contains(related)) return;
+            // #40: relatedTargetチェック拡大（.ce-toolbox, .ce-inline-toolbar含む）
+            if (related && (
+                wrapper.contains(related) ||
+                (related as HTMLElement).closest?.('.ce-toolbox') ||
+                (related as HTMLElement).closest?.('.ce-inline-toolbar')
+            )) return;
 
             if (saveTimer) clearTimeout(saveTimer);
             saveTimer = setTimeout(flushSave, 300);
