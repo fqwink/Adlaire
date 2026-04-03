@@ -77,7 +77,7 @@
 {
     "installed": true,
     "product": "Adlaire",
-    "version": "Ver.2.3-35",
+    "version": "Ver.2.5-38",
     "installed_at": "ISO 8601",
     "installer": "bundle-installer.php",
     "installer_version": "1.0.0"
@@ -90,7 +90,7 @@
 {
     "product": "Adlaire",
     "channel": "release",
-    "version": "Ver.2.3-35",
+    "version": "Ver.2.5-38",
     "bundle_format": 1,
     "required_files": [
         "index.php",
