@@ -27,6 +27,12 @@ final class FileStorage
     private string $revisionsDir;
     private bool $migrated = false;
 
+    /** File permission for sensitive data files */
+    private const FILE_PERMISSION = 0600;
+
+    /** Directory permission */
+    private const DIR_PERMISSION = 0755;
+
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
         'password', 'themeSelect', 'menu', 'title',
@@ -39,6 +45,9 @@ final class FileStorage
 
     /** Maximum number of page revisions to retain per page */
     private const MAX_REVISIONS = 30;
+
+    /** JSON encoding flags for data files */
+    private const JSON_FLAGS = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
 
     public function __construct(string $basePath = 'data')
     {
@@ -63,16 +72,16 @@ final class FileStorage
 
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
             if (!is_dir($dir) && !is_link($dir)) {
-                mkdir($dir, 0755, true);
+                mkdir($dir, self::DIR_PERMISSION, true);
             }
         }
         $systemDir = $this->basePath . '/system';
         if (!is_dir($systemDir) && !is_link($systemDir)) {
-            mkdir($systemDir, 0755, true);
+            mkdir($systemDir, self::DIR_PERMISSION, true);
         }
         $pluginsDir = dirname($this->basePath) . '/plugins';
         if (!is_dir($pluginsDir) && !is_link($pluginsDir)) {
-            mkdir($pluginsDir, 0755, true);
+            mkdir($pluginsDir, self::DIR_PERMISSION, true);
         }
     }
 
@@ -144,7 +153,7 @@ final class FileStorage
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
-                    $this->atomicWrite($dest, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                    $this->atomicWrite($dest, json_encode($pageData, self::JSON_FLAGS));
                     @unlink($file);
                 }
             }
@@ -229,7 +238,7 @@ final class FileStorage
                 $this->rotateBackups();
             }
 
-            $json = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            $json = json_encode($merged, self::JSON_FLAGS);
             return $this->atomicWrite($this->configFile, $json);
         } finally {
             flock($lockFp, LOCK_UN);
@@ -309,7 +318,7 @@ final class FileStorage
             $data['blocks'] = $blocks;
         }
 
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $json = json_encode($data, self::JSON_FLAGS);
         $result = $this->atomicWrite($path, $json);
         if ($result) { $this->invalidatePageCache(); }
         return $result;
@@ -421,7 +430,7 @@ final class FileStorage
                     'updated_at' => $data['updated_at'] ?? '',
                 ];
             }
-            $this->atomicWrite($cacheFile, json_encode($cacheSummary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            $this->atomicWrite($cacheFile, json_encode($cacheSummary, self::JSON_FLAGS));
         }
 
         return $pages;
@@ -456,7 +465,7 @@ final class FileStorage
         $data['updated_at'] = date('c');
 
         $path = $this->pagesDir . '/' . $slug . '.json';
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $json = json_encode($data, self::JSON_FLAGS);
         $result = $this->atomicWrite($path, $json);
         if ($result) { $this->invalidatePageCache(); }
         return $result;
@@ -481,7 +490,7 @@ final class FileStorage
     {
         $dir = dirname($path);
         if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
+            @mkdir($dir, self::DIR_PERMISSION, true);
         }
         $tmp = tempnam($dir, '.tmp_');
         if ($tmp === false) {
@@ -490,7 +499,7 @@ final class FileStorage
         }
 
         $oldUmask = umask(0);
-        chmod($tmp, 0600);
+        chmod($tmp, self::FILE_PERMISSION);
         umask($oldUmask);
 
         $written = file_put_contents($tmp, $content, LOCK_EX);
@@ -500,7 +509,7 @@ final class FileStorage
         }
 
         $oldUmask = umask(0);
-        if (!chmod($tmp, 0600)) {
+        if (!chmod($tmp, self::FILE_PERMISSION)) {
             umask($oldUmask);
             error_log('Adlaire: chmod failed for temp file: ' . $tmp);
             @unlink($tmp);
@@ -562,14 +571,14 @@ final class FileStorage
     {
         $dir = $this->revisionsDir . '/' . $slug;
         if (!is_dir($dir)) {
-            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+            if (!mkdir($dir, self::DIR_PERMISSION, true) && !is_dir($dir)) {
                 error_log('Adlaire: Failed to create revision directory: ' . $dir);
                 return;
             }
         }
 
         $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
-        $this->atomicWrite($revFile, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $this->atomicWrite($revFile, json_encode($pageData, self::JSON_FLAGS));
 
         // Rotate old revisions
         $files = glob($dir . '/*.json');
@@ -645,6 +654,7 @@ final class FileStorage
         return $this->writePage($slug, $data['content'], $format, $blocks, $status);
     }
 
+    /** @return list<string> */
     public function getPageOrder(): array
     {
         $config = $this->readConfig();
@@ -656,11 +666,18 @@ final class FileStorage
         return is_array($data) ? $data : [];
     }
 
+    /** @param list<string> $slugs */
     public function savePageOrder(array $slugs): bool
     {
-        return $this->writeConfigValue('page_order', json_encode($slugs, JSON_UNESCAPED_UNICODE));
+        $json = json_encode($slugs, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode page order JSON');
+            return false;
+        }
+        return $this->writeConfigValue('page_order', $json);
     }
 
+    /** @return array<string, list<array{timestamp: string}>> */
     public function listAllRevisions(): array
     {
         $result = [];

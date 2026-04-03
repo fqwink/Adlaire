@@ -59,7 +59,10 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
     if (!is_dir($distDir)) {
-        mkdir($distDir, 0755, true);
+        if (!mkdir($distDir, 0755, true)) {
+            apiError(500, 'Failed to create dist directory');
+            return;
+        }
     }
 
     $pages = $storage->listPublishedPages();
@@ -83,18 +86,19 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
 
-    // Copy JS
+    // Copy only public JS (exclude admin-only scripts from static output)
     $jsSrc = dirname(__DIR__) . '/js';
     $jsDst = $distDir . '/js';
+    $publicJs = ['markdown.js', 'editInplace.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
             mkdir($jsDst, 0755, true);
         }
-        $jsFiles = glob($jsSrc . '/*.js');
-        if (is_array($jsFiles)) {
-            foreach ($jsFiles as $jsFile) {
-                if (!copy($jsFile, $jsDst . '/' . basename($jsFile))) {
-                    error_log('Adlaire: Failed to copy JS file: ' . basename($jsFile));
+        foreach ($publicJs as $jsName) {
+            $jsPath = $jsSrc . '/' . $jsName;
+            if (is_file($jsPath)) {
+                if (!copy($jsPath, $jsDst . '/' . $jsName)) {
+                    error_log('Adlaire: Failed to copy JS file: ' . $jsName);
                 }
             }
         }
@@ -192,7 +196,7 @@ function handleApiGenerate(FileStorage $storage): void
     $buildTimeMs = (int) ((hrtime(true) - $startTime) / 1_000_000);
     $pagesTotal = count($pages);
 
-    echo json_encode([
+    apiResponse([
         'status' => 'ok',
         'pages' => $count,
         'output' => 'dist/',

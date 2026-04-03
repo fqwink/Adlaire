@@ -69,5 +69,9 @@
     "admin_bulk_delete": "Bulk Delete",
     "confirm_bulk_delete": "Delete all selected pages?",
     "preview_draft_notice": "This is a preview. This page is not yet published.",
-    "admin_import_result": "Imported"
+    "admin_import_result": "Imported",
+    "csrf_error": "Security token verification failed. Please try again.",
+    "admin_system": "System Info",
+    "admin_no_pages": "No pages yet",
+    "block_delimiter": "Delimiter"
 }

@@ -72,6 +72,7 @@ function handleEdit(): void
 
     // Return new CSRF token for subsequent requests (one-time token)
     header('Content-Type: text/plain; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
     $csrfValue = $_SESSION['csrf'] ?? '';
     if ($csrfValue !== '') {
         header('X-CSRF-Token: ' . $csrfValue);
@@ -99,6 +100,7 @@ function handleApi(): void
     }
 
     header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
     if ($origin === 'null' || $origin === '') {
@@ -148,6 +150,9 @@ function handleApi(): void
 function handleApiPages(FileStorage $storage, string $method): void
 {
     $slug = $_REQUEST['slug'] ?? null;
+    if ($slug !== null && is_string($slug)) {
+        $slug = trim($slug);
+    }
 
     $action = $_REQUEST['action'] ?? '';
 
@@ -193,7 +198,7 @@ function apiPageList(FileStorage $storage): void
             'updated_at' => $data['updated_at'],
         ];
     }
-    echo json_encode(['pages' => $summary], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    apiResponse(['pages' => $summary], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiPageGet(FileStorage $storage, string $slug): void
@@ -203,7 +208,7 @@ function apiPageGet(FileStorage $storage, string $slug): void
         apiError(404, 'Page not found');
         return;
     }
-    echo json_encode(['page' => $slug, 'data' => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    apiResponse(['page' => $slug, 'data' => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiPageSave(FileStorage $storage): void
@@ -282,7 +287,7 @@ function apiPageSave(FileStorage $storage): void
     if ($warnings !== []) {
         $response['warnings'] = $warnings;
     }
-    echo json_encode($response);
+    apiResponse($response);
 }
 
 function apiPageStatusUpdate(FileStorage $storage): void
@@ -310,7 +315,7 @@ function apiPageStatusUpdate(FileStorage $storage): void
         return;
     }
 
-    echo json_encode(['status' => 'ok', 'slug' => $slug, 'page_status' => $status]);
+    apiResponse(['status' => 'ok', 'slug' => $slug, 'page_status' => $status]);
 }
 
 function apiPageDelete(FileStorage $storage, ?string $slug): void
@@ -331,7 +336,7 @@ function apiPageDelete(FileStorage $storage, ?string $slug): void
         return;
     }
 
-    echo json_encode(['status' => 'ok', 'deleted' => $slug]);
+    apiResponse(['status' => 'ok', 'deleted' => $slug]);
 }
 
 function handleApiRevisions(FileStorage $storage, string $method): void
@@ -358,7 +363,7 @@ function handleApiRevisions(FileStorage $storage, string $method): void
 function apiRevisionList(FileStorage $storage, string $slug): void
 {
     $revisions = $storage->listRevisions($slug);
-    echo json_encode(['slug' => $slug, 'revisions' => $revisions], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    apiResponse(['slug' => $slug, 'revisions' => $revisions], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiRevisionRestore(FileStorage $storage, string $slug): void
@@ -380,7 +385,7 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
         return;
     }
 
-    echo json_encode(['status' => 'ok', 'restored' => $slug, 'timestamp' => $timestamp]);
+    apiResponse(['status' => 'ok', 'restored' => $slug, 'timestamp' => $timestamp]);
 }
 
 // --- Search API ---
@@ -424,8 +429,7 @@ function handleApiSearch(FileStorage $storage): void
         ];
     }
 
-    $searchJson = json_encode(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    echo $searchJson !== false ? $searchJson : '{"results":[]}';
+    apiResponse(['query' => $rawQuery, 'results' => $results], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 // --- Sitemap API ---
@@ -433,6 +437,7 @@ function handleApiSearch(FileStorage $storage): void
 function handleApiSitemap(FileStorage $storage): void
 {
     header('Content-Type: application/xml; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
 
     $app = App::getInstance();
     $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
@@ -500,7 +505,13 @@ function handleApiExport(FileStorage $storage): void
 
     header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
-    echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    header('X-Content-Type-Options: nosniff');
+    $exportJson = json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($exportJson === false) {
+        apiError(500, 'Export JSON encoding failed');
+        return;
+    }
+    echo $exportJson;
 }
 
 // --- Import API ---
@@ -625,7 +636,7 @@ function handleApiImport(FileStorage $storage): void
         $imported['revisions'] = $revCount;
     }
 
-    echo json_encode(['status' => 'ok', 'imported' => $imported]);
+    apiResponse(['status' => 'ok', 'imported' => $imported]);
 }
 
 // --- Version API ---
@@ -643,7 +654,7 @@ function handleApiVersion(): void
         $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
     }
 
-    echo json_encode([
+    apiResponse([
         'product' => 'Adlaire',
         'version' => $version,
         'app_version' => App::VERSION,
@@ -679,7 +690,7 @@ function apiPageReorder(FileStorage $storage): void
         return;
     }
 
-    echo json_encode(['status' => 'ok']);
+    apiResponse(['status' => 'ok']);
 }
 
 function apiSidebar(FileStorage $storage, string $method): void
@@ -687,7 +698,7 @@ function apiSidebar(FileStorage $storage, string $method): void
     $app = App::getInstance();
     if ($method === 'GET') {
         $blocks = $app->getSidebarBlocks();
-        echo json_encode(['blocks' => $blocks], JSON_UNESCAPED_UNICODE);
+        apiResponse(['blocks' => $blocks], JSON_UNESCAPED_UNICODE);
         return;
     }
     if ($method === 'POST') {
@@ -706,7 +717,7 @@ function apiSidebar(FileStorage $storage, string $method): void
             apiError(500, 'Write failed');
             return;
         }
-        echo json_encode(['status' => 'ok']);
+        apiResponse(['status' => 'ok']);
         return;
     }
     apiError(405, 'Method not allowed');
@@ -735,7 +746,7 @@ function apiBulkStatus(FileStorage $storage): void
         }
     }
 
-    echo json_encode(['status' => 'ok', 'updated' => $updated]);
+    apiResponse(['status' => 'ok', 'updated' => $updated]);
 }
 
 function apiBulkDelete(FileStorage $storage): void
@@ -760,7 +771,7 @@ function apiBulkDelete(FileStorage $storage): void
         }
     }
 
-    echo json_encode(['status' => 'ok', 'deleted' => $deleted]);
+    apiResponse(['status' => 'ok', 'deleted' => $deleted]);
 }
 
 function apiRevisionDiff(FileStorage $storage, string $slug): void
@@ -803,7 +814,7 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         }
     }
 
-    echo json_encode(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiResponse(array $data, int $flags = 0): void
@@ -811,6 +822,7 @@ function apiResponse(array $data, int $flags = 0): void
     $json = json_encode($data, $flags);
     if ($json === false) {
         http_response_code(500);
+        error_log('Adlaire: JSON encoding failed: ' . json_last_error_msg());
         echo '{"error":"JSON encoding failed"}';
         return;
     }

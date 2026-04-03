@@ -220,3 +220,18 @@ footer p{
 	.ce-format-bar{flex-wrap:wrap;}
 	.ce-inline-toolbar{position:fixed;bottom:0;left:0;right:0;top:auto;justify-content:center;border-radius:0;}
 }
+
+@media (prefers-color-scheme: dark){
+	body{background:#1a1a2e;color:#ddd;}
+	#wrapper{background:#2a2a3e;color:#ddd;}
+	#wrapper a{color:#aaa;border-bottom-color:#555;}
+	#side{background:#16213e;}
+	footer{background:#0f0f1e;}
+	.ce-code{background:#0d1117;color:#e6e6e6;}
+	.ce-toolbox{background:#2a2a3e;border-color:#444;}
+	.ce-toolbox__btn{border-color:#555;color:#ccc;}
+	.ce-toolbox__btn:hover{background:#3a3a4e;}
+	.ce-quote{color:#aaa;}
+	.ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
+	span.editText textarea{color:#ddd;}
+}

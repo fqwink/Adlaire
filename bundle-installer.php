@@ -40,15 +40,15 @@ function detect_php_version(): array
 
 function detect_files_writable(): array
 {
-    $dir = __DIR__ . '/files';
+    $dir = __DIR__ . '/data';
     if (!is_dir($dir)) {
         $created = @mkdir($dir, 0755, true);
         if (!$created) {
-            return ['ok' => false, 'message' => 'Cannot create files/ directory'];
+            return ['ok' => false, 'message' => 'Cannot create data/ directory'];
         }
     }
     $ok = is_writable($dir);
-    return ['ok' => $ok, 'message' => $ok ? 'files/ is writable' : 'files/ is not writable (set 755)'];
+    return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
 }
 
 function detect_session(): array
@@ -96,6 +96,15 @@ function load_version(): string
 
 // --- Validate functions ---
 
+/** Minimum password length */
+define('INSTALLER_MIN_PASSWORD_LENGTH', 8);
+
+/** Weak passwords blacklist */
+define('INSTALLER_WEAK_PASSWORDS', ['admin', 'password', '12345678', 'adlaire']);
+
+/** Supported locales */
+define('INSTALLER_SUPPORTED_LOCALES', ['ja', 'en']);
+
 function validate_input(array $post): array
 {
     $errors = [];
@@ -107,14 +116,13 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
-    if (!in_array($locale, ['ja', 'en'], true)) {
+    if (!in_array($locale, INSTALLER_SUPPORTED_LOCALES, true)) {
         $errors[] = 'Invalid language selection';
     }
-    if (strlen($password) < 8) {
-        $errors[] = 'Password must be at least 8 characters';
+    if (strlen($password) < INSTALLER_MIN_PASSWORD_LENGTH) {
+        $errors[] = 'Password must be at least ' . INSTALLER_MIN_PASSWORD_LENGTH . ' characters';
     }
-    $weak = ['admin', 'password', '12345678', 'adlaire'];
-    if (in_array(mb_strtolower($password, 'UTF-8'), $weak, true)) {
+    if (in_array(mb_strtolower($password, 'UTF-8'), INSTALLER_WEAK_PASSWORDS, true)) {
         $errors[] = 'That password is too weak';
     }
     if ($password !== $confirm) {
@@ -134,7 +142,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
     // Create system directory
     $systemDir = __DIR__ . '/data/system';
     if (!is_dir($systemDir)) {
-        if (!mkdir($systemDir, 0755, true)) {
+        if (!@mkdir($systemDir, 0755, true) && !is_dir($systemDir)) {
             return ['ok' => false, 'message' => 'Failed to create system directory'];
         }
     }
@@ -392,8 +400,10 @@ $csrf = security_csrf_token();
 
         <label>Default Language *</label>
         <select name="default_locale">
-            <option value="ja" <?= ($_POST['default_locale'] ?? 'ja') === 'ja' ? 'selected' : '' ?>>日本語</option>
-            <option value="en" <?= ($_POST['default_locale'] ?? '') === 'en' ? 'selected' : '' ?>>English</option>
+<?php foreach (INSTALLER_SUPPORTED_LOCALES as $loc): ?>
+<?php $labels = ['ja' => '日本語', 'en' => 'English']; ?>
+            <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc] ?? $loc) ?></option>
+<?php endforeach; ?>
         </select>
 
         <label>Admin Password * (min 8 characters)</label>

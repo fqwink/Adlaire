@@ -15,9 +15,21 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 7;
-    public const VERSION_BUILD = 40;
-    public const VERSION = 'Ver.2.7-40';
+    public const VERSION_MINOR = 8;
+    public const VERSION_BUILD = 41;
+    public const VERSION = 'Ver.2.8-41';
+
+    /** Session timeout in seconds (30 minutes) */
+    private const SESSION_TIMEOUT = 1800;
+
+    /** Minimum password length */
+    private const MIN_PASSWORD_LENGTH = 8;
+
+    /** Weak passwords blacklist */
+    private const WEAK_PASSWORDS = ['admin', 'password', '12345678', 'adlaire'];
+
+    /** JSON encoding flags for safe JS embedding */
+    private const JSON_JS_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
     /** @var array<string, mixed> */
     public array $config = [];
@@ -65,6 +77,7 @@ final class App
         $this->loadPlugins();
     }
 
+    /** @return array{0: string, 1: string} */
     private function parseHost(): array
     {
         $rpRaw = isset($_GET['page'])
@@ -178,7 +191,7 @@ final class App
 
     private function handleAuth(): void
     {
-        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > 1800) {
+        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > self::SESSION_TIMEOUT) {
             session_regenerate_id(true);
             $_SESSION = [];
             session_destroy();
@@ -308,18 +321,24 @@ final class App
         }
         $this->language = $lang;
         $file = dirname(__DIR__) . '/data/lang/' . $lang . '.json';
-        if (is_file($file)) {
-            $json = file_get_contents($file);
-            if ($json !== false) {
-                $decoded = json_decode($json, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    error_log('Adlaire: Failed to decode language file: ' . $file . ' - ' . json_last_error_msg());
-                    $this->translations = [];
-                } else {
-                    $this->translations = is_array($decoded) ? $decoded : [];
-                }
-            }
+        if (!is_file($file)) {
+            error_log('Adlaire: Language file not found: ' . $file);
+            $this->translations = [];
+            return;
         }
+        $json = file_get_contents($file);
+        if ($json === false) {
+            error_log('Adlaire: Failed to read language file: ' . $file);
+            $this->translations = [];
+            return;
+        }
+        $decoded = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Adlaire: Failed to decode language file: ' . $file . ' - ' . json_last_error_msg());
+            $this->translations = [];
+            return;
+        }
+        $this->translations = is_array($decoded) ? $decoded : [];
     }
 
     /** @param array<string, string> $params */
@@ -371,11 +390,10 @@ final class App
 
         $newPass = $_POST['new'] ?? '';
         if ($newPass !== '') {
-            if (strlen($newPass) < 8) {
+            if (strlen($newPass) < self::MIN_PASSWORD_LENGTH) {
                 return $this->t('password_too_short');
             }
-            $weak = ['admin', 'password', '12345678', 'adlaire'];
-            if (in_array(strtolower($newPass), $weak, true)) {
+            if (in_array(strtolower($newPass), self::WEAK_PASSWORDS, true)) {
                 return $this->t('password_too_weak');
             }
             $newHash = $this->savePassword($newPass);
@@ -409,10 +427,9 @@ final class App
             return;
         }
         $token = csrf_token();
-        $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
-        $safeToken = json_encode($token, $jsonFlags);
-        $safeLang = json_encode($this->language, $jsonFlags);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', $jsonFlags);
+        $safeToken = json_encode($token, self::JSON_JS_FLAGS);
+        $safeLang = json_encode($this->language, self::JSON_JS_FLAGS);
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', self::JSON_JS_FLAGS);
         $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
@@ -421,6 +438,7 @@ final class App
         }
     }
 
+    /** @return array{name: string, description: string, version: string, author: string} */
     public function loadThemeJson(string $themeName): array
     {
         $path = dirname(__DIR__) . '/themes/' . basename($themeName) . '/theme.json';
@@ -457,13 +475,12 @@ final class App
         return $this->storage->writeConfigValue('sidebar_blocks', $json);
     }
 
+    private const ADMIN_SCRIPTS = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
+    private const PUBLIC_SCRIPTS = ['markdown', 'editInplace'];
+
     public function scriptTags(bool $adminMode = false): void
     {
-        if ($adminMode) {
-            $scripts = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
-        } else {
-            $scripts = ['markdown', 'editInplace'];
-        }
+        $scripts = $adminMode ? self::ADMIN_SCRIPTS : self::PUBLIC_SCRIPTS;
         $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         foreach ($scripts as $name) {
             echo "\t<script{$n} src=\"js/{$name}.js\"></script>\n";
@@ -474,22 +491,20 @@ final class App
     {
         $format = $this->config['pageFormat'] ?? 'blocks';
         $isPage = ($id === $this->config['page']);
-        $isBlocks = ($format === 'blocks' && $isPage);
-        $isMarkdown = ($format === 'markdown' && $isPage);
 
-        if ($isBlocks) {
+        if ($format === 'blocks' && $isPage) {
             $blocksB64 = '';
             if (isset($this->config['pageBlocks'])) {
-                $json = json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+                $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP;
+                $json = json_encode($this->config['pageBlocks'], $jsonFlags);
                 if ($json !== false) {
                     $blocksB64 = base64_encode($json);
                 }
             }
             echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
-        } elseif ($isMarkdown) {
+        } elseif ($format === 'markdown' && $isPage) {
             $b64 = base64_encode($content);
-            $encoded = esc($b64 !== false ? $b64 : '');
-            echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
+            echo "<div class='markdown-content' data-raw-b64='" . esc($b64) . "'></div>";
         } else {
             echo $content;
         }

@@ -25,6 +25,9 @@ register_shutdown_function(function (): void {
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Strict');
+if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
+    ini_set('session.cookie_secure', '1');
+}
 session_start();
 
 require __DIR__ . '/Core/helpers.php';
@@ -53,6 +56,8 @@ $app->nonce = $nonce;
 // --- Security headers ---
 $cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'";
 header($cspHeader);
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -72,6 +77,7 @@ if (isset($_GET['preview'])) {
         header('Location: ?login');
         exit;
     }
+    header('X-Robots-Tag: noindex, nofollow');
     if (is_string($previewSlug)) {
         $decoded = rawurldecode($previewSlug);
         if ($decoded === $previewSlug || rawurldecode($decoded) === $decoded) {
@@ -103,6 +109,7 @@ if ($realThemePath === false || $themesBase === false || !str_starts_with($realT
     $realThemePath = realpath($themePath);
 }
 if ($realThemePath === false || !is_file($realThemePath)) {
+    error_log('Adlaire: Theme file not found or invalid: ' . $theme);
     http_response_code(500);
     exit;
 }

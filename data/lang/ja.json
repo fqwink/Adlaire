@@ -69,5 +69,9 @@
     "admin_bulk_delete": "一括削除",
     "confirm_bulk_delete": "選択したページを一括削除しますか？",
     "preview_draft_notice": "これはプレビューです。このページはまだ公開されていません。",
-    "admin_import_result": "インポート完了"
+    "admin_import_result": "インポート完了",
+    "csrf_error": "セキュリティトークンの検証に失敗しました。もう一度お試しください。",
+    "admin_system": "システム情報",
+    "admin_no_pages": "ページがありません",
+    "block_delimiter": "区切り線"
 }

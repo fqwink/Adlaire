@@ -26,7 +26,19 @@ interface BlockToolConfig {
     save(el: HTMLElement): Record<string, unknown>;
 }
 
-type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
+// #65: BlockToolFactory data型を専用interfaceに改善
+interface BlockToolData {
+    [key: string]: unknown;
+    text?: string;
+    level?: number;
+    style?: string;
+    items?: string[];
+    code?: string;
+    url?: string;
+    alt?: string;
+    caption?: string;
+}
+type BlockToolFactory = (data: BlockToolData) => BlockToolConfig;
 
 // --- Helper: get Editor from element ---
 
@@ -82,7 +94,9 @@ function attachListItemHandlers(li: HTMLLIElement): void {
 
 // --- Sanitize: strip dangerous tags from block content ---
 
+// #47: replace chain順序保証 — 1) 危険タグ除去 → 2) Unicode decode → 3) on*属性除去 → 4) プロトコル除去
 function sanitizeHtml(html: string): string {
+    // Phase 1: 危険タグの除去（最初に実行）
     let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
     s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
@@ -95,16 +109,16 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<meta\b[^>]*\/?>/gi, '');
     s = s.replace(/<base\b[^>]*\/?>/gi, '');
     s = s.replace(/<link\b[^>]*\/?>/gi, '');
-    // #1: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
+    // Phase 2: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
     s = s.replace(/\\u(00[0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     s = s.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
-    // #2: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
+    // Phase 3: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
     s = s.replace(/(<[^>]*?)[\r\n\t]+/gi, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
     // #2: 属性値内改行/タブ除去後のon*再チェック（二重パス）
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-    // #8: javascript:プロトコルフィルタにユニコードエスケープ対応
+    // Phase 4: javascript:プロトコルフィルタにユニコードエスケープ対応
     const jsProtoPattern = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
     s = s.replace(jsProtoPattern, '$1=""');
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
@@ -119,7 +133,12 @@ function sanitizeHtml(html: string): string {
 class UndoManager {
     private stack: string[] = [];
     private pointer: number = -1;
-    private readonly maxSize = 50;
+    // #97: maxSize設定可能化 — コンストラクタで指定可能
+    private readonly maxSize: number;
+
+    constructor(maxSize: number = 50) {
+        this.maxSize = maxSize;
+    }
 
     push(state: EditorData): void {
         const json = JSON.stringify(state);
@@ -173,8 +192,21 @@ const builtinTools: Record<string, BlockToolFactory> = {
                         e.preventDefault();
                         const editor = getEditorFromElement(el);
                         if (editor) {
+                            // #88: Enter時の選択範囲保存 — カーソル以降のテキストを新ブロックに移動
+                            const sel = window.getSelection();
+                            let trailingHtml = '';
+                            if (sel && sel.rangeCount) {
+                                const range = sel.getRangeAt(0);
+                                const tailRange = range.cloneRange();
+                                tailRange.selectNodeContents(el);
+                                tailRange.setStart(range.endContainer, range.endOffset);
+                                const fragment = tailRange.extractContents();
+                                const tmp = document.createElement('div');
+                                tmp.appendChild(fragment);
+                                trailingHtml = tmp.innerHTML;
+                            }
                             const idx = editor.getBlockIndex(el.closest('.ce-block') as HTMLElement);
-                            editor.insertBlock('paragraph', {}, idx + 1);
+                            editor.insertBlock('paragraph', { text: trailingHtml }, idx + 1);
                         }
                     }
                 });
@@ -348,10 +380,12 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 });
                 // #17: blockquote focusoutでのセーブ検知改善
                 // #75: delimiter含むfocusout処理
+                // #91: quote focusout saveUndoState一貫性 — dirtyフラグチェック追加
                 bq.addEventListener('focusout', () => {
                     const editor = getEditorFromElement(bq);
-                    if (editor) {
+                    if (editor && (editor as any).dirty) {
                         (editor as any).saveUndoState();
+                        (editor as any).dirty = false;
                     }
                 });
                 return bq;
@@ -775,7 +809,9 @@ class Editor {
         const tool = factory(data);
         const blockEl = this.createBlockWrapper(type, tool);
 
-        if (index >= this.blockElements.length) {
+        // #49: length参照の最適化 — ローカル変数にキャッシュ
+        const len = this.blockElements.length;
+        if (index >= len) {
             this.container.appendChild(blockEl);
             this.blockElements.push(blockEl);
             this.blockTools.push(tool);

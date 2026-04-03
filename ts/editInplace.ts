@@ -28,7 +28,15 @@ function nl2br(s: string): string {
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
 }
 
+// #95: fieldSave大規模content上限（1MB）
+const FIELD_SAVE_MAX_LENGTH = 1_048_576;
 function fieldSave(key: string, val: string): void {
+    // #95: 大規模content対策 — 上限超過時は警告して中断
+    if (val.length > FIELD_SAVE_MAX_LENGTH) {
+        console.warn('fieldSave: content exceeds max length, skipping save for:', key);
+        showFieldFeedback(key, false);
+        return;
+    }
     // #5: CSRF同時リクエスト時のトークン不整合対策 — キューで直列化
     fieldSaveQueue = fieldSaveQueue.then(() => {
         const body = new URLSearchParams();
@@ -43,10 +51,8 @@ function fieldSave(key: string, val: string): void {
         })
         .then(response => {
             if (!response.ok) { throw new Error(String(response.status)); }
-            // Update CSRF token from response header (one-time token)
-            // #33: グローバル変数を直接更新
-            const newToken = response.headers.get('X-CSRF-Token');
-            if (newToken) { csrfToken = newToken; }
+            // #87: updateCsrfFromResponse DRY統一
+            updateCsrfFromResponse(response);
             return response.text();
         })
         .then(data => {
@@ -68,8 +74,14 @@ function fieldSave(key: string, val: string): void {
             }
             changing = false;
         })
-        .catch(() => {
+        .catch((err: unknown) => {
             changing = false;
+            // #40: network/server error区別 — TypeError はネットワークエラー
+            if (err instanceof TypeError) {
+                console.warn('fieldSave network error:', key, err.message);
+            } else {
+                console.warn('fieldSave server error:', key, err instanceof Error ? err.message : String(err));
+            }
             showFieldFeedback(key, false);
         });
     });
@@ -130,7 +142,11 @@ function richTextHook(span: HTMLElement): void {
 
 // --- Content rendering for visitors ---
 
+// #94: render*Content二重呼び出し防止フラグ
+let _markdownRendered = false;
 function renderMarkdownContent(): void {
+    if (_markdownRendered) return;
+    _markdownRendered = true;
     document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
         const b64 = el.dataset.rawB64;
         // #89: b64デコードエラーハンドリング
@@ -146,7 +162,10 @@ function renderMarkdownContent(): void {
     });
 }
 
+let _blocksRendered = false;
 function renderBlocksContent(): void {
+    if (_blocksRendered) return;
+    _blocksRendered = true;
     document.querySelectorAll<HTMLElement>('.blocks-content').forEach(el => {
         let raw = el.dataset.blocks || '';
         const b64 = el.dataset.blocksB64;
@@ -200,11 +219,13 @@ function initBlockEditor(): void {
             flushSaving = true;
             const saved = editorInstance.save();
             // #39: JSON.stringifyでキーソート統一
-            const sortedReplacer = (_key: string, value: unknown): unknown => {
-                if (value && typeof value === 'object' && !Array.isArray(value)) {
+            // #62: sortedReplacer return type改善 — Record | unknown の明示的ユニオン
+            const sortedReplacer = (_key: string, value: unknown): Record<string, unknown> | unknown => {
+                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                    const obj = value as Record<string, unknown>;
                     const sorted: Record<string, unknown> = {};
-                    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
-                        sorted[k] = (value as Record<string, unknown>)[k];
+                    for (const k of Object.keys(obj).sort()) {
+                        sorted[k] = obj[k];
                     }
                     return sorted;
                 }
@@ -237,7 +258,8 @@ function initBlockEditor(): void {
                 (related as HTMLElement).closest?.('.ce-inline-toolbar')
             )) return;
 
-            if (saveTimer) clearTimeout(saveTimer);
+            // #36: saveTimer null代入の明確化
+            if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
             saveTimer = setTimeout(flushSave, 300);
         });
 
@@ -251,11 +273,13 @@ function initBlockEditor(): void {
             // #59: activeEditor null後のsave防止
             if (!editorInstance || !activeEditor) return;
             const saved = editorInstance.save();
-            const sortedReplacer = (_key: string, value: unknown): unknown => {
-                if (value && typeof value === 'object' && !Array.isArray(value)) {
+            // #62: sortedReplacer return type改善
+            const sortedReplacer = (_key: string, value: unknown): Record<string, unknown> | unknown => {
+                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                    const obj = value as Record<string, unknown>;
                     const sorted: Record<string, unknown> = {};
-                    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
-                        sorted[k] = (value as Record<string, unknown>)[k];
+                    for (const k of Object.keys(obj).sort()) {
+                        sorted[k] = obj[k];
                     }
                     return sorted;
                 }
@@ -566,10 +590,11 @@ function initPageSearch(): void {
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
 
+    // #30: Japanese検索改善 — normalize + toLowerCase で全角/半角統一
     input.addEventListener('input', () => {
-        const query = input.value.toLowerCase();
+        const query = input.value.normalize('NFKC').toLowerCase();
         tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
-            const text = row.textContent?.toLowerCase() || '';
+            const text = (row.textContent || '').normalize('NFKC').toLowerCase();
             row.style.display = text.includes(query) ? '' : 'none';
         });
     });
@@ -587,25 +612,28 @@ function initBulkActions(): void {
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
 
+    // #31: DOM queryキャッシュ — checkboxリストを一度取得して再利用
+    const allCheckboxes = tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check');
+
     selectAll.addEventListener('change', () => {
-        tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check').forEach(cb => {
+        allCheckboxes.forEach(cb => {
             cb.checked = selectAll.checked;
         });
     });
 
+    // #53: allChecked判定の最適化 — Array.from + every で短絡評価
     tbody.addEventListener('change', (e) => {
         const target = e.target as HTMLInputElement;
         if (!target.classList.contains('ce-bulk-check')) return;
-        const all = tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check');
-        let allChecked = true;
-        all.forEach(cb => { if (!cb.checked) allChecked = false; });
-        selectAll.checked = allChecked;
+        selectAll.checked = Array.from(allCheckboxes).every(cb => cb.checked);
     });
-
     const getSelectedSlugs = (): string[] => {
         const slugs: string[] = [];
-        tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check:checked').forEach(cb => {
+        allCheckboxes.forEach(cb => {
+            if (!cb.checked) return;
             const row = cb.closest('tr');
+            // #82: hidden item操作防止 — 非表示行のチェックボックスを除外
+            if (row && row.style.display === 'none') return;
             if (row?.dataset.slug) slugs.push(row.dataset.slug);
         });
         return slugs;
@@ -648,9 +676,13 @@ function initBulkActions(): void {
 
 // --- Publish warnings (#B) ---
 
+// #83: showWarnings スタック防止 — タイマーIDを保持
+let _warningsTimer: ReturnType<typeof setTimeout> | null = null;
 function showWarnings(warnings: string[]): void {
     // #93: container参照安全化 — 配列チェック追加
     if (!Array.isArray(warnings) || warnings.length === 0) return;
+    // #83: 前回のタイマーをキャンセルしてスタック防止
+    if (_warningsTimer) { clearTimeout(_warningsTimer); _warningsTimer = null; }
     let container = document.querySelector<HTMLElement>('.ce-warnings');
     if (!container) {
         container = document.createElement('div');
@@ -671,8 +703,10 @@ function showWarnings(warnings: string[]): void {
         item.textContent = msg;
         containerRef.appendChild(item);
     });
-    setTimeout(() => {
+    // #83: タイマーIDを保持してスタック防止
+    _warningsTimer = setTimeout(() => {
         if (containerRef.isConnected) { containerRef.innerHTML = ''; }
+        _warningsTimer = null;
     }, 8000);
 }
 
@@ -737,9 +771,18 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
     `;
     modal.style.display = 'flex';
 
-    const closeModal = (): void => { modal!.style.display = 'none'; };
+    const closeModal = (): void => {
+        modal!.style.display = 'none';
+        // #85: Escapeキーリスナーを解除
+        document.removeEventListener('keydown', escHandler);
+    };
     modal.querySelector('.ce-diff-modal__backdrop')?.addEventListener('click', closeModal);
     modal.querySelector('.ce-diff-modal__close')?.addEventListener('click', closeModal);
+    // #85: Escapeキーでモーダルを閉じる
+    const escHandler = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') closeModal();
+    };
+    document.addEventListener('keydown', escHandler);
 }
 
 // --- Generate report (#F) ---
@@ -776,6 +819,8 @@ function initGenerateReport(): void {
     if (!btn) return;
 
     btn.addEventListener('click', () => {
+        // #86: btn.disabled強化 — 既にdisabledなら重複実行防止
+        if (btn.disabled) return;
         btn.disabled = true;
         // #52: Content-Type追加
         fetch('index.php?api=generate', {
@@ -803,7 +848,11 @@ function initGenerateReport(): void {
 
 // --- Main initialization ---
 
+// #98: initEditInplace重複実行防止
+let _editInplaceInitialized = false;
 function initEditInplace(): void {
+    if (_editInplaceInitialized) return;
+    _editInplaceInitialized = true;
     // Render content for visitors
     renderMarkdownContent();
     renderBlocksContent();

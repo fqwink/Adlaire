@@ -10,7 +10,8 @@
     "sourceMap": false,
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true
   },
   "include": ["ts/**/*.ts"]
 }
