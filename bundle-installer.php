@@ -123,6 +123,9 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
+    if (mb_strlen($siteName, 'UTF-8') > 100) {
+        $errors[] = 'Site name must be 100 characters or less';
+    }
     $adminUsername = trim($post['admin_username'] ?? '');
     if ($adminUsername === '') {
         $adminUsername = 'admin';
@@ -414,6 +417,12 @@ $csrf = security_csrf_token();
         echo "<p class='check {$cls}'>" . esc($check['message']) . "</p>";
     }
     ?>
+
+    <?php
+    $httpsCheck = detect_https();
+    if (!$httpsCheck['ok']): ?>
+        <div class="warning"><strong>Security Warning:</strong> HTTPS is not enabled. All data including passwords will be transmitted in plaintext. It is strongly recommended to enable HTTPS before proceeding with installation.</div>
+    <?php endif; ?>
 
     <?php if ($allOk): ?>
         <form method="POST" action="?step=2">

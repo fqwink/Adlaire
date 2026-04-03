@@ -11,9 +11,12 @@ declare(strict_types=1);
  */
 
 $c = $app->config;
-$adminAction = $_REQUEST['admin'] ?? 'dashboard';
+$adminAction = is_string($_GET['admin'] ?? null) ? ($_GET['admin'] ?? 'dashboard') : 'dashboard';
 $allowedActions = ['dashboard', '', 'edit', 'new', 'users'];
-if (!is_string($adminAction) || !in_array($adminAction, $allowedActions, true)) {
+if (!in_array($adminAction, $allowedActions, true)) {
+    $adminAction = 'dashboard';
+}
+if ($adminAction === 'users' && !$app->isMainMaster()) {
     $adminAction = 'dashboard';
 }
 $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
@@ -33,7 +36,7 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
 </head>
 <body>
 <div class="admin-wrap">
-    <?php if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off'): ?>
+    <?php if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') { $isAdminHttps = false; } else { $isAdminHttps = true; } if (!$isAdminHttps): ?>
         <div style="background:#fff3cd;color:#856404;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:8px;">⚠ HTTPS is not enabled. Admin operations over HTTP are not secure.</div>
     <?php endif; ?>
     <header class="admin-header">
@@ -72,8 +75,10 @@ match ($adminAction) {
 function sortPagesByUpdated(array &$pages): void
 {
     uasort($pages, function (array $a, array $b): int {
-        $ta = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
-        $tb = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
+        $rawA = $a['updated_at'] ?? '1970-01-01';
+        $rawB = $b['updated_at'] ?? '1970-01-01';
+        $ta = is_string($rawA) ? (strtotime($rawA) ?: 0) : 0;
+        $tb = is_string($rawB) ? (strtotime($rawB) ?: 0) : 0;
         return $tb <=> $ta;
     });
 }
@@ -108,7 +113,7 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
     echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
     echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
-    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE);
+    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
@@ -120,7 +125,8 @@ function renderAdminDashboard(App $app, string $n): void
         $status = $data['status'] ?? 'published';
         $statusClass = $status === 'draft' ? 'status-draft' : 'status-published';
         $updated = substr($data['updated_at'] ?? '', 0, 10);
-        echo "<tr data-slug='" . esc($slug) . "' data-status='" . esc($status) . "'>";
+        $safeStatus = esc($status);
+        echo "<tr data-slug=\"" . esc($slug) . "\" data-status=\"" . $safeStatus . "\">";
         echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
         echo "<td>{$format}</td>";
@@ -244,8 +250,8 @@ function renderAdminDashboard(App $app, string $n): void
     echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
     echo 'fetch("index.php?api=generate",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
     echo '.then(function(r){return r.json();})';
-    echo '.then(function(d){if(d.status==="ok"){el.textContent="' . esc($app->t('admin_generate_report')) . ': "+d.pages_generated+" generated, "+d.pages_skipped+" skipped, "+d.pages_failed+" failed ("+d.build_time_ms+"ms)";el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
-    echo '.catch(function(err){el.textContent="Error: "+err.message;el.style.color="#c00";});';
+    echo '.then(function(d){if(d.status==="ok"){el.textContent="' . esc($app->t('admin_generate_report')) . ': "+String(parseInt(d.pages_generated,10))+" generated, "+String(parseInt(d.pages_skipped,10))+" skipped, "+String(parseInt(d.pages_failed,10))+" failed ("+String(parseInt(d.build_time_ms,10))+"ms)";el.style.color="#0a0";}else{el.textContent="Error: "+(typeof d.error==="string"?d.error:"Unknown");el.style.color="#c00";}})';
+    echo '.catch(function(err){el.textContent="Error: "+String(err.message||err);el.style.color="#c00";});';
     echo '});';
     echo '</script>';
 
@@ -325,7 +331,7 @@ function renderAdminDashboard(App $app, string $n): void
 
 function renderAdminEditor(App $app, string $n): void
 {
-    $slug = is_string($_REQUEST['page'] ?? '') ? ($_REQUEST['page'] ?? '') : '';
+    $slug = is_string($_GET['page'] ?? null) ? trim($_GET['page'] ?? '') : '';
     if ($slug === '' || !FileStorage::validateSlug($slug)) {
         echo '<p>Invalid page slug.</p>';
         return;
@@ -516,7 +522,8 @@ function renderAdminUsers(App $app, string $n): void
     echo 'if(d.status==="ok"&&d.credentials){';
     echo 'var c=d.credentials;';
     echo 'var tbl=document.querySelector("#cred-table tbody");';
-    echo 'tbl.innerHTML="<tr><th>Login ID</th><td>"+c.login_id+"</td></tr><tr><th>Password</th><td>"+c.password+"</td></tr><tr><th>Token</th><td>"+c.token+"</td></tr>";';
+    echo 'function escH(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}';
+    echo 'tbl.innerHTML="<tr><th>Login ID</th><td>"+escH(c.login_id)+"</td></tr><tr><th>Password</th><td>"+escH(c.password)+"</td></tr><tr><th>Token</th><td>"+escH(c.token)+"</td></tr>";';
     echo 'document.getElementById("sub-credentials").style.display="block";';
     echo 'genBtn.style.display="none";';
     echo 'var blob=new Blob(["Login ID: "+c.login_id+"\\nPassword: "+c.password+"\\nToken: "+c.token+"\\n"],{type:"text/plain"});';

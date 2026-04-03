@@ -295,7 +295,10 @@ const api = {
         }
         return res.json();
     },
+    // Ver.2.9 #32: ユーザーUI — username入力検証追加
     async disableUser(username) {
+        if (!username || typeof username !== 'string')
+            throw new Error('Invalid username');
         const res = await fetch(buildApiUrl('users'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -312,7 +315,10 @@ const api = {
             throw new Error(msg);
         }
     },
+    // Ver.2.9 #46: ユーザー削除 — username入力検証追加
     async deleteUser(username) {
+        if (!username || typeof username !== 'string')
+            throw new Error('Invalid username');
         const res = await fetch(buildApiUrl('users'), {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -329,7 +335,12 @@ const api = {
             throw new Error(msg);
         }
     },
+    // Ver.2.9 #33: パスワード検証 — クライアント側バリデーション追加
     async updateMainPassword(currentPassword, newPassword) {
+        if (!currentPassword || !newPassword)
+            throw new Error('Password fields are required');
+        if (newPassword.length < 8)
+            throw new Error('Password must be at least 8 characters');
         const res = await fetch(buildApiUrl('users'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },

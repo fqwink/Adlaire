@@ -18,7 +18,7 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.9-43**（2026-04-03）
+**Ver.2.9-45**（2026-04-03）
 
 ---
 
@@ -26,11 +26,11 @@
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
 
-#### Ver.2.9 — マスター管理者アクセス権限 + 品質確定バグ修正（63件精査）
+#### Ver.2.9 — マスター管理者アクセス権限 + 品質確定バグ修正（123件精査）
 
 マスター管理者ユーザーモデル導入（メインmaster 1名 + サブmaster 最大2名）。
 サブmaster認証情報自動生成（73文字hex、3要素認証）。
-品質確定バグ修正63件（PHP全ファイル精査）。
+品質確定バグ修正123件（PHP 63件 + TS 60件精査）。
 詳細は §4.1 を参照。
 
 #### Ver.2.8 — バグ修正（300件精査・300件実装）
@@ -154,6 +154,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 > 2.0 系最終品質確定リリース。
 > マスター管理者ユーザーモデル導入 + 全コード品質確定バグ修正。
+> PHP 63件（精査済・実装済） + TS 60件（致命的8件+重大12件+中程度40件）= 123件精査。
 
 #### マスター管理者アクセス権限
 
@@ -170,7 +171,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | M9 | bundle-installer | セットアップツールで初期マスター管理者ユーザー作成（is_main=true、users.json直接生成） | **実装済** |
 | M10 | 管理UI | ログイン状態表示にユーザー名表示 + ナビにUsersメニュー（メインmasterのみ） | **実装済** |
 
-#### 品質確定バグ修正（63件精査・63件実装）
+#### PHP品質確定バグ修正（63件精査・63件実装）
 
 | # | カテゴリ | 対象 | バグ概要 | 状態 |
 |---|---------|------|---------|:----:|
@@ -245,11 +246,11 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | 区分 | PHP | TS | 合計 | 状態 |
 |:----:|:---:|:--:|:----:|:----:|
-| 致命的 | 5 | 8 | 13 | 計画 |
-| 重大 | 32 | 12 | 44 | 計画 |
-| 中程度 | 32 | 40 | 72 | 計画 |
+| 致命的 | 5 | 8 | 13 | PHP計画 / TS**実装済** |
+| 重大 | 32 | 12 | 44 | PHP計画 / TS**実装済** |
+| 中程度 | 32 | 40 | 72 | PHP計画 / TS**実装済** |
 | 軽微 | 171 | 60 | 231 | 計画 |
-| **合計** | **240** | **120** | **360** | 計画 |
+| **合計** | **240** | **120** | **360** | TS致命的+重大+中程度60件**実装済** |
 
 主な致命的・重大項目:
 - PHP#5: index.php 404後のexit確保
@@ -267,6 +268,71 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 - TS#2/8: editor.ts surroundContents失敗後のHTML復元/サニタイズ
 - TS#3/7: editInplace.ts beforeunload sendBeacon CSRFトークン問題
 - TS#6: editor.ts 複数エディタでのInlineToolbar競合
+
+##### TS側品質確定バグ修正（60件精査・60件実装）
+
+| # | 深刻度 | 対象 | バグ概要 | 状態 |
+|---|:------:|------|---------|:----:|
+| 1 | 致命的 | editInplace.ts | downloadCredentials() XSS対策（escHtml+ファイル名��ニタイズ） | **実装済** |
+| 2 | 致命的 | editor.ts | surroundContents失敗後HTML復元ロジック修正 | **実装済** |
+| 3 | 致命的 | editInplace.ts | beforeunload sendBeacon CSRF Token（_lastValidCsrfTokenキャッシュ） | **実装済** |
+| 4 | 致命的 | editor.ts | isConnected失敗時Observer/Interval残存修正 | **実装済** |
+| 5 | 致命的 | markdown.ts | footnote IDダブルエスケープ修正 | **実装済** |
+| 6 | 致命的 | editor.ts | 複数エディタ静的inlineToolbar参照競合修正 | **実装済** |
+| 7 | 致命的 | editInplace.ts | beforeunload sendBeaconトークン問題（XHRフォールバック） | **実装済** |
+| 8 | 致命的 | editor.ts | surroundContents失敗後サニタイズ未実施修正 | **実装済** |
+| 9 | 重大 | editInplace.ts | 複数エディタactiveEditor競合（focusin更新） | **実装済** |
+| 10 | 重大 | editor.ts | list初期化items��列バリデーション不足 | **実装済** |
+| 11 | 重大 | editInplace.ts | flushSave大規模content上限チェック | **実装済** |
+| 12 | 重大 | editInplace.ts | sidebar flushSaving競合防止フラグ | **実装済** |
+| 13 | 重大 | editor.ts | heading形式切替innerHTML保持+サニタイズ | **実装済** |
+| 14 | 重大 | editor.ts | ブロック削除DOM接続確認 | **実装済** |
+| 15 | 重大 | editInplace.ts | switchFormat失敗ロールバック+reload重複防止 | **実装済** |
+| 16 | 重大 | editInplace.ts | sendBeacon失敗XHR同期フォールバック | **実装済** |
+| 17 | 重大 | editor.ts | removeBlock削除前undo状態保存 | **実装済** |
+| 18 | 重大 | editInplace.ts | sendBeaconリトライXHR同期フォールバック | **実装済** |
+| 19 | 重大 | editor.ts | ツールボック��Escape閉じ+キーボー���対応 | **実装済** |
+| 20 | 重大 | editor.ts | focusout重複防止デバウンスタイマー | **実装済** |
+| 21 | 中程度 | editor.ts | UndoManager連続pushデバウンス+clear() | **実装済** |
+| 22 | 中程度 | i18n.ts | パラメータnullフォールバック+has()追加 | **実装済** |
+| 23 | 中程度 | editor.ts | InlineToolbar位置計算改善 | **実装済** |
+| 24 | 中程度 | editInplace.ts | D&D dragRow tbody存在確認 | **実装済** |
+| 25 | 中程度 | markdown.ts | タスクリスト行頭スペース許容 | **実装済** |
+| 26 | 中程度 | editInplace.ts | saveTimer null代入明確化 | **実装済** |
+| 27 | 中程度 | editor.ts | insertBlock未知typeチェック | **実装済** |
+| 28 | 中程度 | markdown.ts | 脚注参照escAttrダブルエスケープ防止 | **実装済** |
+| 29 | 中程度 | editInplace.ts | エディタフォーカス時activeEditor更新 | **実装済** |
+| 30 | 中程度 | editInplace.ts | save()失敗時UI通知 | **実装済** |
+| 31 | 中程度 | editor.ts | リスト重複リスナー��止 | **実装済** |
+| 32 | 中程度 | api.ts | disableUser/deleteUser入力��証 | **実装済** |
+| 33 | 中程度 | editInplace.ts/api.ts | パスワード最小長+同一チェック | **実装済** |
+| 34 | 中程度 | markdown.ts | image/link正規表現改善+タイトル属性 | **実装済** |
+| 35 | 中程度 | editor.ts | renderBlocks空data安全処理 | **実装済** |
+| 36 | 中程度 | editor.ts | wrapWithLink選択範囲検証+プロトコル拒否 | **実装済** |
+| 37 | 中程度 | editInplace.ts | ページ検索デバウンス | **実装済** |
+| 38 | 中程度 | editor.ts | リスト入力空li→paragraph変換+Backspace | **実装済** |
+| 39 | 中程度 | markdown.ts | テーブルセル数正規化 | **実装済** |
+| 40 | 中程度 | editInplace.ts | revokeObjectURL遅延実行 | **実装済** |
+| 41 | 中程度 | editInplace.ts | showWarnings isConnected確認 | **実装済** |
+| 42 | 中程度 | editor.ts | リストトグルlistEl DOM未接続再取得 | **実装済** |
+| 43 | 中程度 | editInplace.ts | switchFormat newFormat入力検証 | **実装済** |
+| 44 | 中程度 | markdown.ts | コードブロック&lt;p&gt;ラップ除去+空言語安全処理 | **実装済** |
+| 45 | 中程度 | editor.ts | InlineToolbar scrollX/scrollY考慮 | **実装済** |
+| 46 | 中程度 | editInplace.ts | ユーザー削除ボタン無効化 | **実装済** |
+| 47 | 中程度 | editor.ts | Tab Shift+Tabインデント解除 | **実装済** |
+| 48 | 中程度 | editInplace.ts | timestampバリデーション | **実装済** |
+| 49 | 中程度 | editor.ts | Undo/Redo dirty/clear | **実装済** |
+| 50 | 中程度 | editor.ts | paragraph paste sanitizeHtml | **実装済** |
+| 51 | 中程度 | editor.ts | コードブロック言語タグdata-language保持 | **実装済** |
+| 52 | 中程度 | editor.ts | undo/redo focus保持 | **実装済** |
+| 53 | 中程度 | editInplace.ts | allChecked判定最適化 | **実装済** |
+| 54 | 中程度 | markdown.ts | テーブルalignment配列超過防止 | **実装済** |
+| 55 | 中程度 | markdown.ts | 脚注複数行対応 | **実装済** |
+| 56 | 中程度 | editInplace.ts | refreshUserList競合防止 | **実装済** |
+| 57 | 中程度 | editInplace.ts | generateSubMasterレスポンス検証 | **実装済** |
+| 58 | 中程度 | editInplace.ts | パスワードフォームエラー時クリア | **実装済** |
+| 59 | 中程度 | editInplace.ts | i18n ready Promiseインスタンス確認 | **実装済** |
+| 60 | 中程度 | editInplace.ts | D&D reorder失敗時UI復元 | **実装済** |
 
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 

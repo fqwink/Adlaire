@@ -191,7 +191,7 @@ final class FileStorage
         }
 
         $json = $this->lockedRead($this->configFile);
-        if ($json === false) {
+        if ($json === false || $json === '') {
             return [];
         }
 
@@ -236,7 +236,10 @@ final class FileStorage
                 if ($fp !== false) {
                     $raw = stream_get_contents($fp);
                     fclose($fp);
-                    $existing = json_decode($raw ?: '{}', true) ?: [];
+                    if (is_string($raw) && $raw !== '') {
+                        $decoded = json_decode($raw, true);
+                        $existing = is_array($decoded) ? $decoded : [];
+                    }
                 }
             }
 
@@ -244,10 +247,12 @@ final class FileStorage
 
             if (file_exists($this->configFile)) {
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
-                if (!copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json')) {
+                $backupDest = $this->backupsDir . '/config.' . $backupName . '.json';
+                if (!copy($this->configFile, $backupDest)) {
                     error_log('Adlaire: Failed to copy config backup: ' . $backupName);
                     return false;
                 }
+                @chmod($backupDest, self::FILE_PERMISSION);
                 $this->rotateBackups();
             }
 
@@ -286,7 +291,7 @@ final class FileStorage
             return false;
         }
         $json = $this->lockedRead($realPath);
-        if ($json === false) {
+        if ($json === false || $json === '') {
             return false;
         }
         $data = json_decode($json, true);
@@ -362,6 +367,7 @@ final class FileStorage
             error_log('Adlaire: Failed to copy page backup, aborting delete: ' . $slug);
             return false;
         }
+        @chmod($backupPath, self::FILE_PERMISSION);
 
         if (!@unlink($path)) {
             error_log('Adlaire: Failed to delete page file: ' . $path);
@@ -399,9 +405,9 @@ final class FileStorage
             clearstatcache(true, $this->pagesDir);
             $cacheMtime = filemtime($cacheFile);
             $dirMtime = filemtime($this->pagesDir);
-            if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime >= $dirMtime) {
+            if ($cacheMtime !== false && $dirMtime !== false && $cacheMtime > $dirMtime) {
                 $cached = $this->lockedRead($cacheFile);
-                if ($cached !== false) {
+                if ($cached !== false && $cached !== '') {
                     $decoded = json_decode($cached, true);
                     if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                         $cachedIndex = $decoded;
@@ -416,6 +422,15 @@ final class FileStorage
             $memoryLimitBytes = $memoryLimit * 1024 * 1024;
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * 0.8)) {
                 error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
+                if ($cachedIndex !== null) {
+                    foreach ($cachedIndex as $slug => $meta) {
+                        $data = $this->readPageData($slug);
+                        if ($data !== false) {
+                            $pages[$slug] = $data;
+                        }
+                    }
+                    return $pages;
+                }
                 return $pages;
             }
         }
@@ -467,6 +482,8 @@ final class FileStorage
         if (file_exists($cacheFile)) {
             @unlink($cacheFile);
         }
+        clearstatcache(true, $cacheFile);
+        clearstatcache(true, $this->pagesDir);
     }
 
     /**
@@ -661,7 +678,7 @@ final class FileStorage
         }
 
         $json = $this->lockedRead($revFile);
-        if ($json === false) {
+        if ($json === false || $json === '') {
             return false;
         }
 
@@ -681,10 +698,13 @@ final class FileStorage
     {
         $config = $this->readConfig();
         $raw = $config['page_order'] ?? '';
-        if ($raw === '') {
+        if (!is_string($raw) || $raw === '') {
             return [];
         }
         $data = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return [];
+        }
         return is_array($data) ? $data : [];
     }
 
@@ -750,7 +770,7 @@ final class FileStorage
             return false;
         }
         $json = $this->lockedRead($revFile);
-        if ($json === false) {
+        if ($json === false || $json === '') {
             return false;
         }
         $data = json_decode($json, true);
@@ -768,7 +788,7 @@ final class FileStorage
             return [];
         }
         $json = $this->lockedRead($this->usersFile);
-        if ($json === false) {
+        if ($json === false || $json === '') {
             return [];
         }
         $data = json_decode($json, true);
@@ -869,8 +889,11 @@ final class FileStorage
         $totalLen = strlen($loginId) + strlen($password) + strlen($token);
         if ($totalLen < 73) {
             $extra = 73 - $totalLen;
-            $token .= bin2hex(random_bytes((int) ceil($extra / 2)));
-            $token = substr($token, 0, 73 - strlen($loginId) - strlen($password));
+            $token .= bin2hex(random_bytes(max(1, (int) ceil($extra / 2))));
+            $targetTokenLen = 73 - strlen($loginId) - strlen($password);
+            if ($targetTokenLen > 0) {
+                $token = substr($token, 0, $targetTokenLen);
+            }
         }
         return [
             'login_id' => $loginId,

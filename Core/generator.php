@@ -39,7 +39,7 @@ function handleApiGenerate(FileStorage $storage): void
         $lastBuildTime = is_array($state) ? ($state['built_at'] ?? '') : '';
     }
 
-    // Full rebuild: clean dist directory
+    // Full rebuild: clean dist directory (preserve .build_state.json)
     if ($force || $lastBuildTime === '') {
         if (is_dir($distDir)) {
             $files = new RecursiveIteratorIterator(
@@ -48,6 +48,9 @@ function handleApiGenerate(FileStorage $storage): void
             );
             foreach ($files as $file) {
                 $path = $file->getPathname();
+                if (basename($path) === '.build_state.json') {
+                    continue;
+                }
                 if (is_link($path)) {
                     @unlink($path);
                 } elseif ($file->isDir()) {
@@ -89,8 +92,11 @@ function handleApiGenerate(FileStorage $storage): void
     }
     $cssSource = is_file($themePath . '/minimal.css') ? '/minimal.css' : '/style.css';
     if (is_file($themePath . $cssSource)) {
-        if (!copy($themePath . $cssSource, $cssDir . '/style.css')) {
+        $cssDest = $cssDir . '/style.css';
+        if (!copy($themePath . $cssSource, $cssDest)) {
             error_log('Adlaire: Failed to copy theme CSS');
+        } else {
+            @chmod($cssDest, 0644);
         }
     }
 
@@ -135,8 +141,9 @@ function handleApiGenerate(FileStorage $storage): void
 
     // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
-        $updatedTime = strtotime($data['updated_at'] ?? '');
-        $buildTime = strtotime($lastBuildTime);
+        $updatedAt = $data['updated_at'] ?? '';
+        $updatedTime = is_string($updatedAt) && $updatedAt !== '' ? strtotime($updatedAt) : false;
+        $buildTime = $lastBuildTime !== '' ? strtotime($lastBuildTime) : false;
         if ($lastBuildTime !== '' && $updatedTime !== false && $buildTime !== false && $updatedTime <= $buildTime) {
             $skipped++;
             $details[] = ['slug' => $slug, 'result' => 'skipped'];
@@ -150,7 +157,7 @@ function handleApiGenerate(FileStorage $storage): void
         } elseif ($format === 'markdown') {
             $contentHtml = renderMarkdownToHtml($data['content']);
         } else {
-            $contentHtml = $data['content'] ?? '';
+            $contentHtml = esc($data['content'] ?? '');
         }
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
@@ -190,8 +197,13 @@ function handleApiGenerate(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = htmlspecialchars(substr($data['updated_at'] ?? '', 0, 10), ENT_XML1, 'UTF-8');
-        $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
+        $updatedAt = $data['updated_at'] ?? '';
+        $lastmod = (is_string($updatedAt) && strlen($updatedAt) >= 10) ? htmlspecialchars(substr($updatedAt, 0, 10), ENT_XML1, 'UTF-8') : '';
+        $xml .= "  <url><loc>{$loc}</loc>";
+        if ($lastmod !== '') {
+            $xml .= "<lastmod>{$lastmod}</lastmod>";
+        }
+        $xml .= "</url>\n";
     }
     $xml .= '</urlset>';
     if (file_put_contents($distDir . '/sitemap.xml', $xml) === false) {
@@ -242,10 +254,11 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
 
     // Build menu
     $menuHtml = '<ul>';
-    $menu = str_replace("\r\n", "\n", $c['menu']);
+    $menuRaw = $c['menu'] ?? '';
+    $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
     $items = explode("<br />\n", $menu);
     foreach ($items as $item) {
-        $item = trim($item);
+        $item = trim(strip_tags($item));
         if ($item === '') continue;
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';

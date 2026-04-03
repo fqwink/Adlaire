@@ -23,6 +23,8 @@ let activeEditor: InstanceType<typeof Editor> | null = null;
 let fieldSaveQueue: Promise<void> = Promise.resolve();
 // #12: flushSave競合防止フラグ
 let flushSaving = false;
+// Ver.2.9 TS#3/TS#7: sendBeacon用のCSRFトークンキャッシュ — 最後の有効トークンを保持
+let _lastValidCsrfToken: string = '';
 
 function nl2br(s: string): string {
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
@@ -53,6 +55,8 @@ function fieldSave(key: string, val: string): void {
             if (!response.ok) { throw new Error(String(response.status)); }
             // #87: updateCsrfFromResponse DRY統一
             updateCsrfFromResponse(response);
+            // Ver.2.9 TS#3/TS#7: 有効なCSRFトークンをキャッシュ
+            _lastValidCsrfToken = csrfToken;
             return response.text();
         })
         .then(data => {
@@ -213,17 +217,27 @@ function initBlockEditor(): void {
 
         const editorInstance = Editor.create(wrapper, { data: editorData });
         activeEditor = editorInstance;
+        // Ver.2.9 TS#3/TS#7: 初期CSRFトークンをキャッシュ
+        if (!_lastValidCsrfToken) { _lastValidCsrfToken = csrfToken; }
+
+        // Ver.2.9 TS#29: フォーカス管理 — エディタフォーカス時にactiveEditor更新
+        wrapper.addEventListener('focusin', () => {
+            activeEditor = editorInstance;
+        });
 
         // Auto-save on focusout from the editor
         let saveTimer: ReturnType<typeof setTimeout> | null = null;
         let lastSavedJson = '';
+        // Ver.2.9 TS#26: セーブタイマー複数エディタ — flushSavingをエディタごとにローカル化
+        let wrapperFlushSaving = false;
 
         const flushSave = (): void => {
             // #12: flushSave中の別focusout競合防止
-            if (flushSaving) return;
+            // Ver.2.9 TS#26: エディタ固有のフラグを使用
+            if (wrapperFlushSaving) return;
             // #59: activeEditor null後のsave防止
-            if (!editorInstance || !activeEditor) return;
-            flushSaving = true;
+            if (!editorInstance) return;
+            wrapperFlushSaving = true;
             const saved = editorInstance.save();
             // #39: JSON.stringifyでキーソート統一
             // #62: sortedReplacer return type改善 — Record | unknown の明示的ユニオン
@@ -240,19 +254,33 @@ function initBlockEditor(): void {
             };
             const json = JSON.stringify(saved.blocks, sortedReplacer);
             const slug = wrapper.id;
-            if (!slug || json === lastSavedJson) { flushSaving = false; return; }
+            if (!slug || json === lastSavedJson) { wrapperFlushSaving = false; return; }
 
             lastSavedJson = json;
+            // Ver.2.9 TS#10: save大規模content上限チェック
+            if (json.length > FIELD_SAVE_MAX_LENGTH) {
+                console.warn('flushSave: content exceeds max length, skipping save for:', slug);
+                showSaveIndicator(wrapper, 'error');
+                wrapperFlushSaving = false;
+                return;
+            }
             showSaveIndicator(wrapper, 'saving');
             api.savePage(slug, json, 'blocks').then((result) => {
                 showSaveIndicator(wrapper, 'saved');
+                // Ver.2.9 TS#3/TS#7: 有効なCSRFトークンをキャッシュ
+                _lastValidCsrfToken = csrfToken;
                 if (result.warnings && result.warnings.length > 0) {
-                    showWarnings(result.warnings);
+                    // Ver.2.9 TS#41: showWarnings isConnected確認
+                    if (wrapper.isConnected) {
+                        showWarnings(result.warnings);
+                    }
                 }
-            }).catch(() => {
+            }).catch((err: unknown) => {
                 showSaveIndicator(wrapper, 'error');
+                // Ver.2.9 TS#30: save()失敗時のUI通知
+                console.warn('flushSave error:', slug, err instanceof Error ? err.message : String(err));
             }).finally(() => {
-                flushSaving = false;
+                wrapperFlushSaving = false;
             });
         };
 
@@ -299,13 +327,21 @@ function initBlockEditor(): void {
             const body = new URLSearchParams();
             body.append('slug', slug);
             body.append('format', 'blocks');
-            body.append('csrf', csrfToken);
+            // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
+            body.append('csrf', _lastValidCsrfToken || csrfToken);
             body.append('blocks', json);
             body.append('content', '');
             // #13: sendBeacon失敗時のユーザー通知（返り値チェック）
+            // Ver.2.9 TS#18: sendBeaconリトライ — 失敗時にXHR同期フォールバック
             const sent = navigator.sendBeacon('index.php?api=pages', body);
             if (!sent) {
-                console.warn('sendBeacon failed for page:', slug);
+                console.warn('sendBeacon failed for page:', slug, '- attempting XHR fallback');
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'index.php?api=pages', false);
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send(body.toString());
+                } catch { /* best-effort */ }
             }
         });
     });
@@ -378,11 +414,19 @@ function initBlockEditor(): void {
             sidebarLastJson = json;
             const body = new URLSearchParams();
             body.append('blocks', json);
-            body.append('csrf', csrfToken);
+            // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
+            body.append('csrf', _lastValidCsrfToken || csrfToken);
             // #13: sendBeacon失敗時のユーザー通知
+            // Ver.2.9 TS#18: sendBeaconリトライ — 失敗時にXHR同期フォールバック
             const sent = navigator.sendBeacon('index.php?api=sidebar', body);
             if (!sent) {
-                console.warn('sendBeacon failed for sidebar');
+                console.warn('sendBeacon failed for sidebar - attempting XHR fallback');
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'index.php?api=sidebar', false);
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send(body.toString());
+                } catch { /* best-effort */ }
             }
         });
     }
@@ -433,11 +477,17 @@ function initFormatSwitcher(): void {
     });
 }
 
+// Ver.2.9 TS#21: switchFormat location.reload重複防止フラグ
+let _switchFormatReloading = false;
 function switchFormat(slug: string, newFormat: string): void {
+    // Ver.2.9 TS#21: reload中の重複呼び出し防止
+    if (_switchFormatReloading) return;
     // #15: switchFormat失敗時のロールバック — 元データを保持
     // #109: 未使用変数previousEditorRef削除
     let previousContent = '';
     let previousFormat = '';
+    // Ver.2.9 TS#43: switchFormatデータ整形 — newFormatの入力検証
+    if (newFormat !== 'blocks' && newFormat !== 'markdown' && newFormat !== 'html') return;
 
     // Gather current content before switching
     let currentContent = '';
@@ -507,14 +557,16 @@ function switchFormat(slug: string, newFormat: string): void {
         }));
 
         api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
-            location.reload();
+            // Ver.2.9 TS#21: reload重複防止
+            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
         }).catch(() => {
             // #15: 失敗時にロールバック
             rollback();
         });
     } else {
         api.savePage(slug, currentContent, newFormat).then(() => {
-            location.reload();
+            // Ver.2.9 TS#21: reload重複防止
+            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
         }).catch(() => {
             // #15: 失敗時にロールバック
             rollback();
@@ -569,6 +621,8 @@ function initPageReorder(): void {
             e.preventDefault();
             row.classList.remove('ce-row--dragover');
             if (!state.dragRow || state.dragRow === row) return;
+            // Ver.2.9 TS#24: D&D整数チェック — dragRowがtbody内に存在するか確認
+            if (!tbody.contains(state.dragRow)) { state.dragRow = null; return; }
             // #16: reorderPages失敗後のUI復元 — 元の順序を保存
             const originalOrder: HTMLTableRowElement[] = [];
             tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(r => originalOrder.push(r));
@@ -608,18 +662,31 @@ function initPageSearch(): void {
     if (!tbody) return;
 
     // #30: Japanese検索改善 — normalize + toLowerCase で全角/半角統一
+    // Ver.2.9 #37: 検索フィルタ — デバウンスで入力中のパフォーマンス改善
+    let searchTimer: ReturnType<typeof setTimeout> | null = null;
     input.addEventListener('input', () => {
-        const query = input.value.normalize('NFKC').toLowerCase();
-        tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
-            const text = (row.textContent || '').normalize('NFKC').toLowerCase();
-            row.style.display = text.includes(query) ? '' : 'none';
-        });
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            // Ver.2.9 TS#37: normalize古ブラウザ対応 — normalize未対応ブラウザフォールバック
+            const safeNormalize = (s: string): string =>
+                typeof s.normalize === 'function' ? s.normalize('NFKC') : s;
+            const query = safeNormalize(input.value).toLowerCase().trim();
+            tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
+                if (!query) { row.style.display = ''; return; }
+                const text = safeNormalize(row.textContent || '').toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }, 150);
     });
 }
 
 // --- Bulk actions (#D) ---
 
+// Ver.2.9 TS#11: bulkActions初期化重複防止
+let _bulkActionsInitialized = false;
 function initBulkActions(): void {
+    if (_bulkActionsInitialized) return;
+    _bulkActionsInitialized = true;
     const selectAll = document.querySelector<HTMLInputElement>('#ce-bulk-select-all');
     if (!selectAll) return;
 
@@ -701,6 +768,8 @@ function showWarnings(warnings: string[]): void {
     // #83: 前回のタイマーをキャンセルしてスタック防止
     if (_warningsTimer) { clearTimeout(_warningsTimer); _warningsTimer = null; }
     let container = document.querySelector<HTMLElement>('.ce-warnings');
+    // Ver.2.9 TS#41: 既存containerがDOM接続済みか確認
+    if (container && !container.isConnected) { container = null; }
     if (!container) {
         container = document.createElement('div');
         container.className = 'ce-warnings';
@@ -867,21 +936,29 @@ function initGenerateReport(): void {
 
 // --- Sub-master credential download (Ver.2.9) ---
 
+// Ver.2.9 TS#1: downloadCredentials XSS防止 — escHtml()適用で表示時XSS防止
+// Ver.2.9 TS#40: URL.revokeObjectURL早期破棄防止 — setTimeout内で破棄
 function downloadCredentials(username: string, password: string, token: string): void {
+    const safeUser = escHtml(username);
+    const safePw = escHtml(password);
+    const safeToken = escHtml(token);
     const content = `Adlaire Sub-Master Credentials\n` +
         `================================\n` +
-        `Login ID: ${username}\n` +
-        `Password: ${password}\n` +
-        `Token: ${token}\n` +
+        `Login ID: ${safeUser}\n` +
+        `Password: ${safePw}\n` +
+        `Token: ${safeToken}\n` +
         `================================\n` +
         `WARNING: This file is shown only once. Keep it safe.\n`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `adlaire-sub-master-${username}.txt`;
+    // Ver.2.9 TS#1: ファイル名もエスケープ（特殊文字除去）
+    const safeFilename = username.replace(/[^a-zA-Z0-9_-]/g, '_');
+    a.download = `adlaire-sub-master-${safeFilename}.txt`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Ver.2.9 TS#40: revokeObjectURLを遅延実行（ダウンロード完了を待つ）
+    setTimeout(() => { URL.revokeObjectURL(url); }, 5000);
 }
 
 // --- User Management UI (Ver.2.9: マスター管理者対応) ---
@@ -894,6 +971,11 @@ function initUserManagement(): void {
             if (generateBtn.disabled) return;
             generateBtn.disabled = true;
             api.generateSubMaster().then(result => {
+                // Ver.2.9 TS#22: generateSubMasterレスポンス解析 — 必須フィールド検証
+                if (!result || !result.username || !result.password || !result.token) {
+                    alert(i18n.t('sub_master_generate_error') || 'Failed to generate sub-master credentials.');
+                    return;
+                }
                 // Display credentials (shown only once, disappears on reload)
                 const credDisplay = document.createElement('div');
                 credDisplay.className = 'ce-sub-master-credentials';
@@ -937,13 +1019,18 @@ function initUserManagement(): void {
             }
 
             // Delete sub-master
+            // Ver.2.9 #46: ユーザー削除 — ダブル確認とボタン無効化
             if (target.classList.contains('ce-user-delete-btn')) {
                 const username = target.dataset.username;
                 if (!username) return;
                 if (!confirm(i18n.t('confirm_delete_user', { username: escHtml(username) }) || `Delete user "${username}"? This cannot be undone.`)) return;
+                // Ver.2.9 #46: 削除中のボタン無効化
+                const btn = target as HTMLButtonElement;
+                btn.disabled = true;
                 api.deleteUser(username).then(() => {
                     location.reload();
                 }).catch((err: unknown) => {
+                    btn.disabled = false;
                     alert(err instanceof Error ? err.message : String(err));
                 });
             }
@@ -967,12 +1054,27 @@ function initUserManagement(): void {
                 alert(i18n.t('password_mismatch') || 'New password and confirmation do not match.');
                 return;
             }
+            // Ver.2.9 #33: パスワード検証 — 最小長チェック（8文字以上）
+            if (newPw.length < 8) {
+                alert(i18n.t('password_too_short') || 'Password must be at least 8 characters long.');
+                return;
+            }
+            // Ver.2.9 #33: パスワード検証 — 現在のパスワードと同一でないか
+            if (currentPw === newPw) {
+                alert(i18n.t('password_same_as_current') || 'New password must be different from current password.');
+                return;
+            }
 
             api.updateMainPassword(currentPw, newPw).then(() => {
                 alert(i18n.t('password_updated') || 'Password updated successfully.');
                 pwForm.reset();
             }).catch((err: unknown) => {
                 alert(err instanceof Error ? err.message : String(err));
+                // Ver.2.9 TS#33: パスワードフォームエラー時リセット — パスワードフィールドのみクリア
+                const newPwInput = pwForm.querySelector<HTMLInputElement>('#ce-new-password');
+                const confirmPwInput = pwForm.querySelector<HTMLInputElement>('#ce-confirm-password');
+                if (newPwInput) newPwInput.value = '';
+                if (confirmPwInput) confirmPwInput.value = '';
             });
         });
     }
@@ -981,9 +1083,14 @@ function initUserManagement(): void {
     refreshUserList();
 }
 
+// Ver.2.9 TS#32: refreshUserList競合防止 — 実行中フラグ
+let _refreshUserListPending = false;
 function refreshUserList(): void {
     const generateBtn = document.querySelector<HTMLButtonElement>('#ce-generate-sub-master');
     if (!generateBtn) return;
+    // Ver.2.9 TS#32: 既に実行中の場合はスキップ
+    if (_refreshUserListPending) return;
+    _refreshUserListPending = true;
 
     api.listUsers().then(users => {
         // 3-user limit: main master + 2 sub-masters = 3 total
@@ -996,6 +1103,8 @@ function refreshUserList(): void {
         }
     }).catch(() => {
         // Silently ignore list errors on refresh
+    }).finally(() => {
+        _refreshUserListPending = false;
     });
 }
 
@@ -1036,15 +1145,18 @@ function initEditInplace(): void {
         initLoginSubMasterToggle();
     };
     // #36: typeof i18nチェックをより堅牢に
-    if (typeof i18n !== 'undefined' && i18n && typeof i18n.ready?.then === 'function') {
-        i18n.ready.then(initEditorUI);
+    // Ver.2.9 TS#22(i18n): ready?.then型チェック — Promiseインスタンス確認を追加
+    if (typeof i18n !== 'undefined' && i18n && i18n.ready instanceof Promise && typeof i18n.ready.then === 'function') {
+        i18n.ready.then(initEditorUI).catch(() => { initEditorUI(); });
     } else {
         initEditorUI();
     }
 
     // Editable text spans (HTML and Markdown formats)
+    // Ver.2.9 TS#31: イベントリスナー伝播制御 — click伝播を停止して親要素の誤動作を防止
     document.querySelectorAll<HTMLElement>('span.editText').forEach(span => {
-        span.addEventListener('click', () => {
+        span.addEventListener('click', (e) => {
+            e.stopPropagation();
             if (changing) return;
             changing = true;
 

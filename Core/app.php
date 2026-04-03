@@ -54,6 +54,8 @@ final class App
     /** @var string[]|null */
     private ?array $menuItems = null;
 
+    private bool $is404 = false;
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -86,9 +88,12 @@ final class App
             : '';
         $rp = is_string($rpRaw) ? $rpRaw : '';
 
-        $httpHost = filter_input(INPUT_SERVER, 'HTTP_HOST') ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
-            $httpHost = 'localhost';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        if (!is_string($httpHost) || preg_match('/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/', $httpHost) !== 1) {
+            $httpHost = $_SERVER['SERVER_NAME'] ?? 'localhost';
+            if (!is_string($httpHost) || preg_match('/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/', $httpHost) !== 1) {
+                $httpHost = 'localhost';
+            }
         }
 
         $rawUri = $_SERVER['REQUEST_URI'] ?? '/';
@@ -181,19 +186,24 @@ final class App
 
     private function handleAuth(): void
     {
-        if (isset($_SESSION['last_activity']) && is_int($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > self::SESSION_TIMEOUT) {
+        $lastActivity = $_SESSION['last_activity'] ?? null;
+        if (is_int($lastActivity) && (time() - $lastActivity) > self::SESSION_TIMEOUT) {
             $_SESSION = [];
-            session_regenerate_id(true);
-            session_destroy();
-            session_start();
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_regenerate_id(true);
+                session_destroy();
+            }
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                session_start();
+            }
             return;
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
         }
 
-        $sessionUser = $_SESSION['user'] ?? '';
-        $sessionHash = $_SESSION['l'] ?? '';
+        $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+        $sessionHash = is_string($_SESSION['l'] ?? null) ? ($_SESSION['l'] ?? '') : '';
         if ($sessionUser !== '' && $sessionHash !== '') {
             $userData = $this->storage->getUser($sessionUser);
             if ($userData !== false && isset($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
@@ -277,6 +287,7 @@ final class App
             $isDraft = ($pageData['status'] ?? 'published') === 'draft';
             if ($isDraft && !$this->isLoggedIn()) {
                 http_response_code(404);
+                $this->is404 = true;
                 $this->config['content'] = $this->defaults['new_page']['visitor'];
                 return;
             }
@@ -295,6 +306,7 @@ final class App
         }
 
         http_response_code(404);
+        $this->is404 = true;
         $this->config['content'] = $this->isLoggedIn()
             ? $this->defaults['new_page']['admin']
             : $this->defaults['new_page']['visitor'];
@@ -405,9 +417,9 @@ final class App
         $host = esc($this->host);
         if ($this->isLoggedIn()) {
             $username = esc($this->getCurrentUser());
-            return "<span class='login-user'>{$username}</span> | <a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
+            return "<span class=\"login-user\">{$username}</span> | <a href=\"{$host}?admin\">Admin</a> | <a href=\"{$host}?logout\">" . esc($this->t('logout')) . "</a>";
         }
-        return "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
+        return "<a href=\"{$host}?login\">" . esc($this->t('login')) . "</a>";
     }
 
     public static function getSlug(string $page): string
@@ -416,6 +428,11 @@ final class App
         $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
         $slug = (string) preg_replace('/[^a-zA-Z0-9_\-]/', '', $slug);
         return $slug;
+    }
+
+    public function is404(): bool
+    {
+        return $this->is404;
     }
 
     public function isMainMaster(): bool
@@ -433,10 +450,14 @@ final class App
             return $this->t('login_rate_limited');
         }
 
-        $username = trim($_POST['username'] ?? '');
-        $input = $_POST['password'] ?? '';
+        $username = is_string($_POST['username'] ?? null) ? trim($_POST['username'] ?? '') : '';
+        $input = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
 
-        if ($username === '') {
+        if ($username === '' || strlen($username) > 64) {
+            return $this->t('wrong_password');
+        }
+
+        if (strlen($input) > 256) {
             return $this->t('wrong_password');
         }
 
@@ -457,13 +478,13 @@ final class App
         $isMain = $userData['is_main'] ?? false;
 
         if (!$isMain && isset($userData['token'])) {
-            $tokenInput = $_POST['token'] ?? '';
+            $tokenInput = is_string($_POST['token'] ?? null) ? ($_POST['token'] ?? '') : '';
             if ($tokenInput === '' || !password_verify($tokenInput, $userData['token'])) {
                 return $this->t('wrong_password');
             }
         }
 
-        $newPass = $_POST['new'] ?? '';
+        $newPass = is_string($_POST['new'] ?? null) ? ($_POST['new'] ?? '') : '';
         if ($newPass !== '') {
             if (!$isMain) {
                 return $this->t('wrong_password');
@@ -580,12 +601,12 @@ final class App
                     $blocksB64 = base64_encode($json);
                 }
             }
-            echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
+            echo "<div class=\"blocks-content\" data-blocks-b64=\"" . esc($blocksB64) . "\"></div>";
         } elseif ($format === 'markdown' && $isPage) {
             $b64 = base64_encode($content);
-            echo "<div class='markdown-content' data-raw-b64='" . esc($b64) . "'></div>";
+            echo "<div class=\"markdown-content\" data-raw-b64=\"" . esc($b64) . "\"></div>";
         } else {
-            echo $content;
+            echo esc($content);
         }
     }
 
@@ -599,7 +620,7 @@ final class App
         $items = $this->menuItems;
         echo '<ul>';
         foreach ($items as $item) {
-            $item = trim($item);
+            $item = trim(strip_tags($item));
             if ($item === '') {
                 continue;
             }
@@ -607,7 +628,7 @@ final class App
             $safeItem = esc($item);
             $safeSlug = esc($slug);
             $active = ($this->config['page'] === $slug) ? ' id="active"' : '';
-            echo "<li{$active}><a href='{$safeSlug}'>{$safeItem}</a></li>";
+            echo "<li{$active}><a href=\"{$safeSlug}\">{$safeItem}</a></li>";
         }
         echo '</ul>';
     }

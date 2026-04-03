@@ -35,6 +35,10 @@ function verifyApiAuth(FileStorage $storage): bool
 
 function handleEdit(): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return;
+    }
+
     $fieldname = $_POST['fieldname'] ?? null;
     $content = $_POST['content'] ?? null;
 
@@ -42,7 +46,7 @@ function handleEdit(): void
         return;
     }
 
-    $fieldname = basename($fieldname);
+    $fieldname = basename(trim($fieldname));
     $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'content', 'status', 'format', 'blocks'];
     if (!in_array($fieldname, $allowedConfigFields, true) && !FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
@@ -90,7 +94,7 @@ function handleEdit(): void
     header('Content-Type: text/plain; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
     $csrfValue = $_SESSION['csrf'] ?? '';
-    if ($csrfValue !== '') {
+    if (is_string($csrfValue) && $csrfValue !== '' && preg_match('/^[a-f0-9]+$/', $csrfValue)) {
         header('X-CSRF-Token: ' . $csrfValue);
     }
     echo $content;
@@ -122,9 +126,19 @@ function handleApi(): void
     if ($origin === 'null' || $origin === '') {
         // Reject null and empty origins
     } elseif ($allowedHost !== '') {
-        $parsed = parse_url($origin, PHP_URL_HOST);
-        if (is_string($parsed) && $parsed === $allowedHost) {
-            header('Access-Control-Allow-Origin: ' . $origin);
+        $parsedHost = parse_url($origin, PHP_URL_HOST);
+        $parsedPort = parse_url($origin, PHP_URL_PORT);
+        $hostWithPort = $allowedHost;
+        $hostOnly = str_contains($allowedHost, ':') ? strstr($allowedHost, ':', true) : $allowedHost;
+        if (is_string($parsedHost) && $parsedHost === $hostOnly) {
+            $allowedPort = str_contains($allowedHost, ':') ? (int) substr($allowedHost, (int) strpos($allowedHost, ':') + 1) : null;
+            if ($allowedPort === null && $parsedPort === null) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            } elseif ($parsedPort !== null && $allowedPort !== null && (int) $parsedPort === $allowedPort) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            } elseif ($parsedPort === null && $allowedPort === null) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            }
         }
     }
 
@@ -145,7 +159,7 @@ function handleApi(): void
     }
 
     $apiCsrf = $_SESSION['csrf'] ?? '';
-    if ($apiCsrf !== '') {
+    if (is_string($apiCsrf) && $apiCsrf !== '' && preg_match('/^[a-f0-9]+$/', $apiCsrf)) {
         header('X-CSRF-Token: ' . $apiCsrf);
     }
 
@@ -410,9 +424,9 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 function handleApiSearch(FileStorage $storage): void
 {
-    $rawQuery = is_string($_REQUEST['q'] ?? '') ? ($_REQUEST['q'] ?? '') : '';
-    if ($rawQuery === '') {
-        echo json_encode(['results' => []]);
+    $rawQuery = is_string($_REQUEST['q'] ?? null) ? trim($_REQUEST['q'] ?? '') : '';
+    if ($rawQuery === '' || mb_strlen($rawQuery, 'UTF-8') > 200) {
+        apiResponse(['results' => []]);
         return;
     }
 
@@ -458,7 +472,7 @@ function handleApiSitemap(FileStorage $storage): void
     header('X-Content-Type-Options: nosniff');
 
     $app = App::getInstance();
-    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     $rawHost = rtrim($app->host, '/');
     $host = ($isHttps ? 'https' : 'http') . ':' . $rawHost;
 
@@ -525,14 +539,16 @@ function handleApiExport(FileStorage $storage): void
         $export['revision_data'] = $revisionData;
     }
 
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
-    header('X-Content-Type-Options: nosniff');
     $exportJson = json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     if ($exportJson === false) {
+        header('Content-Type: application/json; charset=UTF-8');
         apiError(500, 'Export JSON encoding failed');
         return;
     }
+    $safeDate = preg_replace('/[^0-9_]/', '', date('Ymd_His'));
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="adlaire-export-' . $safeDate . '.json"');
+    header('X-Content-Type-Options: nosniff');
     echo $exportJson;
 }
 
@@ -550,17 +566,29 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    $maxImportSize = 16 * 1024 * 1024;
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($contentLength > $maxImportSize) {
+        apiError(413, 'Import data exceeds 16MB limit');
+        return;
+    }
+
     static $rawInput = null;
     if ($rawInput === null) {
-        $rawInput = file_get_contents('php://input');
+        $rawInput = file_get_contents('php://input', false, null, 0, $maxImportSize + 1);
     }
     $input = ($rawInput !== false && $rawInput !== '') ? $rawInput : '';
     if ($input === '') {
-        $input = $_POST['data'] ?? '';
+        $input = is_string($_POST['data'] ?? null) ? ($_POST['data'] ?? '') : '';
     }
 
     if ($input === '') {
         apiError(400, 'Empty request body');
+        return;
+    }
+
+    if (strlen($input) > $maxImportSize) {
+        apiError(413, 'Import data exceeds 16MB limit');
         return;
     }
 
@@ -769,7 +797,7 @@ function handleApiUsers(FileStorage $storage, string $method): void
         }
 
         if ($action === 'disable') {
-            $username = trim($_POST['user'] ?? '');
+            $username = is_string($_POST['user'] ?? null) ? trim($_POST['user'] ?? '') : '';
             if ($username === '') {
                 apiError(400, 'Invalid username');
                 return;
@@ -793,9 +821,13 @@ function handleApiUsers(FileStorage $storage, string $method): void
 
         if ($action === 'password') {
             $sessionUser = $_SESSION['user'] ?? '';
-            $password = $_POST['password'] ?? '';
-            if (strlen($password) < 8) {
+            $password = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
+            if (!is_string($password) || strlen($password) < 8) {
                 apiError(400, 'Password must be at least 8 characters');
+                return;
+            }
+            if (strlen($password) > 256) {
+                apiError(400, 'Password is too long');
                 return;
             }
             $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
@@ -822,12 +854,12 @@ function handleApiUsers(FileStorage $storage, string $method): void
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $username = trim($_REQUEST['username'] ?? '');
+        $username = is_string($_REQUEST['username'] ?? null) ? trim($_REQUEST['username'] ?? '') : '';
         if ($username === '') {
             apiError(400, 'Invalid username');
             return;
         }
-        $sessionUser = $_SESSION['user'] ?? '';
+        $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
         if ($username === $sessionUser) {
             apiError(400, 'Cannot delete yourself');
             return;

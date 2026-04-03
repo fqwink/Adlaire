@@ -8,6 +8,8 @@
  *
  * Spec: EDITOR_RULEBOOK.md §13 (Ver.2.5 エディタ高度化仕様)
  */
+// Ver.2.9 #6: InlineToolbar参照を各Editorインスタンスに紐づけるためのWeakMap
+const _editorInlineToolbarMap = new WeakMap();
 // --- Helper: get Editor from element ---
 function getEditorFromElement(el) {
     const editorEl = el.closest('.ce-editor');
@@ -39,10 +41,31 @@ function attachBackspaceHandler(el) {
     });
 }
 // --- Helper: attach Enter handler for list items ---
+// Ver.2.9 TS#38: リスト重複リスナー防止 — dataset属性で登録済みチェック
 function attachListItemHandlers(li) {
+    if (li.dataset.listHandlerAttached === 'true')
+        return;
+    li.dataset.listHandlerAttached = 'true';
     li.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            // Ver.2.9 #38: 空のliでEnterを押した場合はリストブロック後に新paragraph挿入
+            if (li.textContent?.trim() === '') {
+                const listEl = li.closest('ul, ol');
+                const editor = listEl ? getEditorFromElement(listEl) : getEditorFromElement(li);
+                if (editor && listEl) {
+                    const block = listEl.closest('.ce-block');
+                    if (block) {
+                        const idx = editor.getBlockIndex(block);
+                        li.remove();
+                        if (listEl.children.length === 0) {
+                            editor.removeBlock(idx);
+                        }
+                        editor.insertBlock('paragraph', { text: '' }, idx + 1);
+                        return;
+                    }
+                }
+            }
             const newLi = document.createElement('li');
             newLi.contentEditable = 'true';
             attachListItemHandlers(newLi);
@@ -50,6 +73,28 @@ function attachListItemHandlers(li) {
             newLi.focus();
             const listEl = li.closest('ul, ol');
             const editor = listEl ? getEditorFromElement(listEl) : getEditorFromElement(li);
+            if (editor) {
+                editor.saveUndoState();
+            }
+        }
+        // Ver.2.9 #38: Backspaceで空liを削除して前のliにフォーカス
+        if (e.key === 'Backspace' && li.textContent?.trim() === '') {
+            e.preventDefault();
+            const prev = li.previousElementSibling;
+            const listEl = li.closest('ul, ol');
+            li.remove();
+            if (prev) {
+                prev.focus();
+                const sel = window.getSelection();
+                if (sel && prev.lastChild) {
+                    const range = document.createRange();
+                    range.selectNodeContents(prev);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+            const editor = listEl ? getEditorFromElement(listEl) : null;
             if (editor) {
                 editor.saveUndoState();
             }
@@ -99,12 +144,20 @@ class UndoManager {
     constructor(maxSize = 50) {
         this.stack = [];
         this.pointer = -1;
+        // Ver.2.9 #21: 最終push時刻を記録してデバウンス判定に使用
+        this.lastPushTime = 0;
         this.maxSize = maxSize;
     }
     // #118: push最適化 — raw比較を先に行い、不一致時のみ正規化比較
+    // Ver.2.9 #21: 連続pushのデバウンス（300ms以内の同一操作を統合）
     push(state) {
         const json = JSON.stringify(state);
-        if (this.pointer >= 0) {
+        const now = Date.now();
+        // Ver.2.9 TS#21: maxSize/pointer整合性 — pointerがstack範囲外の場合に補正
+        if (this.pointer >= this.stack.length) {
+            this.pointer = this.stack.length - 1;
+        }
+        if (this.pointer >= 0 && this.pointer < this.stack.length) {
             // Fast path: 完全一致チェック
             if (this.stack[this.pointer] === json)
                 return;
@@ -113,18 +166,33 @@ class UndoManager {
             const prevNormalized = this.stack[this.pointer].replace(/\s+/g, ' ');
             if (prevNormalized === normalized)
                 return;
+            // Ver.2.9 #21: 300ms以内の変更は上書き統合（スタック肥大化防止）
+            if (now - this.lastPushTime < 300) {
+                this.stack[this.pointer] = json;
+                this.lastPushTime = now;
+                return;
+            }
         }
         this.stack = this.stack.slice(0, this.pointer + 1);
         this.stack.push(json);
-        if (this.stack.length > this.maxSize)
+        if (this.stack.length > this.maxSize) {
             this.stack.shift();
+        }
+        // Ver.2.9 TS#21: pointer整合性保証 — shiftで要素が減った場合も正確に追従
         this.pointer = this.stack.length - 1;
+        this.lastPushTime = now;
     }
     // #10: JSON.parseにtry-catch追加
+    // Ver.2.9 TS#49: undo/redo pointer範囲保護
     undo() {
-        if (this.pointer <= 0)
+        if (this.pointer <= 0 || this.stack.length === 0)
             return null;
         this.pointer--;
+        // Ver.2.9 TS#49: pointer下限保護
+        if (this.pointer < 0) {
+            this.pointer = 0;
+            return null;
+        }
         try {
             return JSON.parse(this.stack[this.pointer]);
         }
@@ -133,16 +201,28 @@ class UndoManager {
         }
     }
     // #11: JSON.parseにtry-catch追加
+    // Ver.2.9 TS#49: redo pointer範囲保護
     redo() {
         if (this.pointer >= this.stack.length - 1)
             return null;
         this.pointer++;
+        // Ver.2.9 TS#49: pointer上限保護
+        if (this.pointer >= this.stack.length) {
+            this.pointer = this.stack.length - 1;
+            return null;
+        }
         try {
             return JSON.parse(this.stack[this.pointer]);
         }
         catch {
             return null;
         }
+    }
+    // Ver.2.9 #49: clear — Undo時のメモリ解放メソッド追加
+    clear() {
+        this.stack = [];
+        this.pointer = -1;
+        this.lastPushTime = 0;
     }
 }
 // --- Built-in Block Tools ---
@@ -173,7 +253,24 @@ const builtinTools = {
                                 trailingHtml = tmp.innerHTML;
                             }
                             const idx = editor.getBlockIndex(el.closest('.ce-block'));
-                            editor.insertBlock('paragraph', { text: trailingHtml }, idx + 1);
+                            // Ver.2.9 #50: 新ブロックのtrailingHtmlもサニタイズ
+                            editor.insertBlock('paragraph', { text: sanitizeHtml(trailingHtml) }, idx + 1);
+                        }
+                    }
+                });
+                // Ver.2.9 #50: paste時にサニタイズ適用（外部HTMLのXSS防止）
+                el.addEventListener('paste', (e) => {
+                    const html = e.clipboardData?.getData('text/html');
+                    if (html) {
+                        e.preventDefault();
+                        const cleaned = sanitizeHtml(html);
+                        const sel = window.getSelection();
+                        if (sel && sel.rangeCount) {
+                            const range = sel.getRangeAt(0);
+                            range.deleteContents();
+                            const frag = range.createContextualFragment(cleaned);
+                            range.insertNode(frag);
+                            range.collapse(false);
                         }
                     }
                 });
@@ -205,18 +302,24 @@ const builtinTools = {
                 levelBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const text = headingEl.textContent || '';
+                    // Ver.2.9 #13: 形式切替時にinnerHTMLを保持しつつサニタイズ適用
+                    const currentHtml = sanitizeHtml(headingEl.innerHTML);
                     level = level >= 3 ? 1 : level + 1;
                     const newEl = document.createElement(`h${level}`);
                     // #54: contentEditable属性を確実に設定
                     newEl.contentEditable = 'true';
                     newEl.className = 'ce-heading';
-                    newEl.textContent = text;
+                    newEl.innerHTML = currentHtml;
                     attachBackspaceHandler(newEl);
                     headingEl.replaceWith(newEl);
                     headingEl = newEl;
                     levelBtn.textContent = `H${level}`;
                     newEl.focus();
+                    // Ver.2.9 #13: レベル変更後にdirtyフラグをセット
+                    const editor = getEditorFromElement(newEl);
+                    if (editor) {
+                        editor.dirty = true;
+                    }
                 });
                 wrap.appendChild(levelBtn);
                 wrap.appendChild(headingEl);
@@ -228,9 +331,11 @@ const builtinTools = {
         };
     },
     // #29: list ordered/unordered toggle (confirm → toggle button)
+    // Ver.2.9 #10: list初期化 — items配列が空の場合のフォールバック改善
     list(data) {
         let style = data.style || 'unordered';
-        const items = data.items || [''];
+        const rawItems = data.items;
+        const items = (Array.isArray(rawItems) && rawItems.length > 0) ? rawItems.map(i => String(i ?? '')) : [''];
         let listEl;
         return {
             render() {
@@ -243,6 +348,14 @@ const builtinTools = {
                 toggleBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    // Ver.2.9 TS#42: リストトグルlistEl参照 — listElがDOM未接続の場合は再取得
+                    if (!listEl.isConnected) {
+                        const fallback = wrap.querySelector('ul, ol');
+                        if (fallback)
+                            listEl = fallback;
+                        else
+                            return;
+                    }
                     const currentItems = [];
                     // #14: li.innerHTMLにsanitizeHtml適用してXSS防止
                     listEl.querySelectorAll('li').forEach(li => currentItems.push(sanitizeHtml(li.innerHTML)));
@@ -261,6 +374,11 @@ const builtinTools = {
                     listEl.replaceWith(newEl);
                     listEl = newEl;
                     toggleBtn.textContent = style === 'ordered' ? 'OL' : 'UL';
+                    // Ver.2.9 TS#42: トグル後にdirtyフラグをセット
+                    const editor = getEditorFromElement(newEl);
+                    if (editor) {
+                        editor.dirty = true;
+                    }
                 });
                 const tag = style === 'ordered' ? 'ol' : 'ul';
                 listEl = document.createElement(tag);
@@ -290,19 +408,92 @@ const builtinTools = {
             render() {
                 const pre = document.createElement('pre');
                 pre.className = 'ce-code';
+                // Ver.2.9 TS#13: コードブロック言語タグ — data-languageをpre要素に保持
+                const lang = typeof data.language === 'string' ? data.language.replace(/[^a-zA-Z0-9+#._-]/g, '') : '';
+                if (lang) {
+                    pre.dataset.language = lang;
+                    pre.className = `ce-code language-${lang}`;
+                }
                 const code = document.createElement('code');
                 code.contentEditable = 'true';
                 code.textContent = data.code || '';
                 // #73: code blockでtabキー入力対応（インデント挿入）
                 code.addEventListener('keydown', (e) => {
+                    // Ver.2.9 #47: Tab処理改善 — Shift+Tabでインデント解除対応
                     if (e.key === 'Tab') {
                         e.preventDefault();
                         const sel = window.getSelection();
                         if (sel && sel.rangeCount) {
                             const range = sel.getRangeAt(0);
-                            range.deleteContents();
-                            range.insertNode(document.createTextNode('    '));
-                            range.collapse(false);
+                            // Ver.2.9 TS#47: Tab挿入複数選択 — 選択範囲がある場合は各行にインデント操作
+                            if (!range.collapsed && range.startContainer.nodeType === Node.TEXT_NODE && range.startContainer.textContent) {
+                                const textNode = range.startContainer;
+                                const text = textNode.textContent;
+                                const startOffset = range.startOffset;
+                                const endOffset = range.endOffset;
+                                // 選択範囲内の行を処理
+                                let lineStart = text.lastIndexOf('\n', startOffset - 1) + 1;
+                                let modified = text;
+                                let offsetDelta = 0;
+                                if (e.shiftKey) {
+                                    // 各行頭のインデントを除去
+                                    let pos = lineStart;
+                                    while (pos <= endOffset + offsetDelta && pos < modified.length) {
+                                        if (modified.substring(pos, pos + 4) === '    ') {
+                                            modified = modified.substring(0, pos) + modified.substring(pos + 4);
+                                            offsetDelta -= 4;
+                                        }
+                                        else if (modified.charAt(pos) === '\t') {
+                                            modified = modified.substring(0, pos) + modified.substring(pos + 1);
+                                            offsetDelta -= 1;
+                                        }
+                                        const next = modified.indexOf('\n', pos);
+                                        if (next === -1 || next >= endOffset + offsetDelta)
+                                            break;
+                                        pos = next + 1;
+                                    }
+                                }
+                                else {
+                                    // 各行頭に4スペース追加
+                                    let pos = lineStart;
+                                    while (pos <= endOffset + offsetDelta && pos < modified.length) {
+                                        modified = modified.substring(0, pos) + '    ' + modified.substring(pos);
+                                        offsetDelta += 4;
+                                        const next = modified.indexOf('\n', pos + 4);
+                                        if (next === -1 || next >= endOffset + offsetDelta)
+                                            break;
+                                        pos = next + 1;
+                                    }
+                                }
+                                textNode.textContent = modified;
+                                range.setStart(textNode, Math.max(0, startOffset));
+                                range.setEnd(textNode, Math.min(modified.length, Math.max(0, endOffset + offsetDelta)));
+                            }
+                            else if (e.shiftKey) {
+                                // Shift+Tab: 行頭の4スペースまたはタブを削除
+                                const textNode = range.startContainer;
+                                if (textNode.nodeType === Node.TEXT_NODE && textNode.textContent) {
+                                    const text = textNode.textContent;
+                                    const offset = range.startOffset;
+                                    // 行頭を探す
+                                    let lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+                                    if (text.substring(lineStart, lineStart + 4) === '    ') {
+                                        textNode.textContent = text.substring(0, lineStart) + text.substring(lineStart + 4);
+                                        range.setStart(textNode, Math.max(lineStart, offset - 4));
+                                        range.collapse(true);
+                                    }
+                                    else if (text.charAt(lineStart) === '\t') {
+                                        textNode.textContent = text.substring(0, lineStart) + text.substring(lineStart + 1);
+                                        range.setStart(textNode, Math.max(lineStart, offset - 1));
+                                        range.collapse(true);
+                                    }
+                                }
+                            }
+                            else {
+                                range.deleteContents();
+                                range.insertNode(document.createTextNode('    '));
+                                range.collapse(false);
+                            }
                             sel.removeAllRanges();
                             sel.addRange(range);
                         }
@@ -314,7 +505,12 @@ const builtinTools = {
             },
             save(el) {
                 const code = el.querySelector('code');
-                return { code: code?.textContent || '' };
+                // Ver.2.9 TS#13/TS#44: コードブロック言語タグ保存 — 空言語も安全に処理
+                const savedLang = el.dataset.language || '';
+                const result = { code: code?.textContent || '' };
+                if (savedLang)
+                    result.language = savedLang;
+                return result;
             },
         };
     },
@@ -492,7 +688,16 @@ class InlineToolbar {
                 }
             });
         });
-        this.selectionHandler = () => this.update();
+        // Ver.2.9 TS#45: InlineToolbar getBoundingClientRect性能改善 — requestAnimationFrameでスロットル
+        let _updateRafId = null;
+        this.selectionHandler = () => {
+            if (_updateRafId !== null)
+                return;
+            _updateRafId = requestAnimationFrame(() => {
+                _updateRafId = null;
+                this.update();
+            });
+        };
         // #32: signal指定でselectionchangeリスナー多重登録防止
         document.addEventListener('selectionchange', this.selectionHandler, { signal: this.selectionAc.signal });
     }
@@ -525,24 +730,28 @@ class InlineToolbar {
         else {
             const wrapper = document.createElement(tagName);
             const savedRange = range.cloneRange();
-            // #3: surroundContents失敗時のHTML構造復元 - 親要素のHTML保存
+            // Ver.2.9 #2/#8: surroundContents失敗時のHTML構造復元+サニタイズ - 親要素のHTML保存
             const ancestor = range.commonAncestorContainer;
             const restoreTarget = ancestor.nodeType === Node.TEXT_NODE
                 ? ancestor.parentElement : ancestor;
             const restoreHtml = restoreTarget?.innerHTML ?? '';
             try {
                 range.surroundContents(wrapper);
+                // Ver.2.9 #8: surroundContents成功後もwrapper内をサニタイズ
+                wrapper.innerHTML = sanitizeHtml(wrapper.innerHTML);
             }
             catch {
                 try {
                     const contents = range.extractContents();
                     wrapper.appendChild(contents);
+                    // Ver.2.9 #8: extractContents経由でもサニタイズ適用
+                    wrapper.innerHTML = sanitizeHtml(wrapper.innerHTML);
                     range.insertNode(wrapper);
                 }
                 catch {
-                    // #3: HTML構造復元 - extractContentsも失敗した場合に元のHTMLを復元
+                    // Ver.2.9 #2: HTML構造復元 - extractContentsも失敗した場合に元のHTMLをサニタイズして復元
                     if (restoreTarget) {
-                        restoreTarget.innerHTML = restoreHtml;
+                        restoreTarget.innerHTML = sanitizeHtml(restoreHtml);
                     }
                     sel.removeAllRanges();
                     sel.addRange(savedRange);
@@ -556,14 +765,22 @@ class InlineToolbar {
             }
         }
     }
+    // Ver.2.9 #36: wrapWithLink — 選択範囲検証とURL安全性の二重チェック
     wrapWithLink(url) {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.rangeCount)
             return;
         const range = sel.getRangeAt(0);
+        // Ver.2.9 #36: 選択範囲がエディタ内であることを確認
+        const ancestor = range.commonAncestorContainer;
+        const ancestorEl = ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentElement : ancestor;
+        if (!ancestorEl || !ancestorEl.closest('.ce-editor'))
+            return;
         const savedRange = range.cloneRange();
         const a = document.createElement('a');
-        a.href = /^\s*javascript\s*:/i.test(url) ? '' : url;
+        // Ver.2.9 #36: data:/vbscript:も拒否
+        a.href = /^\s*(javascript|data|vbscript|about)\s*:/i.test(url) ? '' : url;
+        a.rel = 'noopener noreferrer';
         try {
             range.surroundContents(a);
         }
@@ -602,13 +819,21 @@ class InlineToolbar {
             return;
         }
         const rect = range.getBoundingClientRect();
+        // Ver.2.9 #23: InlineToolbar位置 — 選択範囲が空の場合は非表示
+        if (rect.width === 0 && rect.height === 0) {
+            this.el.style.display = 'none';
+            return;
+        }
         this.el.style.display = 'flex';
         // #66: InlineToolbar position計算のviewport制限
-        let top = rect.top + window.scrollY - 40;
-        let left = rect.left + window.scrollX + rect.width / 2 - this.el.offsetWidth / 2;
+        // Ver.2.9 #45: InlineToolbar位置計算改善 — scrollX/scrollYとvisualViewport考慮
+        const scrollX = window.scrollX || window.pageXOffset;
+        const scrollY = window.scrollY || window.pageYOffset;
+        let top = rect.top + scrollY - 40;
+        let left = rect.left + scrollX + rect.width / 2 - this.el.offsetWidth / 2;
         // 上端制限
-        if (top < window.scrollY)
-            top = rect.bottom + window.scrollY + 4;
+        if (top < scrollY)
+            top = rect.bottom + scrollY + 4;
         // 左端制限
         if (left < 0)
             left = 4;
@@ -616,6 +841,11 @@ class InlineToolbar {
         const maxLeft = document.documentElement.clientWidth - this.el.offsetWidth - 4;
         if (left > maxLeft)
             left = maxLeft;
+        // Ver.2.9 #23: 下端制限 — ビューポート下にはみ出す場合は選択範囲上に表示
+        const viewportBottom = scrollY + window.innerHeight;
+        if (top + 40 > viewportBottom) {
+            top = rect.top + scrollY - 44;
+        }
         this.el.style.top = `${top}px`;
         this.el.style.left = `${left}px`;
     }
@@ -626,6 +856,8 @@ class Editor {
         this.blockElements = [];
         this.blockTools = [];
         this.blockTypes = [];
+        // Ver.2.9 #6: 静的inlineToolbar参照をインスタンスベースに変更（競合解消）
+        this.ownInlineToolbar = null;
         // #25: Undo/Redo
         this.undoManager = new UndoManager();
         this.isUndoRedoing = false;
@@ -635,14 +867,33 @@ class Editor {
         this.clipboardBlock = null;
         // #11: ブロック内容変更追跡フラグ
         this.dirty = false;
+        // Ver.2.9 #4: isConnected監視用インターバルID
+        this.connectedCheckInterval = null;
+        // Ver.2.9 #4: MutationObserver参照保持
+        this.containerObserver = null;
         this.container = container;
         this.tools = { ...builtinTools, ...tools };
         this.container.classList.add('ce-editor');
         this.container.__editor = this;
-        if (!Editor.inlineToolbar) {
-            Editor.inlineToolbar = new InlineToolbar();
-        }
+        // Ver.2.9 #6: 各Editorインスタンスごとに独立したInlineToolbarを生成
+        this.ownInlineToolbar = new InlineToolbar();
+        _editorInlineToolbarMap.set(this.container, this.ownInlineToolbar);
         Editor.inlineToolbarRefCount++;
+        // Ver.2.9 #4: isConnected監視 — DOM切断時にObserver/Intervalを自動クリーンアップ
+        this.connectedCheckInterval = setInterval(() => {
+            if (!this.container.isConnected) {
+                this.destroy();
+            }
+        }, 5000);
+        // Ver.2.9 #4: MutationObserverでDOM削除を即座に検知
+        if (this.container.parentNode) {
+            this.containerObserver = new MutationObserver(() => {
+                if (!this.container.isConnected) {
+                    this.destroy();
+                }
+            });
+            this.containerObserver.observe(this.container.parentNode, { childList: true });
+        }
         // #25: Keyboard shortcuts for Undo/Redo + #27: Copy/Paste
         this.container.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
@@ -665,6 +916,8 @@ class Editor {
         // #11: input/keyupでdirtyフラグを立て、focusoutで未保存チェック
         this.container.addEventListener('input', () => { this.dirty = true; });
         // #25: Save state on content changes (focusout)
+        // Ver.2.9 #20: focusout重複防止 — デバウンスタイマーで集約
+        let focusoutTimer = null;
         this.container.addEventListener('focusout', (e) => {
             const related = e.relatedTarget;
             // #27: toolbar操作時のセーブ遅延改善 - ce-toolbox, ce-inline-toolbar含む
@@ -674,11 +927,17 @@ class Editor {
                 related.closest?.('.ce-block__toolbar'))) {
                 return;
             }
-            // #11: dirtyフラグがある場合のみ保存（不要な保存回避）
-            if (!this.isUndoRedoing && this.dirty) {
-                this.saveUndoState();
-                this.dirty = false;
-            }
+            // Ver.2.9 #20: 短時間に複数focusoutが発火した場合は統合
+            if (focusoutTimer)
+                clearTimeout(focusoutTimer);
+            focusoutTimer = setTimeout(() => {
+                focusoutTimer = null;
+                // #11: dirtyフラグがある場合のみ保存（不要な保存回避）
+                if (!this.isUndoRedoing && this.dirty) {
+                    this.saveUndoState();
+                    this.dirty = false;
+                }
+            }, 50);
         });
     }
     static create(el, config) {
@@ -694,8 +953,17 @@ class Editor {
     }
     render(data) {
         this.clear();
-        data.blocks.forEach(block => {
-            this.insertBlock(block.type, block.data, this.blockElements.length);
+        // Ver.2.9 TS#35: 空blocks処理 — blocks配列のバリデーション
+        const blocks = Array.isArray(data.blocks) ? data.blocks : [];
+        if (blocks.length === 0) {
+            this.insertBlock('paragraph', {}, 0);
+            return;
+        }
+        blocks.forEach(block => {
+            // Ver.2.9 TS#50: ブロック編集中間エラー — 無効なblock定義をスキップ
+            if (!block || !block.type)
+                return;
+            this.insertBlock(block.type, block.data || {}, this.blockElements.length);
         });
     }
     save() {
@@ -706,16 +974,24 @@ class Editor {
             // #61: blockTools[i]のnullチェック強化
             if (contentEl && this.blockTools[i] && typeof this.blockTools[i].save === 'function') {
                 try {
-                    blocks.push({
-                        type: this.blockTypes[i],
-                        data: this.blockTools[i].save(contentEl),
-                    });
+                    const savedData = this.blockTools[i].save(contentEl);
+                    // Ver.2.9 TS#50: ブロック編集中間エラー — save結果のnull/undefinedチェック
+                    if (savedData && typeof savedData === 'object') {
+                        blocks.push({
+                            type: this.blockTypes[i],
+                            data: savedData,
+                        });
+                    }
                 }
                 catch {
                     // #61: save失敗時はスキップしてデータ損失を防止
                     console.warn(`Block save failed at index ${i}, type: ${this.blockTypes[i]}`);
                 }
             }
+        }
+        // Ver.2.9 TS#35: 空blocks処理 — blocksが空の場合はデフォルト段落を含める
+        if (blocks.length === 0) {
+            blocks.push({ type: 'paragraph', data: { text: '' } });
         }
         return {
             time: Date.now(),
@@ -725,16 +1001,29 @@ class Editor {
     }
     destroy() {
         this.clear();
+        // Ver.2.9 TS#49: destroy時にUndoManagerをクリアしてメモリ解放
+        this.undoManager.clear();
         this.container.classList.remove('ce-editor');
         delete this.container.__editor;
+        // Ver.2.9 #4: isConnected監視のインターバルをクリア
+        if (this.connectedCheckInterval) {
+            clearInterval(this.connectedCheckInterval);
+            this.connectedCheckInterval = null;
+        }
+        // Ver.2.9 #4: MutationObserverを切断
+        if (this.containerObserver) {
+            this.containerObserver.disconnect();
+            this.containerObserver = null;
+        }
+        // Ver.2.9 #6: インスタンス固有のInlineToolbarを破棄
+        if (this.ownInlineToolbar) {
+            this.ownInlineToolbar.destroy();
+            _editorInlineToolbarMap.delete(this.container);
+            this.ownInlineToolbar = null;
+        }
         // #26: refCount<0にならないよう保護
         if (Editor.inlineToolbarRefCount > 0) {
             Editor.inlineToolbarRefCount--;
-        }
-        if (Editor.inlineToolbarRefCount <= 0 && Editor.inlineToolbar) {
-            Editor.inlineToolbar.destroy();
-            Editor.inlineToolbar = null;
-            Editor.inlineToolbarRefCount = 0;
         }
     }
     insertBlock(type, data, index) {
@@ -742,8 +1031,11 @@ class Editor {
         index = Math.max(0, index);
         // #72: createBlockWrapperのtype検証（ツールが存在しない場合は無視）
         const factory = this.tools[type];
-        if (!factory || typeof factory !== 'function')
+        if (!factory || typeof factory !== 'function') {
+            // Ver.2.9 TS#27: insertBlock未知type通知
+            console.warn('insertBlock: unknown block type:', type);
             return;
+        }
         const tool = factory(data);
         const blockEl = this.createBlockWrapper(type, tool);
         // #49: length参照の最適化 — ローカル変数にキャッシュ
@@ -767,10 +1059,19 @@ class Editor {
         if (!this.isUndoRedoing)
             this.saveUndoState();
     }
+    // Ver.2.9 #14: ブロック削除改善 — 削除後に隣接ブロックへフォーカス移動
+    // Ver.2.9 TS#17: removeBlock undo状態保存 — 削除前に状態を保存
     removeBlock(index) {
         if (index < 0 || index >= this.blockElements.length)
             return;
-        this.blockElements[index].remove();
+        // Ver.2.9 TS#17: 削除前にundo状態を保存（復元可能にする）
+        if (!this.isUndoRedoing)
+            this.saveUndoState();
+        const el = this.blockElements[index];
+        // Ver.2.9 #14: 削除前にDOM接続確認
+        if (el.isConnected) {
+            el.remove();
+        }
         this.blockElements.splice(index, 1);
         this.blockTools.splice(index, 1);
         this.blockTypes.splice(index, 1);
@@ -823,6 +1124,7 @@ class Editor {
     saveUndoState() {
         this.undoManager.push(this.save());
     }
+    // Ver.2.9 #49: Undo時にdirtyフラグをリセットしてfocusout再トリガー防止
     undo() {
         const state = this.undoManager.undo();
         if (!state)
@@ -841,12 +1143,15 @@ class Editor {
         }
         finally {
             this.isUndoRedoing = false;
+            // Ver.2.9 #49: render後のdirtyフラグをリセット
+            this.dirty = false;
         }
         // #55: focusを復元
         if (focusIdx >= 0 && focusIdx < this.blockElements.length) {
             this.focusBlock(focusIdx);
         }
     }
+    // Ver.2.9 #49: Redo時にもdirtyフラグをリセット
     redo() {
         const state = this.undoManager.redo();
         if (!state)
@@ -865,6 +1170,8 @@ class Editor {
         }
         finally {
             this.isUndoRedoing = false;
+            // Ver.2.9 #49: render後のdirtyフラグをリセット
+            this.dirty = false;
         }
         // #55: focusを復元
         if (focusIdx >= 0 && focusIdx < this.blockElements.length) {
@@ -1016,6 +1323,7 @@ class Editor {
         return wrapper;
     }
     // #28/#29: Toolbox without prompt/confirm
+    // Ver.2.9 #19: ツールボックス改善 — キーボードEscape閉じ + フォーカストラップ
     showToolbox(refBlock) {
         this.container.querySelector('.ce-toolbox')?.remove();
         const toolbox = document.createElement('div');
@@ -1032,6 +1340,7 @@ class Editor {
             { type: 'delimiter', label: '---' },
             { type: 'image', label: i18n.t('block_image') },
         ];
+        const ac = new AbortController();
         toolTypes.forEach(({ type, label }) => {
             const btn = document.createElement('button');
             btn.className = 'ce-toolbox__btn';
@@ -1047,23 +1356,40 @@ class Editor {
                 }
                 this.insertBlock(type, defaultData, idx + 1);
                 toolbox.remove();
-                ac.abort();
+                if (!ac.signal.aborted)
+                    ac.abort();
             });
             toolbox.appendChild(btn);
         });
-        const ac = new AbortController();
         refBlock.after(toolbox);
         const close = (e) => {
             if (!toolbox.contains(e.target)) {
                 toolbox.remove();
-                ac.abort();
+                // Ver.2.9 TS#19: AbortControllerタイミング — abort前にsignal確認
+                if (!ac.signal.aborted)
+                    ac.abort();
             }
         };
-        setTimeout(() => document.addEventListener('click', close, { signal: ac.signal }), 0);
+        // Ver.2.9 #19: Escapeキーでツールボックスを閉じる
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                toolbox.remove();
+                if (!ac.signal.aborted)
+                    ac.abort();
+            }
+        }, { signal: ac.signal });
+        // Ver.2.9 TS#19: showToolbox AbortControllerタイミング改善 — requestAnimationFrame使用
+        requestAnimationFrame(() => {
+            if (!ac.signal.aborted) {
+                document.addEventListener('click', close, { signal: ac.signal });
+            }
+        });
     }
     // #119: clear時にdirtyフラグをリセット
+    // Ver.2.9 #49: Undo時のメモリ解放 — destroy時にUndoManagerをクリア
     clear() {
-        this.blockElements.forEach(el => el.remove());
+        this.blockElements.forEach(el => { if (el.isConnected)
+            el.remove(); });
         this.blockElements = [];
         this.blockTools = [];
         this.blockTypes = [];
@@ -1071,26 +1397,34 @@ class Editor {
         this.container.querySelector('.ce-toolbox')?.remove();
     }
 }
-Editor.inlineToolbar = null;
 Editor.inlineToolbarRefCount = 0;
 // --- Render blocks to HTML (for visitor view) ---
 function escHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+// Ver.2.9 #35: 空コンテンツ — 空paragraphはスキップ、data未定義時の安全処理
 function renderBlocks(blocks) {
+    if (!Array.isArray(blocks))
+        return '';
     return blocks.map(block => {
-        const d = block.data;
+        if (!block || !block.type)
+            return '';
+        const d = block.data || {};
         switch (block.type) {
-            case 'paragraph':
-                return `<p>${escHtml(String(d.text || ''))}</p>`;
+            case 'paragraph': {
+                const text = String(d.text || '');
+                // Ver.2.9 #35: 空paragraphは空行として出力（完全除去はしない）
+                return `<p>${escHtml(text)}</p>`;
+            }
             case 'heading': {
                 const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
                 return `<h${lvl}>${escHtml(String(d.text || ''))}</h${lvl}>`;
             }
             case 'list': {
                 const tag = d.style === 'ordered' ? 'ol' : 'ul';
-                const items = d.items || [];
-                return `<${tag}>${items.map(i => `<li>${escHtml(String(i))}</li>`).join('')}</${tag}>`;
+                const items = Array.isArray(d.items) ? d.items : [];
+                // Ver.2.9 #35: 空のリストアイテムをフィルタ
+                return `<${tag}>${items.map(i => `<li>${escHtml(String(i ?? ''))}</li>`).join('')}</${tag}>`;
             }
             case 'code':
                 return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
@@ -1101,6 +1435,10 @@ function renderBlocks(blocks) {
             // #117: image alt属性にcaptionをフォールバック出力
             case 'image': {
                 const url = escHtml(String(d.url || ''));
+                // Ver.2.9 #44: image URL安全性チェック
+                if (/^\s*(javascript|data|vbscript)\s*:/i.test(String(d.url || ''))) {
+                    return `<figure><img src="" alt="${escHtml(String(d.caption || ''))}"/></figure>`;
+                }
                 const alt = escHtml(String(d.caption || ''));
                 const cap = d.caption ? `<figcaption>${escHtml(String(d.caption))}</figcaption>` : '';
                 return `<figure><img src="${url}" alt="${alt}"/>${cap}</figure>`;

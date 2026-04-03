@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 function esc(string $value): string
 {
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
 function csrf_token(): string
@@ -25,11 +25,14 @@ function csrf_token(): string
 function csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!is_string($token)) {
+    if (!is_string($token) || $token === '') {
         return false;
     }
     $session = $_SESSION['csrf'] ?? '';
-    if (!is_string($session) || $token === '' || $session === '' || !hash_equals($session, $token)) {
+    if (!is_string($session) || $session === '') {
+        return false;
+    }
+    if (!hash_equals($session, $token)) {
         return false;
     }
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -47,6 +50,9 @@ function login_rate_check(): bool
     $now = time();
 
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (!is_string($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        $ip = '127.0.0.1';
+    }
     $rateDir = __DIR__ . '/../data/system';
     if (!is_dir($rateDir)) {
         if (!@mkdir($rateDir, 0755, true) && !is_dir($rateDir)) {
@@ -59,14 +65,15 @@ function login_rate_check(): bool
     if (is_file($rateFile)) {
         $fp = fopen($rateFile, 'r');
         if ($fp !== false) {
-            flock($fp, LOCK_SH);
-            $raw = stream_get_contents($fp);
-            flock($fp, LOCK_UN);
-            fclose($fp);
-            $decoded = json_decode($raw ?: '[]', true);
-            if (is_array($decoded)) {
-                $attempts = $decoded;
+            if (flock($fp, LOCK_SH | LOCK_NB) || flock($fp, LOCK_SH)) {
+                $raw = stream_get_contents($fp);
+                flock($fp, LOCK_UN);
+                $decoded = json_decode(is_string($raw) && $raw !== '' ? $raw : '[]', true);
+                if (is_array($decoded)) {
+                    $attempts = $decoded;
+                }
             }
+            fclose($fp);
         }
     }
 

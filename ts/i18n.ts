@@ -47,13 +47,22 @@ const i18n = {
      * Translate a key with optional parameter substitution.
      * Parameters use :name syntax (e.g. ':page', ':year').
      */
+    // Ver.2.9 #22: i18n — キー不在時のフォールバック改善とパラメータ安全性
     t(key: string, params?: Record<string, string>): string {
         let str = this.translations[key] ?? key;
         if (params) {
             for (const [k, v] of Object.entries(params)) {
-                str = str.replaceAll(':' + k, v);
+                // Ver.2.9 #22: パラメータ値がundefined/nullの場合は空文字にフォールバック
+                str = str.replaceAll(':' + k, v ?? '');
             }
         }
         return str;
+    },
+
+    /**
+     * Ver.2.9 #22: Check if a translation key exists.
+     */
+    has(key: string): boolean {
+        return key in this.translations;
     },
 };
