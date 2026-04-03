@@ -103,6 +103,32 @@
 
 ---
 
+## 2.7 ユーザーデータ (`data/system/users.json`)
+
+```json
+{
+    "users": {
+        "username": {
+            "password": "bcrypt hash",
+            "role": "master",
+            "created_at": "ISO 8601",
+            "last_login": "ISO 8601"
+        }
+    },
+    "max_users": 3
+}
+```
+
+- **ロール**: `master` のみ。全管理操作の権限を持つ。
+- **最大ユーザー数**: 3名まで。
+- **パスワード**: PHP `password_hash(PASSWORD_DEFAULT)` で bcrypt ハッシュ化。
+- **マイグレーション**: config.json の `password` キーから users.json への自動移行を行う。移行後 config.json の `password` キーは削除する。
+- **単一管理者モード**: 廃止。users.json が存在しない場合は強制マイグレーションを実行する。
+- **ファイルロック**: config.json と同様に排他ロック + アトミック書き込みを使用する。
+- **ファイル権限**: 0600（owner のみ読み書き可）。
+
+---
+
 # 3. PHP API 仕様
 
 ## 3.1 FileStorage (`Core/core.php`)
