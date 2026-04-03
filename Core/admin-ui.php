@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 $c = $app->config;
 $adminAction = $_REQUEST['admin'] ?? 'dashboard';
+$n = $app->nonce !== '' ? " nonce=\"{$app->nonce}\"" : '';
 ?>
 <!doctype html>
 <html lang="<?= esc($app->language) ?>">
@@ -45,9 +46,9 @@ $adminAction = $_REQUEST['admin'] ?? 'dashboard';
 
 <?php
 match ($adminAction) {
-    'edit'      => renderAdminEditor($app),
-    'new'       => renderAdminNewPage($app),
-    default     => renderAdminDashboard($app),
+    'edit'      => renderAdminEditor($app, $n),
+    'new'       => renderAdminNewPage($app, $n),
+    default     => renderAdminDashboard($app, $n),
 };
 ?>
 
@@ -56,35 +57,61 @@ match ($adminAction) {
 </html>
 <?php
 
-function renderAdminDashboard(App $app): void
+function renderAdminDashboard(App $app, string $n): void
 {
     $pages = $app->storage->listPages();
-    // Sort by updated_at descending
-    uasort($pages, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+    $pageOrder = $app->storage->getPageOrder();
+
+    if ($pageOrder !== []) {
+        $ordered = [];
+        foreach ($pageOrder as $slug) {
+            if (isset($pages[$slug])) {
+                $ordered[$slug] = $pages[$slug];
+            }
+        }
+        foreach ($pages as $slug => $data) {
+            if (!isset($ordered[$slug])) {
+                $ordered[$slug] = $data;
+            }
+        }
+        $unordered = array_diff_key($pages, array_flip($pageOrder));
+        uasort($unordered, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+        $pages = $ordered;
+    } else {
+        uasort($pages, fn($a, $b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+    }
 
     // --- Page List ---
     echo '<section class="admin-section">';
-    echo '<h2>Pages</h2>';
+    echo '<h2>' . esc($app->t('admin_pages')) . '</h2>';
+    echo '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+    echo '<input type="text" id="page-search" placeholder="' . esc($app->t('admin_search')) . '" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">';
+    echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
+    echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
+    echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
+    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_reorder')) . '</button>';
+    echo '</div>';
     echo '<table class="admin-table">';
-    echo '<thead><tr><th>Slug</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
-    echo '<tbody>';
+    echo '<thead><tr><th><input type="checkbox" id="select-all"></th><th>Slug</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
+    echo '<tbody id="page-list">';
     foreach ($pages as $slug => $data) {
         $safeSlug = esc($slug);
         $format = esc($data['format'] ?? 'blocks');
         $status = $data['status'] ?? 'published';
         $statusClass = $status === 'draft' ? 'status-draft' : 'status-published';
         $updated = substr($data['updated_at'] ?? '', 0, 10);
-        echo "<tr>";
+        echo "<tr data-slug='" . esc($slug) . "' data-status='" . esc($status) . "'>";
+        echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
         echo "<td>{$format}</td>";
         echo "<td class='{$statusClass}'>{$status}</td>";
         echo "<td>{$updated}</td>";
         $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>Edit</a><a href='{$safeSlug}' target='_blank'>View</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>Delete</a></td>";
+        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
         echo "</tr>";
     }
     if (empty($pages)) {
-        echo '<tr><td colspan="5" style="text-align:center;color:#999;">No pages yet</td></tr>';
+        echo '<tr><td colspan="6" style="text-align:center;color:#999;">No pages yet</td></tr>';
     }
     echo '</tbody></table>';
     echo '</section>';
@@ -120,7 +147,12 @@ function renderAdminDashboard(App $app): void
             foreach ($dirs as $dir) {
                 $val = basename($dir);
                 $selected = ($val === $app->config['themeSelect']) ? ' selected' : '';
-                echo "<option value='" . esc($val) . "'{$selected}>" . esc($val) . "</option>";
+                $themeMeta = $app->loadThemeJson($val);
+                $themeDesc = '';
+                if (($themeMeta['description'] ?? '') !== '' || ($themeMeta['version'] ?? '') !== '') {
+                    $themeDesc = ' (' . esc($themeMeta['description'] ?? '') . ($themeMeta['version'] !== '' ? ' v' . esc($themeMeta['version']) : '') . ')';
+                }
+                echo "<option value='" . esc($val) . "'{$selected}>" . esc($val) . $themeDesc . "</option>";
             }
         }
     }
@@ -138,15 +170,21 @@ function renderAdminDashboard(App $app): void
 
     echo '</div>';
 
+    // Sidebar editor
+    echo '<section class="admin-section">';
+    echo '<h2>' . esc($app->t('admin_sidebar')) . '</h2>';
+    echo '<div class="ce-editor-wrapper" id="sidebar-editor"></div>';
+    echo '</section>';
+
     // Export/Import/Generate
     echo '<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">';
-    echo '<a class="admin-btn admin-btn--outline" href="?api=export">Export</a>';
-    echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">Import <input type="file" accept=".json" style="display:none;" data-action="import-site"></label>';
-    echo '<button class="admin-btn" data-action="generate-site">Generate Static Site</button>';
+    echo '<a class="admin-btn admin-btn--outline" href="?api=export">' . esc($app->t('admin_export')) . '</a>';
+    echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">' . esc($app->t('admin_import')) . ' <input type="file" accept=".json" style="display:none;" data-action="import-site"></label>';
+    echo '<button class="admin-btn" data-action="generate-site">' . esc($app->t('admin_generate')) . '</button>';
     echo '</div>';
     echo '<div id="import-result" style="margin-top:4px;font-size:13px;"></div>';
     echo '<div id="generate-result" style="margin-top:8px;font-size:13px;"></div>';
-    echo '<script>';
+    echo "<script{$n}>";
     echo 'document.addEventListener("change",function(e){';
     echo 'var el=e.target;';
     echo 'if(el.matches("[data-action=\\"field-save\\"]")){fieldSave(el.getAttribute("data-field"),el.value);}';
@@ -168,12 +206,12 @@ function renderAdminDashboard(App $app): void
     echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
     echo 'fetch("index.php?api=generate",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
     echo '.then(function(r){return r.json();})';
-    echo '.then(function(d){if(d.status==="ok"){el.textContent="Generated "+d.pages+" pages to "+d.output;el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
+    echo '.then(function(d){if(d.status==="ok"){el.textContent="' . esc($app->t('admin_generate_report')) . ': "+d.pages_generated+" generated, "+d.pages_skipped+" skipped, "+d.pages_failed+" failed ("+d.build_time_ms+"ms)";el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
     echo '.catch(function(err){el.textContent="Error: "+err.message;el.style.color="#c00";});';
     echo '});';
     echo '</script>';
 
-    echo '<script>';
+    echo "<script{$n}>";
     echo 'document.addEventListener("click",function(e){';
     echo 'var btn=e.target.closest("[data-action=\\"delete\\"]");';
     echo 'if(!btn)return;';
@@ -183,6 +221,45 @@ function renderAdminDashboard(App $app): void
     echo 'api.deletePage(slug).then(function(){location.reload();}).catch(function(err){alert("Error: "+err.message);});';
     echo '});';
     echo '</script>';
+
+    echo "<script{$n}>";
+    echo 'document.getElementById("select-all").addEventListener("change",function(){';
+    echo 'var checks=document.querySelectorAll(".page-check");';
+    echo 'for(var i=0;i<checks.length;i++){checks[i].checked=this.checked;}';
+    echo 'toggleBulkBtns();';
+    echo '});';
+    echo 'document.addEventListener("change",function(e){if(e.target.classList.contains("page-check")){toggleBulkBtns();}});';
+    echo 'function toggleBulkBtns(){var c=document.querySelectorAll(".page-check:checked");var s=c.length>0?"inline-block":"none";document.getElementById("bulk-status-btn").style.display=s;document.getElementById("bulk-delete-btn").style.display=s;}';
+    echo 'document.getElementById("bulk-status-btn").addEventListener("click",function(){';
+    echo 'var slugs=[];document.querySelectorAll(".page-check:checked").forEach(function(c){slugs.push(c.value);});';
+    echo 'var st=prompt("' . esc($app->t('admin_bulk_action')) . ': published / draft");';
+    echo 'if(st!=="published"&&st!=="draft")return;';
+    echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);body.append("status",st);';
+    echo 'slugs.forEach(function(s){body.append("slugs[]",s);});';
+    echo 'fetch("index.php?api=pages&action=bulk-status",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(){location.reload();});';
+    echo '});';
+    echo 'document.getElementById("bulk-delete-btn").addEventListener("click",function(){';
+    echo 'var slugs=[];document.querySelectorAll(".page-check:checked").forEach(function(c){slugs.push(c.value);});';
+    echo 'if(!confirm("' . esc($app->t('confirm_bulk_delete')) . '"))return;';
+    echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
+    echo 'slugs.forEach(function(s){body.append("slugs[]",s);});';
+    echo 'fetch("index.php?api=pages&action=bulk-delete",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(){location.reload();});';
+    echo '});';
+    echo '</script>';
+
+    echo "<script{$n}>";
+    echo 'var searchEl=document.getElementById("page-search");';
+    echo 'var filterEl=document.getElementById("page-filter");';
+    echo 'function filterPages(){var q=(searchEl.value||"").toLowerCase();var f=filterEl.value;var rows=document.querySelectorAll("#page-list tr");';
+    echo 'for(var i=0;i<rows.length;i++){var r=rows[i];var slug=r.getAttribute("data-slug")||"";var st=r.getAttribute("data-status")||"";';
+    echo 'var show=true;if(q&&slug.indexOf(q)===-1)show=false;if(f&&st!==f)show=false;r.style.display=show?"":"none";}}';
+    echo 'if(searchEl)searchEl.addEventListener("input",filterPages);';
+    echo 'if(filterEl)filterEl.addEventListener("change",filterPages);';
+    echo '</script>';
+
+    echo '</section>';
 
     // --- System Info ---
     echo '<section class="admin-section">';
@@ -205,7 +282,7 @@ function renderAdminDashboard(App $app): void
     echo '</section>';
 }
 
-function renderAdminEditor(App $app): void
+function renderAdminEditor(App $app, string $n): void
 {
     $slug = $_REQUEST['page'] ?? '';
     if ($slug === '' || !FileStorage::validateSlug($slug)) {
@@ -229,7 +306,7 @@ function renderAdminEditor(App $app): void
     $safeSlug = esc($slug);
 
     echo "<section class='admin-section'>";
-    echo "<h2>Edit: {$safeSlug}</h2>";
+    echo "<h2>" . esc($app->t('admin_edit')) . ": {$safeSlug}</h2>";
 
     // Meta bar
     echo "<div class='admin-meta'>";
@@ -251,8 +328,9 @@ function renderAdminEditor(App $app): void
     echo "<option value='draft'{$draftSelected}>Draft</option>";
     echo "</select>";
     echo "<button class='admin-btn' id='save-status-btn' style='font-size:12px;padding:4px 12px;'>Save Status</button>";
+    echo "<a href='?preview={$safeSlug}' target='_blank' class='admin-btn admin-btn--outline' style='font-size:12px;padding:4px 12px;'>" . esc($app->t('admin_preview')) . "</a>";
     $jsonSafeSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-    echo "<script>document.getElementById('save-status-btn').addEventListener('click',function(){";
+    echo "<script{$n}>document.getElementById('save-status-btn').addEventListener('click',function(){";
     echo "var s=document.getElementById('status-select').value;";
     echo "var body=new URLSearchParams();";
     echo "body.append('slug',{$jsonSafeSlug});body.append('status',s);body.append('csrf',csrfToken);";
@@ -277,32 +355,53 @@ function renderAdminEditor(App $app): void
     $revisions = $app->storage->listRevisions($slug);
     if (!empty($revisions)) {
         echo "<div class='admin-sidebar'>";
-        echo "<h3>Revisions (" . count($revisions) . ")</h3>";
+        echo "<h3>" . esc($app->t('admin_revisions')) . " (" . count($revisions) . ")</h3>";
         echo "<ul>";
-        foreach (array_slice($revisions, 0, 10) as $rev) {
+        foreach (array_slice($revisions, 0, 10) as $idx => $rev) {
             $ts = esc($rev['timestamp']);
-            echo "<li><span>{$ts}</span> <a href='#' onclick='api.restoreRevision(\"{$safeSlug}\",\"{$ts}\").then(function(){location.reload();});return false;'>Restore</a></li>";
+            echo "<li><span>{$ts}</span> ";
+            echo "<a href='#' class='rev-restore' data-slug='{$safeSlug}' data-ts='{$ts}'>" . esc($app->t('admin_restore')) . "</a>";
+            if ($idx > 0) {
+                $prevTs = esc($revisions[$idx - 1]['timestamp']);
+                echo " <a href='#' class='rev-diff' data-slug='{$safeSlug}' data-t1='{$ts}' data-t2='{$prevTs}'>" . esc($app->t('admin_revision_diff')) . "</a>";
+            }
+            echo "</li>";
         }
         echo "</ul>";
+        echo "<div id='diff-result' style='margin-top:8px;font-size:12px;'></div>";
         echo "</div>";
     }
+
+    echo "<script{$n}>";
+    echo 'document.addEventListener("click",function(e){';
+    echo 'var rb=e.target.closest(".rev-restore");';
+    echo 'if(rb){e.preventDefault();api.restoreRevision(rb.getAttribute("data-slug"),rb.getAttribute("data-ts")).then(function(){location.reload();});return;}';
+    echo 'var db=e.target.closest(".rev-diff");';
+    echo 'if(db){e.preventDefault();';
+    echo 'fetch("index.php?api=revisions&action=diff&slug="+encodeURIComponent(db.getAttribute("data-slug"))+"&t1="+encodeURIComponent(db.getAttribute("data-t1"))+"&t2="+encodeURIComponent(db.getAttribute("data-t2")))';
+    echo '.then(function(r){return r.json();}).then(function(d){';
+    echo 'var el=document.getElementById("diff-result");';
+    echo 'el.textContent="Added:"+d.added.length+" Removed:"+d.removed.length+" Changed:"+d.changed.length;';
+    echo '});}';
+    echo '});';
+    echo '</script>';
 
     echo "</section>";
 }
 
-function renderAdminNewPage(App $app): void
+function renderAdminNewPage(App $app, string $n): void
 {
     echo "<section class='admin-section'>";
-    echo "<h2>New Page</h2>";
+    echo "<h2>" . esc($app->t('admin_new_page_title')) . "</h2>";
     echo "<div class='admin-form'>";
-    echo "<label>Slug</label>";
+    echo "<label>" . esc($app->t('admin_slug')) . "</label>";
     echo "<input type='text' id='new-slug' placeholder='page-name' pattern='[a-zA-Z0-9_\\-]+'>";
     echo "<label>Format</label>";
     echo "<select id='new-format'><option value='blocks'>Blocks</option><option value='markdown'>Markdown</option></select>";
     echo "<br><br>";
-    echo "<button data-action='create-page'>Create Page</button>";
+    echo "<button data-action='create-page'>" . esc($app->t('admin_create')) . "</button>";
     echo "</div>";
-    echo "<script>";
+    echo "<script{$n}>";
     echo "document.addEventListener('click',function(e){";
     echo "if(!e.target.closest('[data-action=\"create-page\"]'))return;";
     echo "var slug=document.getElementById('new-slug').value.toLowerCase().replace(/\\s+/g,'-');";

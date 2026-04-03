@@ -52,5 +52,20 @@
     "confirm_format_switch": "Switch format to :format?\nContent will be converted.",
     "password_too_short": "Password must be at least 8 characters.",
     "password_too_weak": "That password is too weak. Please choose another.",
-    "password_migrated": "Password security has been upgraded. Please change to a new password."
+    "password_migrated": "Password security has been upgraded. Please change to a new password.",
+    "admin_search": "Search pages...",
+    "admin_filter": "Filter",
+    "admin_bulk_action": "Enter status (published / draft)",
+    "admin_preview": "Preview",
+    "admin_page_order": "Page Order",
+    "admin_reorder": "Reorder",
+    "admin_sidebar": "Sidebar Editor",
+    "admin_publish_check": "Publish Check",
+    "admin_revision_diff": "Diff",
+    "admin_generate_report": "Generate Report",
+    "admin_select_all": "Select All",
+    "admin_bulk_status": "Bulk Status",
+    "admin_bulk_delete": "Bulk Delete",
+    "confirm_bulk_delete": "Delete all selected pages?",
+    "preview_draft_notice": "This is a preview. This page is not yet published."
 }

@@ -52,5 +52,20 @@
     "confirm_format_switch": "Format を :format に変更しますか？\nコンテンツが変換されます。",
     "password_too_short": "パスワードは8文字以上にしてください。",
     "password_too_weak": "そのパスワードは弱すぎます。別のパスワードを選んでください。",
-    "password_migrated": "パスワードのセキュリティを更新しました。新しいパスワードに変更することを推奨します。"
+    "password_migrated": "パスワードのセキュリティを更新しました。新しいパスワードに変更することを推奨します。",
+    "admin_search": "ページを検索...",
+    "admin_filter": "フィルタ",
+    "admin_bulk_action": "ステータスを入力 (published / draft)",
+    "admin_preview": "プレビュー",
+    "admin_page_order": "ページ順序",
+    "admin_reorder": "並び替え",
+    "admin_sidebar": "サイドバー編集",
+    "admin_publish_check": "公開前チェック",
+    "admin_revision_diff": "差分",
+    "admin_generate_report": "生成レポート",
+    "admin_select_all": "全選択",
+    "admin_bulk_status": "一括ステータス変更",
+    "admin_bulk_delete": "一括削除",
+    "confirm_bulk_delete": "選択したページを一括削除しますか？",
+    "preview_draft_notice": "これはプレビューです。このページはまだ公開されていません。"
 }

@@ -432,8 +432,9 @@ final class App
         } else {
             $scripts = ['markdown', 'editInplace'];
         }
+        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
         foreach ($scripts as $name) {
-            echo "\t<script src=\"js/{$name}.js\"></script>\n";
+            echo "\t<script{$n} src=\"js/{$name}.js\"></script>\n";
         }
     }
 
