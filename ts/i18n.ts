@@ -47,15 +47,11 @@ const i18n = {
      * Translate a key with optional parameter substitution.
      * Parameters use :name syntax (e.g. ':page', ':year').
      */
-    // BugFix #16: paramsのHTMLエスケープ対応 — escapeオプション追加
-    t(key: string, params?: Record<string, string>, escape: boolean = false): string {
+    t(key: string, params?: Record<string, string>): string {
         let str = this.translations[key] ?? key;
         if (params) {
             for (const [k, v] of Object.entries(params)) {
-                const safeV = escape
-                    ? v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-                    : v;
-                str = str.replaceAll(':' + k, safeV);
+                str = str.replaceAll(':' + k, v);
             }
         }
         return str;

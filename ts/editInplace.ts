@@ -104,9 +104,8 @@ function plainTextEdit(span: HTMLElement): void {
     const titleAttr = title ? `"${title}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
 
-    // BugFix #1: markdown取得時もtextContentを使用（innerHTML直接取得によるXSSリスク回避）
     const content = isMarkdown
-        ? (span.dataset.rawContent || span.textContent || '')
+        ? span.innerHTML
         : (span.textContent || '');
 
     const textarea = document.createElement('textarea');
@@ -328,11 +327,7 @@ function initBlockEditor(): void {
         let sidebarSaveTimer: ReturnType<typeof setTimeout> | null = null;
         let sidebarLastJson = '';
 
-        // BugFix #13: flushSaving同等の競合防止ガード追加
-        let sidebarFlushing = false;
         const flushSidebarSave = (): void => {
-            if (sidebarFlushing) return;
-            sidebarFlushing = true;
             const saved = sidebarEditor.save();
             const json = JSON.stringify(saved.blocks);
             if (json === sidebarLastJson) return;
@@ -342,8 +337,6 @@ function initBlockEditor(): void {
                 showSaveIndicator(sidebarEl, 'saved');
             }).catch(() => {
                 showSaveIndicator(sidebarEl, 'error');
-            }).finally(() => {
-                sidebarFlushing = false;
             });
         };
 
@@ -395,10 +388,8 @@ function showSaveIndicator(container: HTMLElement, state: 'saving' | 'saved' | '
     indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '✓' : '✗';
     indicator.className = 'ce-save-indicator ce-save--' + state;
 
-    // BugFix #12: non-null assertionを安全な参照に変更
     if (state !== 'saving') {
-        const indicatorRef = indicator;
-        setTimeout(() => { if (indicatorRef.isConnected) { indicatorRef.className = 'ce-save-indicator'; } }, 2000);
+        setTimeout(() => { indicator!.className = 'ce-save-indicator'; }, 2000);
     }
 }
 
@@ -463,8 +454,7 @@ function switchFormat(slug: string, newFormat: string): void {
                 currentContent = textarea.value;
                 previousContent = textarea.value;
             } else {
-                // BugFix #10: textContentで安全に取得（innerHTML直接使用回避）
-                currentContent = (span.textContent || '');
+                currentContent = span.innerHTML.replace(/<br\s*\/?>/gi, '\n');
                 previousContent = currentContent;
             }
             previousFormat = span.dataset.format || 'markdown';
@@ -833,7 +823,6 @@ function initGenerateReport(): void {
         if (btn.disabled) return;
         btn.disabled = true;
         // #52: Content-Type追加
-        // BugFix #9: res.okチェック追加 + res.json()失敗時の安全な処理
         fetch('index.php?api=generate', {
             method: 'POST',
             headers: {
@@ -843,11 +832,10 @@ function initGenerateReport(): void {
         })
         .then(res => {
             updateCsrfFromResponse(res);
-            if (!res.ok) { throw new Error(`API error: ${res.status}`); }
             return res.json();
         })
         .then(json => {
-            if (json && json.report) {
+            if (json.report) {
                 showGenerateReport(json.report);
             }
         })
@@ -856,123 +844,6 @@ function initGenerateReport(): void {
         })
         .finally(() => { btn.disabled = false; });
     });
-}
-
-// --- User Management (M6: マスター管理者ユーザー管理画面) ---
-
-function initUserManagement(): void {
-    const userPanel = document.querySelector<HTMLElement>('.ce-user-management');
-    if (!userPanel) return;
-
-    const MAX_USERS = 3;
-
-    // --- User add form handler ---
-    const addForm = userPanel.querySelector<HTMLFormElement>('.ce-user-add-form');
-    if (addForm) {
-        addForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const usernameInput = addForm.querySelector<HTMLInputElement>('input[name="username"]');
-            const passwordInput = addForm.querySelector<HTMLInputElement>('input[name="password"]');
-            if (!usernameInput || !passwordInput) return;
-
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value;
-
-            if (!username || !password) {
-                alert(i18n.t('user_fields_required') || 'Username and password are required.');
-                return;
-            }
-
-            const submitBtn = addForm.querySelector<HTMLButtonElement>('button[type="submit"]');
-            if (submitBtn) submitBtn.disabled = true;
-
-            api.createUser(username, password).then(() => {
-                location.reload();
-            }).catch((err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                alert(i18n.t('user_create_error') || `Failed to create user: ${msg}`);
-            }).finally(() => {
-                if (submitBtn) submitBtn.disabled = false;
-            });
-        });
-    }
-
-    // --- User delete button handlers ---
-    userPanel.querySelectorAll<HTMLButtonElement>('.ce-user-delete-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const username = btn.dataset.username;
-            if (!username) return;
-
-            if (!confirm(i18n.t('confirm_user_delete', { username: escHtml(username) })
-                || `Delete user "${username}"? This action cannot be undone.`)) {
-                return;
-            }
-
-            btn.disabled = true;
-            api.deleteUser(username).then(() => {
-                location.reload();
-            }).catch((err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                alert(i18n.t('user_delete_error') || `Failed to delete user: ${msg}`);
-            }).finally(() => {
-                btn.disabled = false;
-            });
-        });
-    });
-
-    // --- Password change form handlers ---
-    userPanel.querySelectorAll<HTMLFormElement>('.ce-user-password-form').forEach(form => {
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const usernameInput = form.querySelector<HTMLInputElement>('input[name="username"]');
-            const passwordInput = form.querySelector<HTMLInputElement>('input[name="new_password"]');
-            if (!usernameInput || !passwordInput) return;
-
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value;
-
-            if (!password) {
-                alert(i18n.t('user_password_required') || 'New password is required.');
-                return;
-            }
-
-            const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-            if (submitBtn) submitBtn.disabled = true;
-
-            api.updateUserPassword(username, password).then(() => {
-                passwordInput.value = '';
-                // BugFix #14: パスワード変更成功フィードバック表示
-                const feedback = form.querySelector<HTMLElement>('.ce-user-feedback');
-                if (feedback) {
-                    feedback.textContent = i18n.t('user_password_changed') || 'Password changed.';
-                    feedback.className = 'ce-user-feedback ce-user-feedback--success';
-                    setTimeout(() => {
-                        feedback.textContent = '';
-                        feedback.className = 'ce-user-feedback';
-                    }, 3000);
-                }
-            }).catch((err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                alert(i18n.t('user_password_error') || `Failed to change password: ${msg}`);
-            }).finally(() => {
-                if (submitBtn) submitBtn.disabled = false;
-            });
-        });
-    });
-
-    // --- BugFix #15: 3-user limit: disable add form if at max ---
-    const userRows = userPanel.querySelectorAll<HTMLElement>('.ce-user-row');
-    if (userRows.length >= MAX_USERS) {
-        if (addForm) {
-            const submitBtn = addForm.querySelector<HTMLButtonElement>('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.title = i18n.t('user_max_reached') || 'Maximum of 3 users reached.';
-            }
-            const inputs = addForm.querySelectorAll<HTMLInputElement>('input');
-            inputs.forEach(input => { input.disabled = true; });
-        }
-    }
 }
 
 // --- Main initialization ---
@@ -995,7 +866,6 @@ function initEditInplace(): void {
         initBulkActions();
         initRevisionDiff();
         initGenerateReport();
-        initUserManagement();
     };
     // #36: typeof i18nチェックをより堅牢に
     if (typeof i18n !== 'undefined' && i18n && typeof i18n.ready?.then === 'function') {

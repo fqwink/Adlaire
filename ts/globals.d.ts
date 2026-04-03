@@ -17,11 +17,3 @@ declare function escHtml(s: string): string;
 interface HTMLElement {
     __editor?: Editor | undefined;
 }
-
-/** User management types */
-interface UserInfo {
-    username: string;
-    role: string;
-    created_at: string;
-    last_login: string;
-}
