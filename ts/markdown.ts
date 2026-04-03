@@ -90,15 +90,17 @@ function markdownToHtml(md: string): string {
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
     // Images ![alt](url) — must come before links
+    // BugFix #17: alt属性・URL属性をescAttrでエスケープ（属性値インジェクション防止）
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, url: string) => {
-        if (_mdDangerousProto.test(url)) return `<img src="" alt="${alt}">`;
-        return `<img src="${url}" alt="${alt}">`;
+        if (_mdDangerousProto.test(url)) return `<img src="" alt="${escAttr(alt)}">`;
+        return `<img src="${escAttr(url)}" alt="${escAttr(alt)}">`;
     });
 
     // Links [text](url)
+    // BugFix #18: href属性をescAttrでエスケープ
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, url: string) => {
         if (_mdDangerousProto.test(url)) return `<a href="">${text}</a>`;
-        return `<a href="${url}">${text}</a>`;
+        return `<a href="${escAttr(url)}">${text}</a>`;
     });
 
     // --- Tables ---
@@ -193,6 +195,11 @@ function markdownToHtml(md: string): string {
         });
         html += '</ol></section>';
     }
+
+    // BugFix #19: <p>タグ内のコードブロックを修正（<p>%%CODEBLOCK%%</p> → %%CODEBLOCK%%）
+    codeBlocks.forEach((_block, i) => {
+        html = html.replace(`<p>%%CODEBLOCK_${i}%%</p>`, `%%CODEBLOCK_${i}%%`);
+    });
 
     // Restore code blocks from placeholders
     codeBlocks.forEach((block, i) => {

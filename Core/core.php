@@ -25,6 +25,7 @@ final class FileStorage
     private string $pagesDir;
     private string $backupsDir;
     private string $revisionsDir;
+    private string $usersFile;
     private bool $migrated = false;
 
     /** File permission for sensitive data files */
@@ -33,9 +34,12 @@ final class FileStorage
     /** Directory permission */
     private const DIR_PERMISSION = 0755;
 
+    /** Maximum number of users */
+    private const MAX_USERS = 3;
+
     /** Config keys managed in config.json */
     private const CONFIG_KEYS = [
-        'password', 'themeSelect', 'menu', 'title',
+        'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
         'language', 'page_order', 'sidebar_blocks',
     ];
@@ -57,6 +61,7 @@ final class FileStorage
         $this->pagesDir = $basePath . '/pages';
         $this->backupsDir = $basePath . '/backups';
         $this->revisionsDir = $basePath . '/revisions';
+        $this->usersFile = $basePath . '/system/users.json';
     }
 
     public function ensureDirectories(): void
@@ -113,8 +118,10 @@ final class FileStorage
             $realBase = $this->basePath;
         }
 
+        $legacyConfigKeys = array_merge(self::CONFIG_KEYS, ['password']);
+
         $config = [];
-        foreach (self::CONFIG_KEYS as $key) {
+        foreach ($legacyConfigKeys as $key) {
             $legacyFile = $realBase . '/' . $key;
             if (file_exists($legacyFile) && !is_link($legacyFile)) {
                 $config[$key] = file_get_contents($legacyFile);
@@ -125,7 +132,7 @@ final class FileStorage
             $this->writeConfig($config);
         }
 
-        $skipFiles = array_merge(self::CONFIG_KEYS, [
+        $skipFiles = array_merge($legacyConfigKeys, [
             'config.json', 'pages.meta.json', 'pages.index.json',
             '.htaccess', '.config.lock', 'install.lock',
         ]);
@@ -159,7 +166,7 @@ final class FileStorage
             }
         }
 
-        foreach (self::CONFIG_KEYS as $key) {
+        foreach ($legacyConfigKeys as $key) {
             $legacyFile = $realBase . '/' . $key;
             if (file_exists($legacyFile) && !is_link($legacyFile)) {
                 @unlink($legacyFile);
@@ -730,5 +737,141 @@ final class FileStorage
             return false;
         }
         return $data;
+    }
+
+    // --- User management ---
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function readUsers(): array
+    {
+        if (!file_exists($this->usersFile)) {
+            return [];
+        }
+        $json = $this->lockedRead($this->usersFile);
+        if ($json === false) {
+            return [];
+        }
+        $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            error_log('Adlaire: Failed to parse users.json: ' . json_last_error_msg());
+            return [];
+        }
+        return $data['users'] ?? [];
+    }
+
+    public function writeUser(string $username, array $data): bool
+    {
+        if ($username === '' || !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $username)) {
+            return false;
+        }
+
+        $users = $this->readUsers();
+
+        if (!isset($users[$username]) && count($users) >= self::MAX_USERS) {
+            error_log('Adlaire: Maximum user limit reached (' . self::MAX_USERS . ')');
+            return false;
+        }
+
+        if (isset($users[$username])) {
+            $users[$username] = array_merge($users[$username], $data);
+        } else {
+            $data['created_at'] = $data['created_at'] ?? date('c');
+            $data['last_login'] = $data['last_login'] ?? '';
+            $users[$username] = $data;
+        }
+
+        return $this->writeUsersFile($users);
+    }
+
+    public function deleteUser(string $username): bool
+    {
+        if ($username === '') {
+            return false;
+        }
+
+        $users = $this->readUsers();
+        if (!isset($users[$username])) {
+            return false;
+        }
+
+        if (count($users) <= 1) {
+            error_log('Adlaire: Cannot delete last remaining user');
+            return false;
+        }
+
+        unset($users[$username]);
+        return $this->writeUsersFile($users);
+    }
+
+    /**
+     * @return array<string, array{role: string, created_at: string, last_login: string}>
+     */
+    public function listUsers(): array
+    {
+        $users = $this->readUsers();
+        $result = [];
+        foreach ($users as $username => $data) {
+            $result[$username] = [
+                'role' => $data['role'] ?? 'master',
+                'created_at' => $data['created_at'] ?? '',
+                'last_login' => $data['last_login'] ?? '',
+            ];
+        }
+        return $result;
+    }
+
+    public function getUserCount(): int
+    {
+        return count($this->readUsers());
+    }
+
+    public function usersFileExists(): bool
+    {
+        return file_exists($this->usersFile);
+    }
+
+    /**
+     * @return array<string, mixed>|false
+     */
+    public function getUser(string $username): array|false
+    {
+        $users = $this->readUsers();
+        if (!isset($users[$username])) {
+            return false;
+        }
+        return $users[$username];
+    }
+
+    /**
+     * @param array<string, mixed> $users
+     */
+    private function writeUsersFile(array $users): bool
+    {
+        $data = [
+            'users' => $users,
+            'max_users' => self::MAX_USERS,
+        ];
+        $json = json_encode($data, self::JSON_FLAGS);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode users JSON: ' . json_last_error_msg());
+            return false;
+        }
+        return $this->atomicWrite($this->usersFile, $json);
+    }
+
+    public function removeConfigKey(string $key): bool
+    {
+        $config = $this->readConfig();
+        if (!isset($config[$key])) {
+            return true;
+        }
+        unset($config[$key]);
+        $json = json_encode($config, self::JSON_FLAGS);
+        if ($json === false) {
+            return false;
+        }
+        return $this->atomicWrite($this->configFile, $json);
     }
 }

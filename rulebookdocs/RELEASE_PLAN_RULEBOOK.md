@@ -157,17 +157,38 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | M3 | マイグレーション | config.json:password → users.json 強制移行（単一管理者モード廃止） | 計画 |
 | M4 | 認証 | ログイン画面にユーザー名入力フィールド追加 | 計画 |
 | M5 | セッション | $_SESSION にユーザー名・ロール情報追加 | 計画 |
-| M6 | 管理UI | ユーザー管理画面（一覧/追加/削除/パスワード変更） | 計画 |
-| M7 | API | ?api=users エンドポイント（CRUD、master権限必須） | 計画 |
+| M6 | 管理UI | ユーザー管理画面（一覧/追加/削除/パスワード変更） | **TS実装済** |
+| M7 | API | ?api=users エンドポイント（CRUD、master権限必須） | **TS実装済** |
 | M8 | セキュリティ | users.json ファイル権限 0600 + 排他ロック + アトミック書き込み | 計画 |
 | M9 | bundle-installer | セットアップツールで初期マスター管理者ユーザー作成（users.json直接生成） | 計画 |
 | M10 | 管理UI | ログイン状態表示にユーザー名表示 | 計画 |
 
-#### 品質確定バグ修正
+#### 品質確定バグ修正（TS 20件精査・20件実装）
 
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 30 | Ver.2.0 系全体の品質確定バグ修正（50件以上精査） | 計画 |
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 1 | セキュリティ | editInplace.ts | plainTextEdit: markdown取得時にinnerHTML直接使用（XSSリスク） | **実装済** |
+| 2 | 型安全性 | editor.ts | paragraph/heading/quote render: as stringキャストをString()に改善 | **実装済** |
+| 3 | セキュリティ | editor.ts | paragraph save(): el.innerHTMLをsanitizeHtmlなしで返却 | **実装済** |
+| 4 | セキュリティ | editor.ts | quote save(): el.innerHTMLをsanitizeHtmlなしで返却 | **実装済** |
+| 5 | セキュリティ | editor.ts | heading save(): headingEl.innerHTMLをsanitizeHtmlなしで返却 | **実装済** |
+| 6 | エラーハンドリング | api.ts | restoreRevision: res.json()をres.okチェック前に呼出（非JSON例外） | **実装済** |
+| 7 | エラーハンドリング | api.ts | importSite: res.json()をres.okチェック前に呼出（非JSON例外） | **実装済** |
+| 8 | セキュリティ | api.ts | exportSite: CSRFトークン未送信 + updateCsrfFromResponse欠如 | **実装済** |
+| 9 | エラーハンドリング | editInplace.ts | initGenerateReport: res.okチェック欠如 + res.json()失敗未処理 | **実装済** |
+| 10 | セキュリティ | editInplace.ts | switchFormat: span.innerHTML直接使用（textContentに変更） | **実装済** |
+| 11 | UX | editor.ts | image tool: 危険なURL入力時にユーザーフィードバック欠如 | **実装済** |
+| 12 | エラーハンドリング | editInplace.ts | showSaveIndicator: non-null assertion(!)を安全な参照に変更 | **実装済** |
+| 13 | データ損失 | editInplace.ts | flushSidebarSave: flushSaving同等の競合防止ガード欠如 | **実装済** |
+| 14 | UX | editInplace.ts | ユーザー管理: パスワード変更成功時のフィードバック表示 | **実装済** |
+| 15 | UX | editInplace.ts | ユーザー管理: 3名上限時のフォーム無効化とメッセージ表示 | **実装済** |
+| 16 | セキュリティ | i18n.ts | t(): paramsのHTMLエスケープオプション未対応 | **実装済** |
+| 17 | セキュリティ | markdown.ts | image: alt/URL属性値がescAttr未適用（属性値インジェクション） | **実装済** |
+| 18 | セキュリティ | markdown.ts | link: href属性値がescAttr未適用 | **実装済** |
+| 19 | ロジック | markdown.ts | コードブロックプレースホルダが<p>タグ内に含まれる問題 | **実装済** |
+| 20 | エラーハンドリング | autosize.ts | disconnected要素への操作防止チェック欠如 | **実装済** |
+
+> 残り30件以上の精査は次フェーズで実施予定。
 
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 

@@ -143,6 +143,7 @@ const api = {
     /**
      * Restore a page from a specific revision.
      */
+    // BugFix #6: res.okチェックをres.json()の前に移動（非JSONレスポンスでの例外防止）
     async restoreRevision(slug: string, timestamp: string): Promise<void> {
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
@@ -154,8 +155,11 @@ const api = {
             body: body.toString(),
         });
         updateCsrfFromResponse(res);
-        const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     /**
@@ -175,8 +179,12 @@ const api = {
     /**
      * Export all site data as JSON.
      */
+    // BugFix #8: CSRFトークンヘッダー送信 + updateCsrfFromResponse追加
     async exportSite(): Promise<string> {
-        const res = await fetch(buildApiUrl('export'));
+        const res = await fetch(buildApiUrl('export'), {
+            headers: { 'X-CSRF-Token': csrfToken },
+        });
+        updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error('Export failed'); }
         return res.text();
     },
@@ -184,6 +192,7 @@ const api = {
     /**
      * Import site data from JSON.
      */
+    // BugFix #7: res.okチェックをres.json()の前に移動（非JSONレスポンスでの例外防止）
     async importSite(data: string): Promise<{ config: boolean; pages: number }> {
         const res = await fetch(buildApiUrl('import'), {
             method: 'POST',
@@ -191,8 +200,12 @@ const api = {
             body: data,
         });
         updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.imported;
     },
 
@@ -246,6 +259,83 @@ const api = {
             throw new Error(msg);
         }
         return res.json();
+    },
+
+    /**
+     * List all users (master admin only).
+     */
+    async listUsers(): Promise<UserInfo[]> {
+        const res = await fetch(buildApiUrl('users'), {
+            headers: { 'X-CSRF-Token': csrfToken },
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+        const json = await res.json();
+        return json.users ?? [];
+    },
+
+    /**
+     * Create a new user (master admin only, max 3).
+     */
+    async createUser(username: string, password: string): Promise<void> {
+        const body = new URLSearchParams();
+        body.append('username', username);
+        body.append('password', password);
+        body.append('csrf', csrfToken);
+
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    /**
+     * Update a user's password (master admin only).
+     */
+    async updateUserPassword(username: string, password: string): Promise<void> {
+        const body = new URLSearchParams();
+        body.append('username', username);
+        body.append('password', password);
+        body.append('csrf', csrfToken);
+
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    /**
+     * Delete a user (master admin only).
+     */
+    async deleteUser(username: string): Promise<void> {
+        const res = await fetch(buildApiUrl('users', { username }), {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': csrfToken },
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     async saveSidebar(blocks: string): Promise<void> {

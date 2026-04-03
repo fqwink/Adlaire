@@ -186,7 +186,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const el = document.createElement('div');
                 el.contentEditable = 'true';
                 el.className = 'ce-paragraph';
-                el.innerHTML = sanitizeHtml((data.text as string) || '');
+                // BugFix #2: String()で型安全にキャスト（as string回避）
+                el.innerHTML = sanitizeHtml(String(data.text ?? ''));
                 el.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -213,8 +214,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 attachBackspaceHandler(el);
                 return el;
             },
+            // BugFix #3: save時にsanitizeHtml適用（XSS防止）
             save(el) {
-                return { text: el.innerHTML };
+                return { text: sanitizeHtml(el.innerHTML) };
             },
         };
     },
@@ -232,7 +234,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 headingEl = document.createElement(`h${level}`);
                 headingEl.contentEditable = 'true';
                 headingEl.className = 'ce-heading';
-                headingEl.innerHTML = sanitizeHtml((data.text as string) || '');
+                // BugFix #2b: String()で型安全にキャスト
+                headingEl.innerHTML = sanitizeHtml(String(data.text ?? ''));
                 attachBackspaceHandler(headingEl);
 
                 const levelBtn = document.createElement('button');
@@ -260,8 +263,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 wrap.appendChild(headingEl);
                 return wrap;
             },
+            // BugFix #5: save時にsanitizeHtml適用（XSS防止）
             save() {
-                return { text: headingEl.innerHTML, level };
+                return { text: sanitizeHtml(headingEl.innerHTML), level };
             },
         };
     },
@@ -370,7 +374,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const bq = document.createElement('blockquote');
                 bq.className = 'ce-quote';
                 bq.contentEditable = 'true';
-                bq.innerHTML = sanitizeHtml((data.text as string) || '');
+                // BugFix #2c: String()で型安全にキャスト
+                bq.innerHTML = sanitizeHtml(String(data.text ?? ''));
                 attachBackspaceHandler(bq);
                 // #74: blockquoteのネスト防止（paste時にblockquoteタグを除去）
                 bq.addEventListener('paste', (e) => {
@@ -390,8 +395,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 });
                 return bq;
             },
+            // BugFix #4: save時にsanitizeHtml適用（XSS防止）
             save(el) {
-                return { text: el.innerHTML };
+                return { text: sanitizeHtml(el.innerHTML) };
             },
         };
     },
@@ -468,7 +474,16 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 urlInput.value = initialUrl;
                 urlInput.addEventListener('input', () => {
                     const val = urlInput.value;
-                    img.src = isDangerousUrl(val) ? '' : val;
+                    // BugFix #11: 危険なURL入力時にフィードバック表示
+                    if (isDangerousUrl(val)) {
+                        img.src = '';
+                        urlInput.style.borderColor = '#c00';
+                        urlInput.title = 'Blocked: dangerous URL protocol';
+                    } else {
+                        img.src = val;
+                        urlInput.style.borderColor = '';
+                        urlInput.title = '';
+                    }
                     // #19: URLの割り当て時にonerror属性をnullに設定
                     img.onerror = null;
                 });

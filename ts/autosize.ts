@@ -7,6 +7,8 @@
  */
 
 function autosize(textarea: HTMLTextAreaElement): void {
+    // BugFix #20: textarea要素の有効性チェック追加（disconnected要素への操作防止）
+    if (!textarea || !textarea.isConnected) return;
     if (textarea.dataset.autosize === 'true') return;
     textarea.dataset.autosize = 'true';
 
