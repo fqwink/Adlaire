@@ -134,7 +134,9 @@ function install_execute(string $siteName, string $locale, string $password): ar
     // Create system directory
     $systemDir = __DIR__ . '/data/system';
     if (!is_dir($systemDir)) {
-        mkdir($systemDir, 0755, true);
+        if (!mkdir($systemDir, 0755, true)) {
+            return ['ok' => false, 'message' => 'Failed to create system directory'];
+        }
     }
 
     // Save config
@@ -164,9 +166,13 @@ function install_execute(string $siteName, string $locale, string $password): ar
         'installer' => 'bundle-installer.php',
         'installer_version' => '1.0.0',
     ];
+    $lockJson = json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($lockJson === false) {
+        return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
+    }
     $lockResult = file_put_contents(
         __DIR__ . '/data/system/install.lock',
-        json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        $lockJson
     );
 
     if ($lockResult === false) {

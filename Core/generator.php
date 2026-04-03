@@ -22,7 +22,10 @@ function handleApiGenerate(FileStorage $storage): void
         return;
     }
 
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $app = App::getInstance();
     $distDir = dirname(__DIR__) . '/dist';
@@ -102,7 +105,9 @@ function handleApiGenerate(FileStorage $storage): void
 
     // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
-        if ($lastBuildTime !== '' && strtotime($data['updated_at'] ?? '') <= strtotime($lastBuildTime)) {
+        $updatedTime = strtotime($data['updated_at'] ?? '');
+        $buildTime = strtotime($lastBuildTime);
+        if ($lastBuildTime !== '' && $updatedTime !== false && $buildTime !== false && $updatedTime <= $buildTime) {
             continue; // Skip unchanged pages in diff build
         }
         $format = $data['format'] ?? 'blocks';
@@ -121,13 +126,19 @@ function handleApiGenerate(FileStorage $storage): void
 
         // Write to dist
         if ($slug === 'home') {
-            file_put_contents($distDir . '/index.html', $pageHtml);
+            if (file_put_contents($distDir . '/index.html', $pageHtml) === false) {
+                apiError(500, 'Failed to write index.html');
+                return;
+            }
         }
         $pageDir = $distDir . '/' . $slug;
         if (!is_dir($pageDir)) {
             mkdir($pageDir, 0755, true);
         }
-        file_put_contents($pageDir . '/index.html', $pageHtml);
+        if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
+            apiError(500, 'Failed to write ' . $slug . '/index.html');
+            return;
+        }
         $count++;
     }
 
@@ -143,13 +154,20 @@ function handleApiGenerate(FileStorage $storage): void
         $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
     }
     $xml .= '</urlset>';
-    file_put_contents($distDir . '/sitemap.xml', $xml);
+    if (file_put_contents($distDir . '/sitemap.xml', $xml) === false) {
+        apiError(500, 'Failed to write sitemap.xml');
+        return;
+    }
 
     // Save build state for diff builds
-    file_put_contents($distDir . '/.build_state.json', json_encode([
+    $buildStateJson = json_encode([
         'built_at' => date('c'),
         'pages' => $count,
-    ], JSON_PRETTY_PRINT));
+    ], JSON_PRETTY_PRINT);
+    if ($buildStateJson === false || file_put_contents($distDir . '/.build_state.json', $buildStateJson) === false) {
+        apiError(500, 'Failed to write build state');
+        return;
+    }
 
     echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
 }

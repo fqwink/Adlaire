@@ -64,7 +64,8 @@ function attachListItemHandlers(li: HTMLLIElement): void {
             attachListItemHandlers(newLi);
             li.after(newLi);
             newLi.focus();
-            const editor = getEditorFromElement(li);
+            const listEl = li.closest('ul, ol');
+            const editor = listEl ? getEditorFromElement(listEl as HTMLElement) : getEditorFromElement(li);
             if (editor) {
                 (editor as any).saveUndoState();
             }
@@ -409,10 +410,10 @@ class InlineToolbar {
             parent.removeChild(existing);
         } else {
             const wrapper = document.createElement(tagName);
+            const savedRange = range.cloneRange();
             try {
                 range.surroundContents(wrapper);
             } catch {
-                const savedRange = range.cloneRange();
                 try {
                     const contents = range.extractContents();
                     wrapper.appendChild(contents);

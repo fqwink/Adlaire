@@ -68,7 +68,7 @@ function fieldSave(key: string, val: string): void {
 }
 
 function showFieldFeedback(key: string, success: boolean): void {
-    const el = document.querySelector(`[onchange*="fieldSave(\\"${key}\\""]`) as HTMLElement
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${CSS.escape(key)}\\""]`) as HTMLElement
         || document.getElementById(key);
     if (!el) return;
     const orig = el.style.borderColor;
@@ -122,7 +122,9 @@ function renderMarkdownContent(): void {
     document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
         const b64 = el.dataset.rawB64;
         const raw = b64 ? atob(b64) : (el.textContent || '');
-        if (typeof markdownToHtml === 'function') { el.innerHTML = markdownToHtml(raw); }
+        if (typeof markdownToHtml === 'function') {
+            el.innerHTML = sanitizeHtml(markdownToHtml(raw));
+        }
     });
 }
 
@@ -136,7 +138,7 @@ function renderBlocksContent(): void {
         if (!raw) return;
         try {
             const blocks = JSON.parse(raw);
-            el.innerHTML = renderBlocks(blocks);
+            el.innerHTML = sanitizeHtml(renderBlocks(blocks));
         } catch {
             // Leave content as-is on parse failure
         }
@@ -169,25 +171,38 @@ function initBlockEditor(): void {
 
         // Auto-save on focusout from the editor
         let saveTimer: ReturnType<typeof setTimeout> | null = null;
+        let lastSavedJson = '';
+
+        const flushSave = (): void => {
+            if (!editorInstance) return;
+            const saved = editorInstance.save();
+            const json = JSON.stringify(saved.blocks);
+            const slug = wrapper.id;
+            if (!slug || json === lastSavedJson) return;
+
+            lastSavedJson = json;
+            showSaveIndicator(wrapper, 'saving');
+            api.savePage(slug, json, 'blocks').then(() => {
+                showSaveIndicator(wrapper, 'saved');
+            }).catch(() => {
+                showSaveIndicator(wrapper, 'error');
+            });
+        };
+
         wrapper.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
             if (related && wrapper.contains(related)) return;
 
-            // Debounce to avoid saving while user clicks between blocks
             if (saveTimer) clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => {
-                if (!editorInstance) return;
-                const saved = editorInstance.save();
-                const slug = wrapper.id;
-                if (!slug) return;
+            saveTimer = setTimeout(flushSave, 300);
+        });
 
-                showSaveIndicator(wrapper, 'saving');
-                api.savePage(slug, JSON.stringify(saved.blocks), 'blocks').then(() => {
-                    showSaveIndicator(wrapper, 'saved');
-                }).catch(() => {
-                    showSaveIndicator(wrapper, 'error');
-                });
-            }, 300);
+        window.addEventListener('beforeunload', () => {
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+                saveTimer = null;
+            }
+            flushSave();
         });
     });
 }

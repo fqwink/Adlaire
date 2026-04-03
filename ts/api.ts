@@ -110,8 +110,8 @@ const api = {
      */
     async listRevisions(slug: string): Promise<Revision[]> {
         const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`);
+        if (!res.ok) { return []; }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.revisions;
     },
 
@@ -138,8 +138,8 @@ const api = {
      */
     async search(query: string): Promise<SearchResult[]> {
         const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
+        if (!res.ok) { return []; }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.results;
     },
 

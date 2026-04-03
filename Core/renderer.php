@@ -72,5 +72,9 @@ function renderMarkdownToHtml(string $md): string
     $html = preg_replace('/^&gt; (.+)$/m', '<blockquote>$1</blockquote>', $html) ?? $html;
     $html = preg_replace('/^(?!<[a-z\/])(.*\S.*)$/m', '<p>$1</p>', $html) ?? $html;
 
+    if (preg_last_error() !== PREG_NO_ERROR) {
+        return htmlspecialchars($md, ENT_QUOTES, 'UTF-8');
+    }
+
     return $html;
 }

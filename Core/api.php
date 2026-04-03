@@ -36,7 +36,10 @@ function handleEdit(): void
         exit;
     }
 
-    csrf_verify();
+    if (!csrf_verify()) {
+        http_response_code(403);
+        exit;
+    }
 
     if ($fieldname === 'password') {
         header('HTTP/1.1 403 Forbidden');
@@ -170,7 +173,10 @@ function apiPageGet(FileStorage $storage, string $slug): void
 
 function apiPageSave(FileStorage $storage): void
 {
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $slug = $_POST['slug'] ?? null;
     $content = $_POST['content'] ?? null;
@@ -216,7 +222,10 @@ function apiPageSave(FileStorage $storage): void
 
 function apiPageStatusUpdate(FileStorage $storage): void
 {
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $slug = $_POST['slug'] ?? null;
     $status = $_POST['status'] ?? null;
@@ -246,7 +255,10 @@ function apiPageDelete(FileStorage $storage, ?string $slug): void
         return;
     }
 
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $result = $storage->deletePage($slug);
     if (!$result) {
@@ -280,7 +292,10 @@ function apiRevisionList(FileStorage $storage, string $slug): void
 
 function apiRevisionRestore(FileStorage $storage, string $slug): void
 {
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $timestamp = $_POST['timestamp'] ?? null;
     if ($timestamp === null) {
@@ -405,7 +420,10 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
-    csrf_verify();
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
 
     $input = file_get_contents('php://input');
     if ($input === false || $input === '') {

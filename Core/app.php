@@ -68,7 +68,7 @@ final class App
             : '';
 
         $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (!preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost)) {
+        if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
             $httpHost = 'localhost';
         }
 
@@ -238,7 +238,7 @@ final class App
         if ($pageData !== false) {
             $isDraft = ($pageData['status'] ?? 'published') === 'draft';
             if ($isDraft && !$this->isLoggedIn()) {
-                header('HTTP/1.1 404 Not Found');
+                http_response_code(404);
                 $this->config['content'] = $this->defaults['new_page']['visitor'];
                 return;
             }

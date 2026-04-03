@@ -25,15 +25,15 @@ function csrf_token(): string
     return $_SESSION['csrf'];
 }
 
-function csrf_verify(): void
+function csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
-        header('HTTP/1.1 403 Forbidden');
-        exit;
+        return false;
     }
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    return true;
 }
 
 /**

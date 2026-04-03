@@ -136,7 +136,7 @@ final class FileStorage
                         'updated_at' => $mtime,
                     ];
                     $this->atomicWrite($dest, json_encode($pageData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                    unlink($file);
+                    @unlink($file);
                 }
             }
         }
@@ -145,7 +145,7 @@ final class FileStorage
         foreach (self::CONFIG_KEYS as $key) {
             $legacyFile = $this->basePath . '/' . $key;
             if (file_exists($legacyFile)) {
-                unlink($legacyFile);
+                @unlink($legacyFile);
             }
         }
     }
@@ -166,6 +166,9 @@ final class FileStorage
         }
 
         $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return [];
+        }
         return is_array($data) ? $data : [];
     }
 
@@ -200,7 +203,9 @@ final class FileStorage
 
             if (file_exists($this->configFile)) {
                 $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
-                copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json');
+                if (!copy($this->configFile, $this->backupsDir . '/config.' . $backupName . '.json')) {
+                    error_log('Adlaire: Failed to copy config backup: ' . $backupName);
+                }
                 $this->rotateBackups();
             }
 
@@ -234,6 +239,9 @@ final class FileStorage
             return false;
         }
         $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return false;
+        }
         return is_array($data) && isset($data['content']) ? $data : false;
     }
 
@@ -294,9 +302,14 @@ final class FileStorage
         }
 
         $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
-        copy($path, $backupPath);
+        if (!copy($path, $backupPath)) {
+            error_log('Adlaire: Failed to copy page backup: ' . $slug);
+        }
 
-        unlink($path);
+        if (!@unlink($path)) {
+            error_log('Adlaire: Failed to delete page file: ' . $path);
+            return false;
+        }
 
         // Clean up revisions for deleted page
         $revDir = $this->revisionsDir . '/' . $slug;
@@ -304,7 +317,7 @@ final class FileStorage
             $revFiles = glob($revDir . '/*.json');
             if (is_array($revFiles)) {
                 foreach ($revFiles as $rf) {
-                    unlink($rf);
+                    @unlink($rf);
                 }
             }
             rmdir($revDir);
@@ -387,7 +400,7 @@ final class FileStorage
     {
         $cacheFile = $this->basePath . '/pages.index.json';
         if (file_exists($cacheFile)) {
-            unlink($cacheFile);
+            @unlink($cacheFile);
         }
     }
 
@@ -446,10 +459,15 @@ final class FileStorage
         }
 
         if (!chmod($tmp, 0644)) {
-            unlink($tmp);
+            @unlink($tmp);
             return false;
         }
-        return rename($tmp, $path);
+        if (!rename($tmp, $path)) {
+            error_log('Adlaire: Failed to rename temp file: ' . $tmp . ' -> ' . $path);
+            @unlink($tmp);
+            return false;
+        }
+        return true;
     }
 
     private function lockedRead(string $path): string|false
@@ -478,9 +496,9 @@ final class FileStorage
             return;
         }
         sort($files);
-        $toRemove = array_slice($files, 0, count($files) - self::MAX_BACKUPS + 1);
+        $toRemove = array_slice($files, 0, max(0, count($files) - self::MAX_BACKUPS));
         foreach ($toRemove as $old) {
-            unlink($old);
+            @unlink($old);
         }
     }
     // --- Revision management ---
@@ -505,7 +523,7 @@ final class FileStorage
             sort($files);
             $toRemove = array_slice($files, 0, count($files) - self::MAX_REVISIONS);
             foreach ($toRemove as $old) {
-                unlink($old);
+                @unlink($old);
             }
         }
     }
@@ -563,7 +581,7 @@ final class FileStorage
         }
 
         $data = json_decode($json, true);
-        if (!is_array($data) || !isset($data['content'])) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || !isset($data['content'])) {
             return false;
         }
 

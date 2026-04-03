@@ -27,6 +27,8 @@ function autosize(textarea: HTMLTextAreaElement): void {
     textarea.style.overflow = 'hidden';
     textarea.style.resize = 'none';
 
+    const ac = new AbortController();
+
     function resize(): void {
         textarea.style.overflowY = 'hidden';
         textarea.style.height = '0';
@@ -34,18 +36,15 @@ function autosize(textarea: HTMLTextAreaElement): void {
         textarea.style.height = Math.max(scrollHeight, minHeight) + 'px';
     }
 
-    textarea.addEventListener('input', resize);
-    window.addEventListener('resize', resize);
+    textarea.addEventListener('input', resize, { signal: ac.signal });
+    window.addEventListener('resize', resize, { signal: ac.signal });
 
-    // Initial resize
     resize();
 
-    // Cleanup on remove (via custom event)
     textarea.addEventListener('autosize:destroy', () => {
+        ac.abort();
         textarea.style.overflow = savedOverflow;
         textarea.style.resize = '';
-        textarea.removeEventListener('input', resize);
-        window.removeEventListener('resize', resize);
         delete textarea.dataset.autosize;
     }, { once: true });
 }

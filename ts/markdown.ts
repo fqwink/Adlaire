@@ -115,10 +115,10 @@ function markdownToHtml(md: string): string {
     html = html.replace(/^\d+\. (.+)$/gm, '<li class="ol">$1</li>');
 
     // Wrap consecutive <li> in <ul> or <ol>
-    html = html.replace(/((?:<li class="ol">.*<\/li>\n?)+)/g, (m) => {
+    html = html.replace(/((?:<li class="ol">[\s\S]*?<\/li>\n?)+)/g, (m) => {
         return '<ol>' + m.replaceAll(' class="ol"', '') + '</ol>';
     });
-    html = html.replace(/((?:<li[\s>].*<\/li>\n?)+)/g, (m) => {
+    html = html.replace(/((?:<li[\s>][\s\S]*?<\/li>\n?)+)/g, (m) => {
         if (m.startsWith('<ol>')) return m;
         return '<ul>' + m + '</ul>';
     });
