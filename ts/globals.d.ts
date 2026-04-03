@@ -15,5 +15,5 @@ declare function escHtml(s: string): string;
 
 /** Editor instance attached to container element */
 interface HTMLElement {
-    __editor?: InstanceType<typeof Editor>;
+    __editor?: Editor | undefined;
 }

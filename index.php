@@ -72,6 +72,9 @@ if (isset($_GET['preview'])) {
         header('Location: ?login');
         exit;
     }
+    if (is_string($previewSlug) && $previewSlug !== rawurldecode($previewSlug)) {
+        $previewSlug = rawurldecode($previewSlug);
+    }
     if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
         $previewData = $app->storage->readPageData($previewSlug);
         if ($previewData !== false) {

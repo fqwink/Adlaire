@@ -41,8 +41,31 @@ function autosize(textarea: HTMLTextAreaElement): void {
 
     resize();
 
+    // #3: MutationObserver to detect DOM removal and abort listeners
+    const observer = new MutationObserver(() => {
+        if (!textarea.isConnected) {
+            ac.abort();
+            observer.disconnect();
+        }
+    });
+    if (textarea.parentNode) {
+        observer.observe(textarea.parentNode, { childList: true });
+    }
+
+    // #4: WeakRef-based GC guard for destroy event not firing
+    const weakRef = new WeakRef(textarea);
+    const gcCheckInterval = setInterval(() => {
+        if (!weakRef.deref()) {
+            ac.abort();
+            observer.disconnect();
+            clearInterval(gcCheckInterval);
+        }
+    }, 5000);
+
     textarea.addEventListener('autosize:destroy', () => {
         ac.abort();
+        observer.disconnect();
+        clearInterval(gcCheckInterval);
         textarea.style.overflow = savedOverflow;
         textarea.style.resize = '';
         delete textarea.dataset.autosize;

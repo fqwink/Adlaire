@@ -24,7 +24,7 @@ function csrf_token(): string
 
 function csrf_verify(): bool
 {
-    $token = $_POST['csrf'] ?? $_REQUEST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $session = $_SESSION['csrf'] ?? '';
     if ($token === '' || $session === '' || !hash_equals($session, $token)) {
         return false;
@@ -47,7 +47,7 @@ function login_rate_check(): bool
     if (!is_dir($rateDir)) {
         @mkdir($rateDir, 0755, true);
     }
-    $rateFile = $rateDir . '/rate_' . md5($ip) . '.json';
+    $rateFile = $rateDir . '/rate_' . hash('sha256', $ip) . '.json';
 
     $attempts = [];
     if (is_file($rateFile)) {
@@ -65,8 +65,9 @@ function login_rate_check(): bool
     }
 
     $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < $windowSeconds));
+    $attemptCount = count($attempts);
 
-    if (count($attempts) >= $maxAttempts) {
+    if ($attemptCount >= $maxAttempts) {
         return false;
     }
 

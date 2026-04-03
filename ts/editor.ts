@@ -80,6 +80,7 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
     s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
     s = s.replace(/<embed\b[^>]*\/?>/gi, '');
+    // #6: SVG内onclick等のネスト対応 - SVGタグ全体を除去
     s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
     s = s.replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, '');
     s = s.replace(/<input\b[^>]*\/?>/gi, '');
@@ -87,7 +88,13 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<meta\b[^>]*\/?>/gi, '');
     s = s.replace(/<base\b[^>]*\/?>/gi, '');
     s = s.replace(/<link\b[^>]*\/?>/gi, '');
+    // #6: 属性値内の改行/タブを除去してからイベントハンドラを検出
+    s = s.replace(/(<[^>]*?)[\r\n\t]+/gi, '$1 ');
+    // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    // #8: javascript:プロトコルフィルタにユニコードエスケープ対応
+    const jsProtoPattern = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
+    s = s.replace(jsProtoPattern, '$1=""');
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
     s = s.replace(/\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '');
     return s;

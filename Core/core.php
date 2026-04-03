@@ -52,26 +52,26 @@ final class FileStorage
 
     public function ensureDirectories(): void
     {
-        // Auto-migrate from legacy files/ to data/ directory
         $legacyDir = dirname($this->basePath) . '/files';
         if ($this->basePath === 'data' && !is_dir($this->basePath) && is_dir($legacyDir)) {
-            if (!rename($legacyDir, $this->basePath)) {
+            if (is_link($legacyDir) || is_link($this->basePath)) {
+                error_log('Adlaire: Symlink detected during legacy migration, skipping');
+            } elseif (!rename($legacyDir, $this->basePath)) {
                 error_log('Adlaire: Failed to rename legacy directory: ' . $legacyDir);
             }
         }
 
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
-            if (!is_dir($dir)) {
+            if (!is_dir($dir) && !is_link($dir)) {
                 mkdir($dir, 0755, true);
             }
         }
-        // Ensure system directory exists
         $systemDir = $this->basePath . '/system';
-        if (!is_dir($systemDir)) {
+        if (!is_dir($systemDir) && !is_link($systemDir)) {
             mkdir($systemDir, 0755, true);
         }
         $pluginsDir = dirname($this->basePath) . '/plugins';
-        if (!is_dir($pluginsDir)) {
+        if (!is_dir($pluginsDir) && !is_link($pluginsDir)) {
             mkdir($pluginsDir, 0755, true);
         }
     }
@@ -81,7 +81,7 @@ final class FileStorage
      */
     public static function validateSlug(string $slug): bool
     {
-        if ($slug === '' || $slug !== basename($slug)) {
+        if ($slug === '') {
             return false;
         }
         return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $slug);
@@ -99,10 +99,15 @@ final class FileStorage
         }
         $this->migrated = true;
 
+        $realBase = realpath($this->basePath);
+        if ($realBase === false) {
+            $realBase = $this->basePath;
+        }
+
         $config = [];
         foreach (self::CONFIG_KEYS as $key) {
-            $legacyFile = $this->basePath . '/' . $key;
-            if (file_exists($legacyFile)) {
+            $legacyFile = $realBase . '/' . $key;
+            if (file_exists($legacyFile) && !is_link($legacyFile)) {
                 $config[$key] = file_get_contents($legacyFile);
             }
         }
@@ -111,15 +116,14 @@ final class FileStorage
             $this->writeConfig($config);
         }
 
-        // Migrate page files to JSON format in pages/ subdirectory
         $skipFiles = array_merge(self::CONFIG_KEYS, [
             'config.json', 'pages.meta.json', 'pages.index.json',
             '.htaccess', '.config.lock', 'install.lock',
         ]);
-        $files = glob($this->basePath . '/*');
+        $files = glob($realBase . '/*');
         if (is_array($files)) {
             foreach ($files as $file) {
-                if (is_dir($file)) {
+                if (is_dir($file) || is_link($file)) {
                     continue;
                 }
                 $name = basename($file);
@@ -146,10 +150,9 @@ final class FileStorage
             }
         }
 
-        // Clean up legacy config files (pages already moved)
         foreach (self::CONFIG_KEYS as $key) {
-            $legacyFile = $this->basePath . '/' . $key;
-            if (file_exists($legacyFile)) {
+            $legacyFile = $realBase . '/' . $key;
+            if (file_exists($legacyFile) && !is_link($legacyFile)) {
                 @unlink($legacyFile);
             }
         }

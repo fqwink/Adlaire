@@ -114,7 +114,7 @@ function validate_input(array $post): array
         $errors[] = 'Password must be at least 8 characters';
     }
     $weak = ['admin', 'password', '12345678', 'adlaire'];
-    if (in_array(strtolower($password), $weak, true)) {
+    if (in_array(mb_strtolower($password, 'UTF-8'), $weak, true)) {
         $errors[] = 'That password is too weak';
     }
     if ($password !== $confirm) {
@@ -168,6 +168,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
     ];
     $lockJson = json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     if ($lockJson === false) {
+        @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
     }
     $lockResult = file_put_contents(
@@ -176,6 +177,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
     );
 
     if ($lockResult === false) {
+        @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
 
