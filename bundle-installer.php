@@ -123,9 +123,12 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
-    $adminUsername = trim($post['admin_username'] ?? 'admin');
-    if ($adminUsername !== '' && !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $adminUsername)) {
-        $errors[] = 'Invalid admin username (alphanumeric, dash, underscore only)';
+    $adminUsername = trim($post['admin_username'] ?? '');
+    if ($adminUsername === '') {
+        $adminUsername = 'admin';
+    }
+    if (!preg_match('/^[a-zA-Z0-9_-]{2,32}$/', $adminUsername)) {
+        $errors[] = 'Invalid admin username (2-32 chars, alphanumeric, dash, underscore only)';
     }
     if (!in_array($locale, INSTALLER_SUPPORTED_LOCALES, true)) {
         $errors[] = 'Invalid language selection';
@@ -194,6 +197,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
             $adminUsername => [
                 'password' => password_hash($password, PASSWORD_DEFAULT),
                 'role' => 'master',
+                'is_main' => true,
                 'created_at' => date('c'),
                 'last_login' => '',
             ],

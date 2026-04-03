@@ -60,8 +60,10 @@ const api = {
     /**
      * List all pages (metadata only, no content).
      */
+    // #104: listPages — CSRF token更新追加
     async listPages(): Promise<Record<string, PageSummary>> {
         const res = await fetch(buildApiUrl('pages'));
+        updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         const json = await res.json();
         return json.pages;
@@ -70,8 +72,10 @@ const api = {
     /**
      * Get a single page with full content and metadata.
      */
+    // #105: getPage — CSRF token更新追加
     async getPage(slug: string): Promise<PageData> {
         const res = await fetch(buildApiUrl('pages', { slug }));
+        updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         const json = await res.json();
         return json.data;
@@ -143,6 +147,7 @@ const api = {
     /**
      * Restore a page from a specific revision.
      */
+    // #101: restoreRevision — res.json()失敗時のエラーハンドリング追加
     async restoreRevision(slug: string, timestamp: string): Promise<void> {
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
@@ -154,8 +159,11 @@ const api = {
             body: body.toString(),
         });
         updateCsrfFromResponse(res);
-        const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     /**
@@ -175,15 +183,18 @@ const api = {
     /**
      * Export all site data as JSON.
      */
+    // #106: exportSite — CSRF token更新追加 + エラーメッセージ統一
     async exportSite(): Promise<string> {
         const res = await fetch(buildApiUrl('export'));
-        if (!res.ok) { throw new Error('Export failed'); }
+        updateCsrfFromResponse(res);
+        if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         return res.text();
     },
 
     /**
      * Import site data from JSON.
      */
+    // #102: importSite — !res.okチェックをjson.parse前に移動し安全化
     async importSite(data: string): Promise<{ config: boolean; pages: number }> {
         const res = await fetch(buildApiUrl('import'), {
             method: 'POST',
@@ -191,8 +202,12 @@ const api = {
             body: data,
         });
         updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
         const json = await res.json();
-        if (!res.ok) { throw new Error(json.error); }
         return json.imported;
     },
 
@@ -238,6 +253,7 @@ const api = {
         }
     },
 
+    // #103: getRevisionDiff — 戻り値の型安全性チェック追加
     async getRevisionDiff(slug: string, t1: string, t2: string): Promise<{ added: unknown[]; removed: unknown[]; changed: unknown[] }> {
         const res = await fetch(buildApiUrl('revisiondiff', { slug, t1, t2 }));
         if (!res.ok) {
@@ -245,7 +261,82 @@ const api = {
             try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
             throw new Error(msg);
         }
+        const json = await res.json();
+        return {
+            added: Array.isArray(json.added) ? json.added : [],
+            removed: Array.isArray(json.removed) ? json.removed : [],
+            changed: Array.isArray(json.changed) ? json.changed : [],
+        };
+    },
+
+    // --- User Management APIs (Ver.2.9: Master管理者対応) ---
+
+    async listUsers(): Promise<UserInfo[]> {
+        const res = await fetch(buildApiUrl('users'));
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+        const json = await res.json();
+        return json.users ?? [];
+    },
+
+    async generateSubMaster(): Promise<{username: string; password: string; token: string}> {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'generate_sub_master' }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
         return res.json();
+    },
+
+    async disableUser(username: string): Promise<void> {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'disable', username }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    async deleteUser(username: string): Promise<void> {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ username }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+
+    async updateMainPassword(currentPassword: string, newPassword: string): Promise<void> {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'update_main_password', current_password: currentPassword, new_password: newPassword }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
 
     async saveSidebar(blocks: string): Promise<void> {

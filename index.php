@@ -79,10 +79,7 @@ if (isset($_GET['preview'])) {
     }
     header('X-Robots-Tag: noindex, nofollow');
     if (is_string($previewSlug)) {
-        $decoded = rawurldecode($previewSlug);
-        if ($decoded === $previewSlug || rawurldecode($decoded) === $decoded) {
-            $previewSlug = $decoded;
-        }
+        $previewSlug = rawurldecode($previewSlug);
     }
     if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
         $previewData = $app->storage->readPageData($previewSlug);

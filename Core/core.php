@@ -77,16 +77,22 @@ final class FileStorage
 
         foreach ([$this->basePath, $this->pagesDir, $this->backupsDir, $this->revisionsDir] as $dir) {
             if (!is_dir($dir) && !is_link($dir)) {
-                mkdir($dir, self::DIR_PERMISSION, true);
+                if (!@mkdir($dir, self::DIR_PERMISSION, true) && !is_dir($dir)) {
+                    error_log('Adlaire: Failed to create directory: ' . $dir);
+                }
             }
         }
         $systemDir = $this->basePath . '/system';
         if (!is_dir($systemDir) && !is_link($systemDir)) {
-            mkdir($systemDir, self::DIR_PERMISSION, true);
+            if (!@mkdir($systemDir, self::DIR_PERMISSION, true) && !is_dir($systemDir)) {
+                error_log('Adlaire: Failed to create system directory: ' . $systemDir);
+            }
         }
         $pluginsDir = dirname($this->basePath) . '/plugins';
         if (!is_dir($pluginsDir) && !is_link($pluginsDir)) {
-            mkdir($pluginsDir, self::DIR_PERMISSION, true);
+            if (!@mkdir($pluginsDir, self::DIR_PERMISSION, true) && !is_dir($pluginsDir)) {
+                error_log('Adlaire: Failed to create plugins directory: ' . $pluginsDir);
+            }
         }
     }
 
@@ -246,6 +252,10 @@ final class FileStorage
             }
 
             $json = json_encode($merged, self::JSON_FLAGS);
+            if ($json === false) {
+                error_log('Adlaire: Failed to encode config JSON: ' . json_last_error_msg());
+                return false;
+            }
             return $this->atomicWrite($this->configFile, $json);
         } finally {
             flock($lockFp, LOCK_UN);
@@ -275,12 +285,13 @@ final class FileStorage
         if ($realPath === false || $realPagesDir === false || !str_starts_with($realPath, $realPagesDir . DIRECTORY_SEPARATOR)) {
             return false;
         }
-        $json = $this->lockedRead($path);
+        $json = $this->lockedRead($realPath);
         if ($json === false) {
             return false;
         }
         $data = json_decode($json, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Adlaire: Failed to parse page data: ' . $slug . ' - ' . json_last_error_msg());
             return false;
         }
         return is_array($data) && isset($data['content']) ? $data : false;
@@ -326,6 +337,10 @@ final class FileStorage
         }
 
         $json = json_encode($data, self::JSON_FLAGS);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode page JSON: ' . $slug . ' - ' . json_last_error_msg());
+            return false;
+        }
         $result = $this->atomicWrite($path, $json);
         if ($result) { $this->invalidatePageCache(); }
         return $result;
@@ -338,7 +353,7 @@ final class FileStorage
         }
 
         $path = $this->pagesDir . '/' . $slug . '.json';
-        if (!file_exists($path)) {
+        if (!file_exists($path) || is_link($path)) {
             return false;
         }
 
@@ -473,6 +488,10 @@ final class FileStorage
 
         $path = $this->pagesDir . '/' . $slug . '.json';
         $json = json_encode($data, self::JSON_FLAGS);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode page status JSON: ' . $slug);
+            return false;
+        }
         $result = $this->atomicWrite($path, $json);
         if ($result) { $this->invalidatePageCache(); }
         return $result;
@@ -497,7 +516,10 @@ final class FileStorage
     {
         $dir = dirname($path);
         if (!is_dir($dir)) {
-            @mkdir($dir, self::DIR_PERMISSION, true);
+            if (!@mkdir($dir, self::DIR_PERMISSION, true) && !is_dir($dir)) {
+                error_log('Adlaire: Failed to create directory for atomicWrite: ' . $dir);
+                return false;
+            }
         }
         $tmp = tempnam($dir, '.tmp_');
         if ($tmp === false) {
@@ -505,24 +527,17 @@ final class FileStorage
             return false;
         }
 
-        $oldUmask = umask(0);
-        chmod($tmp, self::FILE_PERMISSION);
-        umask($oldUmask);
-
         $written = file_put_contents($tmp, $content, LOCK_EX);
         if ($written === false) {
             @unlink($tmp);
             return false;
         }
 
-        $oldUmask = umask(0);
-        if (!chmod($tmp, self::FILE_PERMISSION)) {
-            umask($oldUmask);
+        if (!@chmod($tmp, self::FILE_PERMISSION)) {
             error_log('Adlaire: chmod failed for temp file: ' . $tmp);
             @unlink($tmp);
             return false;
         }
-        umask($oldUmask);
         if (!rename($tmp, $path)) {
             error_log('Adlaire: Failed to rename temp file: ' . $tmp . ' -> ' . $path);
             @unlink($tmp);
@@ -609,7 +624,7 @@ final class FileStorage
         }
 
         $dir = $this->revisionsDir . '/' . $slug;
-        if (!is_dir($dir)) {
+        if (!is_dir($dir) || is_link($dir)) {
             return [];
         }
 
@@ -641,7 +656,7 @@ final class FileStorage
         }
 
         $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
-        if (!file_exists($revFile)) {
+        if (!file_exists($revFile) || is_link($revFile)) {
             return false;
         }
 
@@ -676,6 +691,12 @@ final class FileStorage
     /** @param list<string> $slugs */
     public function savePageOrder(array $slugs): bool
     {
+        foreach ($slugs as $slug) {
+            if (!is_string($slug) || !self::validateSlug($slug)) {
+                error_log('Adlaire: Invalid slug in page order');
+                return false;
+            }
+        }
         $json = json_encode($slugs, JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             error_log('Adlaire: Failed to encode page order JSON');
@@ -725,7 +746,7 @@ final class FileStorage
             return false;
         }
         $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
-        if (!file_exists($revFile)) {
+        if (!file_exists($revFile) || is_link($revFile)) {
             return false;
         }
         $json = $this->lockedRead($revFile);
@@ -743,7 +764,7 @@ final class FileStorage
 
     public function readUsers(): array
     {
-        if (!file_exists($this->usersFile)) {
+        if (!file_exists($this->usersFile) || is_link($this->usersFile)) {
             return [];
         }
         $json = $this->lockedRead($this->usersFile);
@@ -787,6 +808,10 @@ final class FileStorage
         if (!isset($users[$username])) {
             return false;
         }
+        if (!empty($users[$username]['is_main'])) {
+            error_log('Adlaire: Cannot delete main master user');
+            return false;
+        }
         if (count($users) <= 1) {
             error_log('Adlaire: Cannot delete last remaining user');
             return false;
@@ -800,11 +825,19 @@ final class FileStorage
         $users = $this->readUsers();
         $result = [];
         foreach ($users as $username => $data) {
-            $result[$username] = [
+            $entry = [
                 'role' => $data['role'] ?? 'master',
+                'is_main' => $data['is_main'] ?? false,
                 'created_at' => $data['created_at'] ?? '',
                 'last_login' => $data['last_login'] ?? '',
             ];
+            if (isset($data['enabled'])) {
+                $entry['enabled'] = $data['enabled'];
+            }
+            if (isset($data['created_by'])) {
+                $entry['created_by'] = $data['created_by'];
+            }
+            $result[$username] = $entry;
         }
         return $result;
     }
@@ -816,7 +849,7 @@ final class FileStorage
 
     public function usersFileExists(): bool
     {
-        return file_exists($this->usersFile);
+        return file_exists($this->usersFile) && !is_link($this->usersFile);
     }
 
     public function getUser(string $username): array|false
@@ -826,6 +859,37 @@ final class FileStorage
             return false;
         }
         return $users[$username];
+    }
+
+    public function generateSubMasterCredentials(): array
+    {
+        $loginId = bin2hex(random_bytes(8));
+        $password = bin2hex(random_bytes(12));
+        $token = bin2hex(random_bytes(16));
+        $totalLen = strlen($loginId) + strlen($password) + strlen($token);
+        if ($totalLen < 73) {
+            $extra = 73 - $totalLen;
+            $token .= bin2hex(random_bytes((int) ceil($extra / 2)));
+            $token = substr($token, 0, 73 - strlen($loginId) - strlen($password));
+        }
+        return [
+            'login_id' => $loginId,
+            'password' => $password,
+            'token' => $token,
+        ];
+    }
+
+    public function disableUser(string $username): bool
+    {
+        $users = $this->readUsers();
+        if (!isset($users[$username])) {
+            return false;
+        }
+        if (!empty($users[$username]['is_main'])) {
+            return false;
+        }
+        $users[$username]['enabled'] = false;
+        return $this->writeUsersFile($users);
     }
 
     private function writeUsersFile(array $users): bool
@@ -851,6 +915,7 @@ final class FileStorage
         unset($config[$key]);
         $json = json_encode($config, self::JSON_FLAGS);
         if ($json === false) {
+            error_log('Adlaire: Failed to encode config JSON in removeConfigKey');
             return false;
         }
         return $this->atomicWrite($this->configFile, $json);

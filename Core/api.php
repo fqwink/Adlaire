@@ -25,6 +25,9 @@ function verifyApiAuth(FileStorage $storage): bool
     if ($userData === false || !isset($userData['password'])) {
         return false;
     }
+    if (isset($userData['enabled']) && $userData['enabled'] === false) {
+        return false;
+    }
     return hash_equals($userData['password'], $sessionHash);
 }
 
@@ -473,10 +476,13 @@ function handleApiSitemap(FileStorage $storage): void
 
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = substr($data['updated_at'], 0, 10); // YYYY-MM-DD
+        $updatedAt = $data['updated_at'] ?? '';
+        $lastmod = strlen($updatedAt) >= 10 ? htmlspecialchars(substr($updatedAt, 0, 10), ENT_XML1, 'UTF-8') : '';
         $xml .= "  <url>\n";
         $xml .= "    <loc>{$loc}</loc>\n";
-        $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+        if ($lastmod !== '') {
+            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+        }
         $xml .= "  </url>\n";
     }
 
@@ -495,6 +501,7 @@ function handleApiExport(FileStorage $storage): void
 
     $config = $storage->readConfig();
     unset($config['password']);
+    unset($config['session']);
 
     $export = [
         'version'   => App::VERSION,
@@ -668,11 +675,14 @@ function handleApiVersion(): void
     $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
     $lockFile = dirname(__DIR__) . '/data/system/install.lock';
-    $installed = file_exists($lockFile);
+    $installed = file_exists($lockFile) && !is_link($lockFile);
     $installedAt = '';
     if ($installed) {
-        $lock = json_decode((string) file_get_contents($lockFile), true);
-        $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
+        $lockContent = file_get_contents($lockFile);
+        if ($lockContent !== false) {
+            $lock = json_decode($lockContent, true);
+            $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
+        }
     }
 
     apiResponse([
@@ -687,8 +697,26 @@ function handleApiVersion(): void
 
 // --- Users API ---
 
+function isMainMasterSession(FileStorage $storage): bool
+{
+    $sessionUser = $_SESSION['user'] ?? '';
+    if ($sessionUser === '') {
+        return false;
+    }
+    $userData = $storage->getUser($sessionUser);
+    if ($userData === false) {
+        return false;
+    }
+    return ($userData['is_main'] ?? false) === true;
+}
+
 function handleApiUsers(FileStorage $storage, string $method): void
 {
+    if (!isMainMasterSession($storage)) {
+        apiError(403, 'Main master access required');
+        return;
+    }
+
     if ($method === 'GET') {
         $users = $storage->listUsers();
         apiResponse(['users' => $users], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -702,53 +730,70 @@ function handleApiUsers(FileStorage $storage, string $method): void
         }
         $action = $_POST['action'] ?? '';
 
-        if ($action === 'create') {
-            $username = trim($_POST['username'] ?? '');
-            $password = $_POST['password'] ?? '';
-            if ($username === '' || !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $username)) {
-                apiError(400, 'Invalid username');
-                return;
-            }
-            if (strlen($password) < 8) {
-                apiError(400, 'Password must be at least 8 characters');
-                return;
-            }
-            $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
-            if (in_array(strtolower($password), $weakPasswords, true)) {
-                apiError(400, 'Password is too weak');
-                return;
-            }
-            $existing = $storage->getUser($username);
+        if ($action === 'generate') {
+            $credentials = $storage->generateSubMasterCredentials();
+            $loginId = $credentials['login_id'];
+            $password = $credentials['password'];
+            $token = $credentials['token'];
+
+            $existing = $storage->getUser($loginId);
             if ($existing !== false) {
-                apiError(409, 'User already exists');
+                apiError(409, 'ID collision, please try again');
                 return;
             }
+
+            $sessionUser = $_SESSION['user'] ?? '';
             $userData = [
                 'password' => password_hash($password, PASSWORD_DEFAULT),
                 'role' => 'master',
+                'is_main' => false,
+                'token' => password_hash($token, PASSWORD_DEFAULT),
+                'enabled' => true,
+                'created_by' => $sessionUser,
                 'created_at' => date('c'),
                 'last_login' => '',
             ];
-            if (!$storage->writeUser($username, $userData)) {
+            if (!$storage->writeUser($loginId, $userData)) {
                 apiError(400, 'Maximum user limit reached');
                 return;
             }
-            apiResponse(['status' => 'ok', 'username' => $username]);
+            apiResponse([
+                'status' => 'ok',
+                'credentials' => [
+                    'login_id' => $loginId,
+                    'password' => $password,
+                    'token' => $token,
+                ],
+            ]);
             return;
         }
 
-        if ($action === 'update') {
-            $username = trim($_POST['username'] ?? '');
-            $password = $_POST['password'] ?? '';
+        if ($action === 'disable') {
+            $username = trim($_POST['user'] ?? '');
             if ($username === '') {
                 apiError(400, 'Invalid username');
                 return;
             }
-            $existing = $storage->getUser($username);
-            if ($existing === false) {
+            $targetUser = $storage->getUser($username);
+            if ($targetUser === false) {
                 apiError(404, 'User not found');
                 return;
             }
+            if (!empty($targetUser['is_main'])) {
+                apiError(400, 'Cannot disable main master');
+                return;
+            }
+            if (!$storage->disableUser($username)) {
+                apiError(500, 'Failed to disable user');
+                return;
+            }
+            apiResponse(['status' => 'ok', 'disabled' => $username]);
+            return;
+        }
+
+        if ($action === 'password') {
+            $sessionUser = $_SESSION['user'] ?? '';
+            $password = $_POST['password'] ?? '';
             if (strlen($password) < 8) {
                 apiError(400, 'Password must be at least 8 characters');
                 return;
@@ -759,17 +804,15 @@ function handleApiUsers(FileStorage $storage, string $method): void
                 return;
             }
             $newHash = password_hash($password, PASSWORD_DEFAULT);
-            if (!$storage->writeUser($username, ['password' => $newHash])) {
+            if (!$storage->writeUser($sessionUser, ['password' => $newHash])) {
                 apiError(500, 'Failed to update password');
                 return;
             }
-            $sessionUser = $_SESSION['user'] ?? '';
-            if ($sessionUser === $username) {
-                $_SESSION['l'] = $newHash;
-            }
-            apiResponse(['status' => 'ok', 'username' => $username]);
+            $_SESSION['l'] = $newHash;
+            apiResponse(['status' => 'ok']);
             return;
         }
+
         apiError(400, 'Invalid action');
         return;
     }
@@ -787,6 +830,11 @@ function handleApiUsers(FileStorage $storage, string $method): void
         $sessionUser = $_SESSION['user'] ?? '';
         if ($username === $sessionUser) {
             apiError(400, 'Cannot delete yourself');
+            return;
+        }
+        $targetUser = $storage->getUser($username);
+        if ($targetUser !== false && !empty($targetUser['is_main'])) {
+            apiError(400, 'Cannot delete main master');
             return;
         }
         if (!$storage->deleteUser($username)) {
@@ -927,8 +975,8 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         return;
     }
 
-    $blocks1 = $data1['blocks'] ?? [];
-    $blocks2 = $data2['blocks'] ?? [];
+    $blocks1 = is_array($data1['blocks'] ?? null) ? $data1['blocks'] : [];
+    $blocks2 = is_array($data2['blocks'] ?? null) ? $data2['blocks'] : [];
 
     $added = [];
     $removed = [];

@@ -109,6 +109,10 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<meta\b[^>]*\/?>/gi, '');
     s = s.replace(/<base\b[^>]*\/?>/gi, '');
     s = s.replace(/<link\b[^>]*\/?>/gi, '');
+    // #114: <style>タグ除去（CSSインジェクション対策）
+    s = s.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    // #115: <textarea>タグ除去（コンテンツインジェクション対策）
+    s = s.replace(/<textarea\b[^<]*(?:(?!<\/textarea>)<[^<]*)*<\/textarea>/gi, '');
     // Phase 2: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
     s = s.replace(/\\u(00[0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     s = s.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
@@ -140,11 +144,14 @@ class UndoManager {
         this.maxSize = maxSize;
     }
 
+    // #118: push最適化 — raw比較を先に行い、不一致時のみ正規化比較
     push(state: EditorData): void {
         const json = JSON.stringify(state);
-        // #9: ホワイトスペース正規化で同一チェック
-        const normalized = json.replace(/\s+/g, ' ');
         if (this.pointer >= 0) {
+            // Fast path: 完全一致チェック
+            if (this.stack[this.pointer] === json) return;
+            // #9: ホワイトスペース正規化で同一チェック（slow path）
+            const normalized = json.replace(/\s+/g, ' ');
             const prevNormalized = this.stack[this.pointer].replace(/\s+/g, ' ');
             if (prevNormalized === normalized) return;
         }
@@ -644,7 +651,8 @@ class InlineToolbar {
         const ancestor = range.commonAncestorContainer;
         // #57: TEXT_NODEの場合はparentElementで安全にHTMLElementを取得
         const el = ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentElement : ancestor as HTMLElement;
-        if (!el || !el.closest('.ce-editor')) {
+        // #116: el nullチェック + instanceof確認強化
+        if (!el || !(el instanceof HTMLElement) || !el.closest('.ce-editor')) {
             this.el.style.display = 'none';
             return;
         }
@@ -1144,11 +1152,13 @@ class Editor {
         setTimeout(() => document.addEventListener('click', close, { signal: ac.signal }), 0);
     }
 
+    // #119: clear時にdirtyフラグをリセット
     private clear(): void {
         this.blockElements.forEach(el => el.remove());
         this.blockElements = [];
         this.blockTools = [];
         this.blockTypes = [];
+        this.dirty = false;
         this.container.querySelector('.ce-toolbox')?.remove();
     }
 }
@@ -1180,10 +1190,12 @@ function renderBlocks(blocks: BlockData[]): string {
                 return `<blockquote>${escHtml(String(d.text || ''))}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
+            // #117: image alt属性にcaptionをフォールバック出力
             case 'image': {
                 const url = escHtml(String(d.url || ''));
+                const alt = escHtml(String(d.caption || ''));
                 const cap = d.caption ? `<figcaption>${escHtml(String(d.caption))}</figcaption>` : '';
-                return `<figure><img src="${url}" alt=""/>${cap}</figure>`;
+                return `<figure><img src="${url}" alt="${alt}"/>${cap}</figure>`;
             }
             default:
                 return '';

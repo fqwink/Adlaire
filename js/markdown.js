@@ -59,12 +59,16 @@ function markdownToHtml(md) {
         footnotes[safeId] = text;
         return '';
     });
-    // Footnote references: [^id] → superscript link (unique IDs per occurrence)
+    // #121: Footnote references — ID別にカウンタを保持し、back-linkの参照先を正確化
     let fnRefCount = 0;
+    const fnRefFirstById = {};
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
         // #8: safeIdを属性値エスケープ
         const safeId = escAttr(id.replace(_mdSafeIdStrip, ''));
         fnRefCount++;
+        if (!(safeId in fnRefFirstById)) {
+            fnRefFirstById[safeId] = fnRefCount;
+        }
         return `<sup><a href="#fn-${safeId}" id="fnref-${safeId}-${fnRefCount}">${safeId}</a></sup>`;
     });
     // Headings (### > ## > #) — #22: 末尾の強調記号ネスト処理（#, =を除去）
@@ -162,15 +166,17 @@ function markdownToHtml(md) {
         const content = m.replace(/%%\/?BQ%%/g, '').trim().replace(/\n/g, '<br>');
         return `<blockquote>${content}</blockquote>`;
     });
-    // Paragraphs: wrap remaining lines that aren't already HTML tags
-    html = html.replace(/^(?!<[a-z\/])(.*\S.*)$/gm, '<p>$1</p>');
+    // #120: Paragraphs — 空白のみの行を除外する条件を明確化
+    html = html.replace(/^(?!<[a-z\/])(?!%%CODEBLOCK_)(.*\S.*)$/gm, '<p>$1</p>');
     // --- Footnote section ---
     const fnIds = Object.keys(footnotes);
     if (fnIds.length > 0) {
         html += '\n<section class="footnotes"><hr><ol>';
         fnIds.forEach(id => {
             // #8: footnote IDは既にescAttr済み、テキストもエスケープ
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">\u21A9</a></li>`;
+            // #121: back-linkは最初の参照IDを使用
+            const firstRef = fnRefFirstById[id] ?? 1;
+            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-${firstRef}">\u21A9</a></li>`;
         });
         html += '</ol></section>';
     }

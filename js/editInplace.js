@@ -84,8 +84,12 @@ function fieldSave(key, val) {
         });
     });
 }
+// #107: CSS.escapeフォールバック追加（Safari旧バージョン対策）
 function showFieldFeedback(key, success) {
-    const el = document.querySelector(`[onchange*="fieldSave(\\"${CSS.escape(key)}\\""]`)
+    const escapedKey = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(key)
+        : key.replace(/([^\w-])/g, '\\$1');
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${escapedKey}\\""]`)
         || document.getElementById(key);
     if (!el)
         return;
@@ -97,7 +101,8 @@ function showFieldFeedback(key, success) {
 function plainTextEdit(span) {
     const id = span.id;
     const title = span.getAttribute('title');
-    const titleAttr = title ? `"${title}" ` : '';
+    // #108: title属性値のエスケープ（引用符対策）
+    const titleAttr = title ? `"${title.replace(/"/g, '&quot;')}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
     const content = isMarkdown
         ? span.innerHTML
@@ -182,6 +187,9 @@ function renderBlocksContent() {
             return;
         try {
             const blocks = JSON.parse(raw);
+            // #111: パース結果のArray.isArrayチェック追加
+            if (!Array.isArray(blocks))
+                return;
             el.innerHTML = sanitizeHtml(renderBlocks(blocks));
         }
         catch (err) {
@@ -345,17 +353,26 @@ function initBlockEditor() {
         const sidebarEditor = Editor.create(sidebarEl, { data: sidebarData });
         let sidebarSaveTimer = null;
         let sidebarLastJson = '';
+        // #112: sidebar flushSaving競合防止フラグ追加
+        let sidebarFlushSaving = false;
         const flushSidebarSave = () => {
+            if (sidebarFlushSaving)
+                return;
+            sidebarFlushSaving = true;
             const saved = sidebarEditor.save();
             const json = JSON.stringify(saved.blocks);
-            if (json === sidebarLastJson)
+            if (json === sidebarLastJson) {
+                sidebarFlushSaving = false;
                 return;
+            }
             sidebarLastJson = json;
             showSaveIndicator(sidebarEl, 'saving');
             api.saveSidebar(json).then(() => {
                 showSaveIndicator(sidebarEl, 'saved');
             }).catch(() => {
                 showSaveIndicator(sidebarEl, 'error');
+            }).finally(() => {
+                sidebarFlushSaving = false;
             });
         };
         sidebarEl.addEventListener('focusout', (e) => {
@@ -393,17 +410,22 @@ function initBlockEditor() {
     }
 }
 // --- Save indicator ---
+// #110: showSaveIndicator — parentElement nullチェック強化
 function showSaveIndicator(container, state) {
-    let indicator = container.parentElement?.querySelector('.ce-save-indicator');
+    const parent = container.parentElement;
+    if (!parent)
+        return;
+    let indicator = parent.querySelector('.ce-save-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.className = 'ce-save-indicator';
-        container.parentElement?.insertBefore(indicator, container);
+        parent.insertBefore(indicator, container);
     }
-    indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '✓' : '✗';
+    indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '\u2713' : '\u2717';
     indicator.className = 'ce-save-indicator ce-save--' + state;
     if (state !== 'saving') {
-        setTimeout(() => { indicator.className = 'ce-save-indicator'; }, 2000);
+        const indicatorRef = indicator;
+        setTimeout(() => { indicatorRef.className = 'ce-save-indicator'; }, 2000);
     }
 }
 // --- Format switching ---
@@ -429,7 +451,7 @@ function initFormatSwitcher() {
 }
 function switchFormat(slug, newFormat) {
     // #15: switchFormat失敗時のロールバック — 元データを保持
-    const previousEditorRef = activeEditor;
+    // #109: 未使用変数previousEditorRef削除
     let previousContent = '';
     let previousFormat = '';
     // Gather current content before switching
@@ -800,11 +822,13 @@ function showGenerateReport(report) {
         }
     }
     container.innerHTML = '';
+    // #113: container非null参照をローカル変数で保持
+    const containerRef = container;
     const line = (label, value) => {
         const row = document.createElement('div');
         row.className = 'ce-generate-report__row';
         row.textContent = `${label}: ${value}`;
-        container.appendChild(row);
+        containerRef.appendChild(row);
     };
     line(i18n.t('report_success'), String(report.success));
     line(i18n.t('report_failed'), String(report.failed));
@@ -843,6 +867,143 @@ function initGenerateReport() {
             .finally(() => { btn.disabled = false; });
     });
 }
+// --- Sub-master credential download (Ver.2.9) ---
+function downloadCredentials(username, password, token) {
+    const content = `Adlaire Sub-Master Credentials\n` +
+        `================================\n` +
+        `Login ID: ${username}\n` +
+        `Password: ${password}\n` +
+        `Token: ${token}\n` +
+        `================================\n` +
+        `WARNING: This file is shown only once. Keep it safe.\n`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `adlaire-sub-master-${username}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+// --- User Management UI (Ver.2.9: マスター管理者対応) ---
+function initUserManagement() {
+    // Sub-master generation
+    const generateBtn = document.querySelector('#ce-generate-sub-master');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', () => {
+            if (generateBtn.disabled)
+                return;
+            generateBtn.disabled = true;
+            api.generateSubMaster().then(result => {
+                // Display credentials (shown only once, disappears on reload)
+                const credDisplay = document.createElement('div');
+                credDisplay.className = 'ce-sub-master-credentials';
+                credDisplay.innerHTML = `
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_id') || 'Login ID')}:</strong> ${escHtml(result.username)}</div>
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_password') || 'Password')}:</strong> ${escHtml(result.password)}</div>
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_token') || 'Token')}:</strong> ${escHtml(result.token)}</div>
+                    <div class="ce-sub-master-credentials__warn">${escHtml(i18n.t('sub_master_warn') || 'This information is shown only once. Please save it.')}</div>
+                `;
+                generateBtn.parentElement?.insertBefore(credDisplay, generateBtn.nextSibling);
+                // Auto-download credentials as text file
+                downloadCredentials(result.username, result.password, result.token);
+                // Refresh user list
+                refreshUserList();
+            }).catch((err) => {
+                alert(err instanceof Error ? err.message : String(err));
+            }).finally(() => {
+                generateBtn.disabled = false;
+            });
+        });
+    }
+    // Disable user buttons (event delegation)
+    const userListContainer = document.querySelector('#ce-user-list');
+    if (userListContainer) {
+        userListContainer.addEventListener('click', (e) => {
+            const target = e.target;
+            // Disable (deactivate) sub-master
+            if (target.classList.contains('ce-user-disable-btn')) {
+                const username = target.dataset.username;
+                if (!username)
+                    return;
+                if (!confirm(i18n.t('confirm_disable_user', { username: escHtml(username) }) || `Disable user "${username}"?`))
+                    return;
+                api.disableUser(username).then(() => {
+                    location.reload();
+                }).catch((err) => {
+                    alert(err instanceof Error ? err.message : String(err));
+                });
+            }
+            // Delete sub-master
+            if (target.classList.contains('ce-user-delete-btn')) {
+                const username = target.dataset.username;
+                if (!username)
+                    return;
+                if (!confirm(i18n.t('confirm_delete_user', { username: escHtml(username) }) || `Delete user "${username}"? This cannot be undone.`))
+                    return;
+                api.deleteUser(username).then(() => {
+                    location.reload();
+                }).catch((err) => {
+                    alert(err instanceof Error ? err.message : String(err));
+                });
+            }
+        });
+    }
+    // Main master password change form
+    const pwForm = document.querySelector('#ce-main-password-form');
+    if (pwForm) {
+        pwForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const currentPw = pwForm.querySelector('#ce-current-password')?.value || '';
+            const newPw = pwForm.querySelector('#ce-new-password')?.value || '';
+            const confirmPw = pwForm.querySelector('#ce-confirm-password')?.value || '';
+            if (!currentPw || !newPw || !confirmPw) {
+                alert(i18n.t('password_fields_required') || 'All password fields are required.');
+                return;
+            }
+            if (newPw !== confirmPw) {
+                alert(i18n.t('password_mismatch') || 'New password and confirmation do not match.');
+                return;
+            }
+            api.updateMainPassword(currentPw, newPw).then(() => {
+                alert(i18n.t('password_updated') || 'Password updated successfully.');
+                pwForm.reset();
+            }).catch((err) => {
+                alert(err instanceof Error ? err.message : String(err));
+            });
+        });
+    }
+    // Enforce 3-user limit: disable generate button when at capacity
+    refreshUserList();
+}
+function refreshUserList() {
+    const generateBtn = document.querySelector('#ce-generate-sub-master');
+    if (!generateBtn)
+        return;
+    api.listUsers().then(users => {
+        // 3-user limit: main master + 2 sub-masters = 3 total
+        const MAX_USERS = 3;
+        generateBtn.disabled = users.length >= MAX_USERS;
+        if (users.length >= MAX_USERS) {
+            generateBtn.title = i18n.t('sub_master_limit_reached') || 'Maximum number of users reached (3).';
+        }
+        else {
+            generateBtn.title = '';
+        }
+    }).catch(() => {
+        // Silently ignore list errors on refresh
+    });
+}
+// --- Login page: sub-master token field toggle (Ver.2.9) ---
+function initLoginSubMasterToggle() {
+    const checkbox = document.querySelector('#ce-login-sub-master');
+    const tokenField = document.querySelector('#ce-login-token-field');
+    if (!checkbox || !tokenField)
+        return;
+    tokenField.style.display = 'none';
+    checkbox.addEventListener('change', () => {
+        tokenField.style.display = checkbox.checked ? '' : 'none';
+    });
+}
 // --- Main initialization ---
 // #98: initEditInplace重複実行防止
 let _editInplaceInitialized = false;
@@ -862,6 +1023,8 @@ function initEditInplace() {
         initBulkActions();
         initRevisionDiff();
         initGenerateReport();
+        initUserManagement();
+        initLoginSubMasterToggle();
     };
     // #36: typeof i18nチェックをより堅牢に
     if (typeof i18n !== 'undefined' && i18n && typeof i18n.ready?.then === 'function') {

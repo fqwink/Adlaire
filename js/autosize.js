@@ -24,7 +24,10 @@ function autosize(textarea) {
     textarea.style.overflow = 'hidden';
     textarea.style.resize = 'none';
     const ac = new AbortController();
+    // #122: resize — DOM未接続時のリサイズをスキップ
     function resize() {
+        if (!textarea.isConnected)
+            return;
         textarea.style.overflowY = 'hidden';
         textarea.style.height = '0';
         const scrollHeight = textarea.scrollHeight + extra;

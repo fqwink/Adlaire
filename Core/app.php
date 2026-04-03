@@ -16,8 +16,8 @@ final class App
 {
     public const VERSION_MAJOR = 2;
     public const VERSION_MINOR = 9;
-    public const VERSION_BUILD = 42;
-    public const VERSION = 'Ver.2.9-42';
+    public const VERSION_BUILD = 43;
+    public const VERSION = 'Ver.2.9-43';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -181,11 +181,12 @@ final class App
 
     private function handleAuth(): void
     {
-        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > self::SESSION_TIMEOUT) {
-            session_regenerate_id(true);
+        if (isset($_SESSION['last_activity']) && is_int($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > self::SESSION_TIMEOUT) {
             $_SESSION = [];
+            session_regenerate_id(true);
             session_destroy();
             session_start();
+            return;
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
@@ -196,13 +197,21 @@ final class App
         if ($sessionUser !== '' && $sessionHash !== '') {
             $userData = $this->storage->getUser($sessionUser);
             if ($userData !== false && isset($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
-                $this->config['loggedin'] = true;
-                $this->config['current_user'] = $sessionUser;
-                $this->config['current_role'] = $_SESSION['role'] ?? 'master';
+                if (isset($userData['enabled']) && $userData['enabled'] === false) {
+                    session_regenerate_id(true);
+                    $_SESSION = [];
+                } else {
+                    $this->config['loggedin'] = true;
+                    $this->config['current_user'] = $sessionUser;
+                    $this->config['current_role'] = $_SESSION['role'] ?? 'master';
+                    $this->config['is_main'] = $_SESSION['is_main'] ?? ($userData['is_main'] ?? false);
+                }
             }
         }
 
         if (isset($_GET['logout'])) {
+            $_SESSION = [];
+            session_regenerate_id(true);
             session_destroy();
             header('Location: ./');
             exit;
@@ -222,6 +231,7 @@ final class App
             $csrf = csrf_token();
             $loginLabel = esc($this->t('login_submit'));
             $usernameLabel = esc($this->t('admin_username'));
+            $tokenLabel = esc($this->t('admin_token'));
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
@@ -230,8 +240,12 @@ final class App
                 <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
                 <label>{$usernameLabel}</label>
-                <input type='text' name='username' autocomplete='username'>
+                <input type='text' name='username' autocomplete='username' id='login-username'>
                 <input type='password' name='password' autocomplete='current-password'>
+                <div id='token-field' style='display:none;'>
+                <label>{$tokenLabel}</label>
+                <input type='password' name='token' autocomplete='off'>
+                </div>
                 <input type='submit' name='login' value='{$loginLabel}'> {$msg}
                 <p class='toggle'>{$changePwLabel}</p>
                 <div class='hide'>{$changePwHint}<br />
@@ -300,6 +314,7 @@ final class App
         $userData = [
             'password' => $passwordHash,
             'role' => 'master',
+            'is_main' => true,
             'created_at' => date('c'),
             'last_login' => '',
         ];
@@ -343,7 +358,7 @@ final class App
             $lang = 'ja';
         }
         $this->language = $lang;
-        $file = dirname(__DIR__) . '/data/lang/' . $lang . '.json';
+        $file = dirname(__DIR__) . '/data/lang/' . basename($lang) . '.json';
         if (!is_file($file)) {
             error_log('Adlaire: Language file not found: ' . $file);
             $this->translations = [];
@@ -398,7 +413,14 @@ final class App
     public static function getSlug(string $page): string
     {
         $slug = str_replace(' ', '-', $page);
-        return mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = (string) preg_replace('/[^a-zA-Z0-9_\-]/', '', $slug);
+        return $slug;
+    }
+
+    public function isMainMaster(): bool
+    {
+        return $this->isLoggedIn() && ($this->config['is_main'] ?? false) === true;
     }
 
     public function login(): string
@@ -423,13 +445,29 @@ final class App
             return $this->t('wrong_password');
         }
 
+        if (isset($userData['enabled']) && $userData['enabled'] === false) {
+            return $this->t('wrong_password');
+        }
+
         $stored = $userData['password'];
         if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
         }
 
+        $isMain = $userData['is_main'] ?? false;
+
+        if (!$isMain && isset($userData['token'])) {
+            $tokenInput = $_POST['token'] ?? '';
+            if ($tokenInput === '' || !password_verify($tokenInput, $userData['token'])) {
+                return $this->t('wrong_password');
+            }
+        }
+
         $newPass = $_POST['new'] ?? '';
         if ($newPass !== '') {
+            if (!$isMain) {
+                return $this->t('wrong_password');
+            }
             if (strlen($newPass) < self::MIN_PASSWORD_LENGTH) {
                 return $this->t('password_too_short');
             }
@@ -442,6 +480,7 @@ final class App
             $_SESSION['l'] = $newHash;
             $_SESSION['user'] = $username;
             $_SESSION['role'] = $userData['role'] ?? 'master';
+            $_SESSION['is_main'] = $isMain;
             return $this->t('password_changed');
         }
 
@@ -450,6 +489,7 @@ final class App
         $_SESSION['l'] = $stored;
         $_SESSION['user'] = $username;
         $_SESSION['role'] = $userData['role'] ?? 'master';
+        $_SESSION['is_main'] = $isMain;
         $_SESSION['last_activity'] = time();
         header('Location: ' . $this->host);
         exit;
@@ -467,8 +507,13 @@ final class App
         $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
-        foreach ($this->hooks['admin-head'] ?? [] as $tag) {
-            echo "\t" . esc($tag) . "\n";
+        $adminHeadHooks = $this->hooks['admin-head'] ?? [];
+        if (is_array($adminHeadHooks)) {
+            foreach ($adminHeadHooks as $tag) {
+                if (is_string($tag)) {
+                    echo "\t" . esc($tag) . "\n";
+                }
+            }
         }
     }
 
@@ -547,7 +592,8 @@ final class App
     public function menu(): void
     {
         if ($this->menuItems === null) {
-            $menu = str_replace("\r\n", "\n", $this->config['menu']);
+            $menuRaw = $this->config['menu'] ?? '';
+            $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
             $this->menuItems = explode("<br />\n", $menu);
         }
         $items = $this->menuItems;

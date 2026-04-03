@@ -25,8 +25,11 @@ function csrf_token(): string
 function csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!is_string($token)) {
+        return false;
+    }
     $session = $_SESSION['csrf'] ?? '';
-    if ($token === '' || $session === '' || !hash_equals($session, $token)) {
+    if (!is_string($session) || $token === '' || $session === '' || !hash_equals($session, $token)) {
         return false;
     }
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -67,7 +70,7 @@ function login_rate_check(): bool
         }
     }
 
-    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < LOGIN_WINDOW_SECONDS));
+    $attempts = array_values(array_filter($attempts, fn(mixed $t) => is_int($t) && ($now - $t) < LOGIN_WINDOW_SECONDS));
     $attemptCount = count($attempts);
 
     if ($attemptCount >= LOGIN_MAX_ATTEMPTS) {

@@ -18,13 +18,20 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.8-41**（2026-04-03）
+**Ver.2.9-43**（2026-04-03）
 
 ---
 
 ## 3. リリース履歴
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
+
+#### Ver.2.9 — マスター管理者アクセス権限 + 品質確定バグ修正（63件精査）
+
+マスター管理者ユーザーモデル導入（メインmaster 1名 + サブmaster 最大2名）。
+サブmaster認証情報自動生成（73文字hex、3要素認証）。
+品質確定バグ修正63件（PHP全ファイル精査）。
+詳細は §4.1 を参照。
 
 #### Ver.2.8 — バグ修正（300件精査・300件実装）
 
@@ -152,22 +159,84 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | カテゴリ | 改良点 | 状態 |
 |---|---------|--------|:----:|
-| M1 | 認証 | ユーザーモデル刷新: 単一管理者→マスター管理者（最大3名） | 計画 |
-| M2 | データ | data/system/users.json 新設（ユーザー名/bcryptハッシュ/role:master/作成日/最終ログイン） | 計画 |
-| M3 | マイグレーション | config.json:password → users.json 強制移行（単一管理者モード廃止） | 計画 |
-| M4 | 認証 | ログイン画面にユーザー名入力フィールド追加 | 計画 |
-| M5 | セッション | $_SESSION にユーザー名・ロール情報追加 | 計画 |
-| M6 | 管理UI | ユーザー管理画面（一覧/追加/削除/パスワード変更） | 計画 |
-| M7 | API | ?api=users エンドポイント（CRUD、master権限必須） | 計画 |
-| M8 | セキュリティ | users.json ファイル権限 0600 + 排他ロック + アトミック書き込み | 計画 |
-| M9 | bundle-installer | セットアップツールで初期マスター管理者ユーザー作成（users.json直接生成） | 計画 |
-| M10 | 管理UI | ログイン状態表示にユーザー名表示 | 計画 |
+| M1 | 認証 | ユーザーモデル刷新: 単一管理者→マスター管理者（最大3名） | **実装済** |
+| M2 | データ | data/system/users.json 新設（ユーザー名/bcryptハッシュ/role:master/is_main/作成日/最終ログイン） | **実装済** |
+| M3 | マイグレーション | config.json:password → users.json 強制移行（is_main=true付与） | **実装済** |
+| M4 | 認証 | ログイン画面にユーザー名+トークン入力フィールド追加 | **実装済** |
+| M5 | セッション | $_SESSION にユーザー名・ロール・is_main情報追加 | **実装済** |
+| M6 | 管理UI | ユーザー管理画面（サブmaster生成/無効化/削除/パスワード変更） | **実装済** |
+| M7 | API | ?api=users エンドポイント（generate/disable/password/delete、メインmaster認証必須） | **実装済** |
+| M8 | セキュリティ | users.json ファイル権限 0600 + 排他ロック + アトミック書き込み + symlink検出 | **実装済** |
+| M9 | bundle-installer | セットアップツールで初期マスター管理者ユーザー作成（is_main=true、users.json直接生成） | **実装済** |
+| M10 | 管理UI | ログイン状態表示にユーザー名表示 + ナビにUsersメニュー（メインmasterのみ） | **実装済** |
 
-#### 品質確定バグ修正
+#### 品質確定バグ修正（63件精査・63件実装）
 
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 30 | Ver.2.0 系全体の品質確定バグ修正（50件以上精査） | 計画 |
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 1 | エラーハンドリング | core.php | ensureDirectories() mkdir()戻り値未チェック | **実装済** |
+| 2 | セキュリティ | core.php | readPageData() lockedReadにrealPath未使用 | **実装済** |
+| 3 | エラーハンドリング | core.php | writeConfig() json_encode()がfalseを返す可能性 | **実装済** |
+| 4 | エラーハンドリング | core.php | writePage() json_encode()がfalseを返す可能性 | **実装済** |
+| 5 | エラーハンドリング | core.php | updatePageStatus() json_encode()がfalseを返す可能性 | **実装済** |
+| 6 | セキュリティ | core.php | deletePage() symlink検出なし | **実装済** |
+| 7 | セキュリティ | core.php | getRevisionData() symlink検出なし | **実装済** |
+| 8 | セキュリティ | core.php | restoreRevision() symlink検出なし | **実装済** |
+| 9 | データ整合性 | core.php | savePageOrder() slugバリデーションなし | **実装済** |
+| 10 | セキュリティ | core.php | listRevisions() ディレクトリsymlink検出なし | **実装済** |
+| 11 | セキュリティ | core.php | deleteUser() メインmaster削除防止なし | **実装済** |
+| 12 | セキュリティ | core.php | usersFileExists() symlink検出なし | **実装済** |
+| 13 | セキュリティ | core.php | readUsers() symlink検出なし | **実装済** |
+| 14 | セキュリティ | app.php | getSlug() 特殊文字除去不足 | **実装済** |
+| 15 | セッション | app.php | handleAuth() session timeout last_activity型チェック不足 | **実装済** |
+| 16 | セキュリティ | app.php | logout処理でセッション変数クリア不足 | **実装済** |
+| 17 | エラーハンドリング | core.php | readPageData() JSON parseエラーログ欠如 | **実装済** |
+| 18 | セキュリティ | app.php | login() サブmasterのenabled=false検出なし | **実装済** |
+| 19 | セキュリティ | app.php | login() サブmasterのトークン認証未実装 | **実装済** |
+| 20 | 型安全性 | app.php | editTags() hooks配列の型チェック不足 | **実装済** |
+| 21 | 型安全性 | app.php | menu() config['menu']の型チェック不足 | **実装済** |
+| 22 | セキュリティ | app.php | handleAuth() サブmaster enabled=false即ログアウト | **実装済** |
+| 23 | データ整合性 | api.php | handleApiSitemap() updated_at長さ検証なし | **実装済** |
+| 24 | セキュリティ | api.php | handleApiExport() session key除去追加 | **実装済** |
+| 25 | セキュリティ | api.php | handleApiVersion() install.lock symlink検出なし | **実装済** |
+| 26 | 型安全性 | api.php | apiRevisionDiff() blocks配列型チェック不足 | **実装済** |
+| 27 | セキュリティ | api.php | verifyApiAuth() disabled user検出なし | **実装済** |
+| 28 | セキュリティ | api.php | handleApiUsers() メインmaster認証必須化 | **実装済** |
+| 29 | セキュリティ | api.php | handleApiUsers() generate: サブmaster生成機能追加 | **実装済** |
+| 30 | セキュリティ | api.php | handleApiUsers() disable: サブmaster無効化機能追加 | **実装済** |
+| 31 | セキュリティ | api.php | handleApiUsers() password: メインmasterパスワード変更 | **実装済** |
+| 32 | セキュリティ | api.php | handleApiUsers() DELETE: メインmaster削除防止 | **実装済** |
+| 33 | 型安全性 | helpers.php | login_rate_check() attempts配列要素の型チェック不足 | **実装済** |
+| 34 | 型安全性 | helpers.php | csrf_verify() token/sessionの型チェック不足 | **実装済** |
+| 35 | 型安全性 | renderer.php | renderBlocksToHtml() list items配列型チェック不足 | **実装済** |
+| 36 | エラーハンドリング | generator.php | dist clean時getRealPath()がfalseを返す可能性 | **実装済** |
+| 37 | データ整合性 | generator.php | generatePageHtml() sidebar blocks未レンダリング | **実装済** |
+| 38 | エラーハンドリング | generator.php | cssDir mkdir()戻り値未チェック | **実装済** |
+| 39 | エラーハンドリング | generator.php | jsDst mkdir()戻り値未チェック | **実装済** |
+| 40 | エラーハンドリング | generator.php | langDst mkdir()戻り値未チェック | **実装済** |
+| 41 | セキュリティ | bundle-installer.php | admin_username空文字列時のバリデーション不備 | **実装済** |
+| 42 | データ整合性 | bundle-installer.php | ユーザー名最小長2文字制約追加 | **実装済** |
+| 43 | セキュリティ | bundle-installer.php | is_main=trueフラグ付与 | **実装済** |
+| 44 | セキュリティ | index.php | preview slug double decode簡素化 | **実装済** |
+| 45 | セキュリティ | admin-ui.php | VERSION file symlink検出なし | **実装済** |
+| 46 | セキュリティ | admin-ui.php | install.lock symlink検出なし | **実装済** |
+| 47 | 型安全性 | admin-ui.php | theme.json version nullチェック不備 | **実装済** |
+| 48 | ロジック | admin-ui.php | sortPagesByUpdated() 変数名$ta/$tbと$a/$bの不一致 | **実装済** |
+| 49 | セキュリティ | admin-ui.php | renderAdminUsers() メインmaster権限チェック追加 | **実装済** |
+| 50 | セキュリティ | admin-ui.php | renderAdminUsers() サブmaster生成UI追加 | **実装済** |
+| 51 | セキュリティ | admin-ui.php | renderAdminUsers() サブmaster無効化UI追加 | **実装済** |
+| 52 | セキュリティ | admin-ui.php | renderAdminUsers() メインmaster自己削除ボタン非表示 | **実装済** |
+| 53 | エラーハンドリング | core.php | removeConfigKey() json_encode失敗ログ | **実装済** |
+| 54 | コード品質 | core.php | atomicWrite() 冗長なumask()呼び出し除去 | **実装済** |
+| 55 | エラーハンドリング | core.php | atomicWrite() mkdir失敗時のエラーハンドリング | **実装済** |
+| 56 | セキュリティ | app.php | loadLanguage() basename()によるパストラバーサル防止 | **実装済** |
+| 57 | セキュリティ | admin-ui.php | Users navメインmasterのみ表示 | **実装済** |
+| 58 | データ整合性 | core.php | listUsers() is_main/enabled/created_by情報追加 | **実装済** |
+| 59 | セキュリティ | core.php | generateSubMasterCredentials() 73文字hex生成 | **実装済** |
+| 60 | セキュリティ | core.php | disableUser() メインmaster無効化防止 | **実装済** |
+| 61 | i18n | ja.json/en.json | サブmaster関連翻訳キー6件追加 | **実装済** |
+| 62 | セッション | app.php | login() is_mainセッション変数設定 | **実装済** |
+| 63 | セキュリティ | app.php | login() サブmasterパスワード変更禁止 | **実装済** |
 
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 

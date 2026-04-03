@@ -83,5 +83,11 @@
     "admin_cannot_delete_self": "自分自身を削除することはできません。",
     "admin_user_created": "ユーザーを作成しました。",
     "admin_user_deleted": "ユーザーを削除しました。",
-    "admin_last_login": "最終ログイン"
+    "admin_last_login": "最終ログイン",
+    "admin_generate_sub": "サブマスター生成",
+    "admin_sub_credentials": "サブマスター認証情報",
+    "admin_token": "トークン",
+    "admin_disable_user": "無効化",
+    "admin_download_credentials": "認証情報ダウンロード",
+    "admin_credentials_warning": "この認証情報は一度のみ表示されます。画面遷移・リロード後は二度と閲覧できません。"
 }

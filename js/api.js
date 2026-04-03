@@ -28,8 +28,10 @@ const api = {
     /**
      * List all pages (metadata only, no content).
      */
+    // #104: listPages — CSRF token更新追加
     async listPages() {
         const res = await fetch(buildApiUrl('pages'));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             throw new Error(`API error: ${res.status}`);
         }
@@ -39,8 +41,10 @@ const api = {
     /**
      * Get a single page with full content and metadata.
      */
+    // #105: getPage — CSRF token更新追加
     async getPage(slug) {
         const res = await fetch(buildApiUrl('pages', { slug }));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             throw new Error(`API error: ${res.status}`);
         }
@@ -119,6 +123,7 @@ const api = {
     /**
      * Restore a page from a specific revision.
      */
+    // #101: restoreRevision — res.json()失敗時のエラーハンドリング追加
     async restoreRevision(slug, timestamp) {
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
@@ -129,9 +134,14 @@ const api = {
             body: body.toString(),
         });
         updateCsrfFromResponse(res);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
         }
     },
     /**
@@ -150,16 +160,19 @@ const api = {
     /**
      * Export all site data as JSON.
      */
+    // #106: exportSite — CSRF token更新追加 + エラーメッセージ統一
     async exportSite() {
         const res = await fetch(buildApiUrl('export'));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
-            throw new Error('Export failed');
+            throw new Error(`API error: ${res.status}`);
         }
         return res.text();
     },
     /**
      * Import site data from JSON.
      */
+    // #102: importSite — !res.okチェックをjson.parse前に移動し安全化
     async importSite(data) {
         const res = await fetch(buildApiUrl('import'), {
             method: 'POST',
@@ -167,10 +180,16 @@ const api = {
             body: data,
         });
         updateCsrfFromResponse(res);
-        const json = await res.json();
         if (!res.ok) {
-            throw new Error(json.error);
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
         }
+        const json = await res.json();
         return json.imported;
     },
     async reorderPages(slugs) {
@@ -224,6 +243,7 @@ const api = {
             throw new Error(msg);
         }
     },
+    // #103: getRevisionDiff — 戻り値の型安全性チェック追加
     async getRevisionDiff(slug, t1, t2) {
         const res = await fetch(buildApiUrl('revisiondiff', { slug, t1, t2 }));
         if (!res.ok) {
@@ -235,7 +255,96 @@ const api = {
             catch { /* non-JSON response */ }
             throw new Error(msg);
         }
+        const json = await res.json();
+        return {
+            added: Array.isArray(json.added) ? json.added : [],
+            removed: Array.isArray(json.removed) ? json.removed : [],
+            changed: Array.isArray(json.changed) ? json.changed : [],
+        };
+    },
+    // --- User Management APIs (Ver.2.9: Master管理者対応) ---
+    async listUsers() {
+        const res = await fetch(buildApiUrl('users'));
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+        const json = await res.json();
+        return json.users ?? [];
+    },
+    async generateSubMaster() {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'generate_sub_master' }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
         return res.json();
+    },
+    async disableUser(username) {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'disable', username }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+    async deleteUser(username) {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ username }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
+    },
+    async updateMainPassword(currentPassword, newPassword) {
+        const res = await fetch(buildApiUrl('users'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ action: 'update_main_password', current_password: currentPassword, new_password: newPassword }),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) {
+            let msg = `API error: ${res.status}`;
+            try {
+                const json = await res.json();
+                msg = json.error || msg;
+            }
+            catch { /* non-JSON response */ }
+            throw new Error(msg);
+        }
     },
     async saveSidebar(blocks) {
         const body = new URLSearchParams();

@@ -49,11 +49,17 @@ function handleApiGenerate(FileStorage $storage): void
             foreach ($files as $file) {
                 $path = $file->getPathname();
                 if (is_link($path)) {
-                    unlink($path);
+                    @unlink($path);
                 } elseif ($file->isDir()) {
-                    rmdir($file->getRealPath());
+                    $realPath = $file->getRealPath();
+                    if ($realPath !== false) {
+                        @rmdir($realPath);
+                    }
                 } else {
-                    unlink($file->getRealPath());
+                    $realPath = $file->getRealPath();
+                    if ($realPath !== false) {
+                        @unlink($realPath);
+                    }
                 }
             }
         }
@@ -77,7 +83,9 @@ function handleApiGenerate(FileStorage $storage): void
     // Copy theme CSS (prefer minimal.css for static output)
     $cssDir = $distDir . '/themes/' . $theme;
     if (!is_dir($cssDir)) {
-        mkdir($cssDir, 0755, true);
+        if (!@mkdir($cssDir, 0755, true) && !is_dir($cssDir)) {
+            error_log('Adlaire: Failed to create theme CSS directory: ' . $cssDir);
+        }
     }
     $cssSource = is_file($themePath . '/minimal.css') ? '/minimal.css' : '/style.css';
     if (is_file($themePath . $cssSource)) {
@@ -92,7 +100,9 @@ function handleApiGenerate(FileStorage $storage): void
     $publicJs = ['markdown.js', 'editInplace.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
-            mkdir($jsDst, 0755, true);
+            if (!@mkdir($jsDst, 0755, true) && !is_dir($jsDst)) {
+                error_log('Adlaire: Failed to create JS directory: ' . $jsDst);
+            }
         }
         foreach ($publicJs as $jsName) {
             $jsPath = $jsSrc . '/' . $jsName;
@@ -109,7 +119,9 @@ function handleApiGenerate(FileStorage $storage): void
     $langDst = $distDir . '/data/lang';
     if (is_dir($langSrc)) {
         if (!is_dir($langDst)) {
-            mkdir($langDst, 0755, true);
+            if (!@mkdir($langDst, 0755, true) && !is_dir($langDst)) {
+                error_log('Adlaire: Failed to create lang directory: ' . $langDst);
+            }
         }
         $langFiles = glob($langSrc . '/*.json');
         if (is_array($langFiles)) {
@@ -242,7 +254,13 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     }
     $menuHtml .= '</ul>';
 
-    $sideContent = esc((string) ($c['subside'] ?? ''));
+    $sidebarBlocks = $app->getSidebarBlocks();
+    $sideContent = '';
+    if ($sidebarBlocks !== []) {
+        $sideContent = renderBlocksToHtml($sidebarBlocks);
+    } else {
+        $sideContent = esc((string) ($c['subside'] ?? ''));
+    }
 
     return <<<HTML
     <!doctype html>

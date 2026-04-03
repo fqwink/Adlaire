@@ -30,7 +30,7 @@ function renderBlocksToHtml(array $blocks): string
         $html .= match ($block['type'] ?? '') {
             'paragraph' => '<p>' . esc((string) ($d['text'] ?? '')) . '</p>',
             'heading'   => (function() use ($d) { $l = max(1, min(3, (int) ($d['level'] ?? 2))); return "<h{$l}>" . esc((string) ($d['text'] ?? '')) . "</h{$l}>"; })(),
-            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . esc((string) $i) . '</li>', $d['items'] ?? [])) . "</{$t}>"; })(),
+            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; $items = is_array($d['items'] ?? null) ? $d['items'] : []; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . esc((string) $i) . '</li>', $items)) . "</{$t}>"; })(),
             'code'      => '<pre><code>' . esc((string) ($d['code'] ?? '')) . '</code></pre>',
             'quote'     => '<blockquote>' . esc((string) ($d['text'] ?? '')) . '</blockquote>',
             'delimiter' => '<hr>',

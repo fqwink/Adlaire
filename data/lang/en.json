@@ -83,5 +83,11 @@
     "admin_cannot_delete_self": "You cannot delete yourself.",
     "admin_user_created": "User created.",
     "admin_user_deleted": "User deleted.",
-    "admin_last_login": "Last Login"
+    "admin_last_login": "Last Login",
+    "admin_generate_sub": "Generate Sub-Master",
+    "admin_sub_credentials": "Sub-Master Credentials",
+    "admin_token": "Token",
+    "admin_disable_user": "Disable",
+    "admin_download_credentials": "Download Credentials",
+    "admin_credentials_warning": "These credentials are shown once only. They cannot be viewed again after navigation or reload."
 }
