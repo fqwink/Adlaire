@@ -16,15 +16,16 @@ declare(strict_types=1);
 
 function handleEdit(): void
 {
-    $fieldname = $_REQUEST['fieldname'] ?? null;
-    $content = $_REQUEST['content'] ?? null;
+    $fieldname = $_POST['fieldname'] ?? null;
+    $content = $_POST['content'] ?? null;
 
     if ($fieldname === null || $content === null) {
         return;
     }
 
     $fieldname = basename($fieldname);
-    if (!FileStorage::validateSlug($fieldname)) {
+    $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'content', 'status', 'format', 'blocks'];
+    if (!in_array($fieldname, $allowedConfigFields, true) && !FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
         exit;
     }
@@ -108,10 +109,6 @@ function handleApi(): void
             header('Access-Control-Allow-Origin: ' . $origin);
         }
     }
-    $apiCsrf = $_SESSION['csrf'] ?? '';
-    if ($apiCsrf !== '') {
-        header('X-CSRF-Token: ' . $apiCsrf);
-    }
 
     // Public endpoints (no authentication)
     if ($endpoint === 'search') {
@@ -130,6 +127,11 @@ function handleApi(): void
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
+    }
+
+    $apiCsrf = $_SESSION['csrf'] ?? '';
+    if ($apiCsrf !== '') {
+        header('X-CSRF-Token: ' . $apiCsrf);
     }
 
     match ($endpoint) {
@@ -594,13 +596,29 @@ function handleApiImport(FileStorage $storage): void
                 mkdir($revDir, 0755, true);
             }
             foreach ($revisions as $ts => $revData) {
-                if (!is_array($revData)) {
+                if (!is_string($ts) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $ts)) {
+                    continue;
+                }
+                if (!is_array($revData) || !isset($revData['content'])) {
                     continue;
                 }
                 $revFile = $revDir . '/' . $ts . '.json';
                 if (!file_exists($revFile)) {
-                    file_put_contents($revFile, json_encode($revData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
-                    $revCount++;
+                    $revJson = json_encode($revData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+                    if ($revJson === false) {
+                        continue;
+                    }
+                    $tmpRev = tempnam(dirname($revFile), '.tmp_');
+                    if ($tmpRev !== false && file_put_contents($tmpRev, $revJson, LOCK_EX) !== false) {
+                        chmod($tmpRev, 0600);
+                        if (rename($tmpRev, $revFile)) {
+                            $revCount++;
+                        } else {
+                            @unlink($tmpRev);
+                        }
+                    } elseif ($tmpRev !== false) {
+                        @unlink($tmpRev);
+                    }
                 }
             }
         }

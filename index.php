@@ -72,8 +72,11 @@ if (isset($_GET['preview'])) {
         header('Location: ?login');
         exit;
     }
-    if (is_string($previewSlug) && $previewSlug !== rawurldecode($previewSlug)) {
-        $previewSlug = rawurldecode($previewSlug);
+    if (is_string($previewSlug)) {
+        $decoded = rawurldecode($previewSlug);
+        if ($decoded === $previewSlug || rawurldecode($decoded) === $decoded) {
+            $previewSlug = $decoded;
+        }
     }
     if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
         $previewData = $app->storage->readPageData($previewSlug);
@@ -92,8 +95,8 @@ if (isset($_GET['preview'])) {
 // --- Public page rendering ---
 $theme = basename($app->config['themeSelect']);
 $themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
-$realThemePath = is_file($themePath) ? realpath($themePath) : false;
 $themesBase = realpath(__DIR__ . '/themes');
+$realThemePath = ($themesBase !== false && is_file($themePath)) ? realpath($themePath) : false;
 if ($realThemePath === false || $themesBase === false || !str_starts_with($realThemePath, $themesBase . DIRECTORY_SEPARATOR)) {
     $theme = 'AP-Default';
     $themePath = __DIR__ . '/themes/' . $theme . '/theme.php';
@@ -106,3 +109,4 @@ if ($realThemePath === false || !is_file($realThemePath)) {
 require $realThemePath;
 
 ob_end_flush();
+exit;

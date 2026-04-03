@@ -67,8 +67,8 @@ final class App
 
     private function parseHost(): array
     {
-        $rpRaw = isset($_REQUEST['page'])
-            ? preg_replace('#/+#', '/', urldecode($_REQUEST['page']))
+        $rpRaw = isset($_GET['page'])
+            ? preg_replace('#/+#', '/', urldecode($_GET['page']))
             : '';
         $rp = is_string($rpRaw) ? $rpRaw : '';
 
@@ -192,13 +192,13 @@ final class App
             $this->config['loggedin'] = true;
         }
 
-        if (isset($_REQUEST['logout'])) {
+        if (isset($_GET['logout'])) {
             session_destroy();
             header('Location: ./');
             exit;
         }
 
-        if (isset($_REQUEST['login'])) {
+        if (isset($_GET['login']) || isset($_POST['login'])) {
             if ($this->isLoggedIn()) {
                 header('Location: ./');
                 exit;
@@ -240,7 +240,7 @@ final class App
         $this->config['pageFormat'] = 'blocks';
         $this->config['pageStatus'] = 'published';
 
-        if (isset($_REQUEST['login'])) {
+        if (isset($_GET['login']) || isset($_POST['login'])) {
             return;
         }
 

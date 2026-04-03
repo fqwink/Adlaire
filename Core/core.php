@@ -251,7 +251,12 @@ final class FileStorage
             return false;
         }
         $path = $this->pagesDir . '/' . $slug . '.json';
-        if (!file_exists($path)) {
+        if (!file_exists($path) || is_link($path)) {
+            return false;
+        }
+        $realPath = realpath($path);
+        $realPagesDir = realpath($this->pagesDir);
+        if ($realPath === false || $realPagesDir === false || !str_starts_with($realPath, $realPagesDir . DIRECTORY_SEPARATOR)) {
             return false;
         }
         $json = $this->lockedRead($path);
@@ -323,7 +328,8 @@ final class FileStorage
 
         $backupPath = $this->backupsDir . '/page_' . $slug . '.' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
         if (!copy($path, $backupPath)) {
-            error_log('Adlaire: Failed to copy page backup: ' . $slug);
+            error_log('Adlaire: Failed to copy page backup, aborting delete: ' . $slug);
+            return false;
         }
 
         if (!@unlink($path)) {
@@ -494,8 +500,9 @@ final class FileStorage
         }
 
         $oldUmask = umask(0);
-        if (!chmod($tmp, 0644)) {
+        if (!chmod($tmp, 0600)) {
             umask($oldUmask);
+            error_log('Adlaire: chmod failed for temp file: ' . $tmp);
             @unlink($tmp);
             return false;
         }

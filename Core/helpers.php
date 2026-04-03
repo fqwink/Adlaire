@@ -81,7 +81,14 @@ function login_rate_check(): bool
     if ($fp !== false) {
         flock($fp, LOCK_EX);
         ftruncate($fp, 0);
-        fwrite($fp, json_encode($attempts));
+        rewind($fp);
+        $encoded = json_encode($attempts);
+        if ($encoded === false || fwrite($fp, $encoded) === false) {
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, '[]');
+        }
+        fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
         @chmod($rateFile, 0600);

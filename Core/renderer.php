@@ -28,7 +28,7 @@ function renderBlocksToHtml(array $blocks): string
             'code'      => '<pre><code>' . esc((string) ($d['code'] ?? '')) . '</code></pre>',
             'quote'     => '<blockquote>' . esc((string) ($d['text'] ?? '')) . '</blockquote>',
             'delimiter' => '<hr>',
-            'image'     => (function() use ($d) { $url = (string) ($d['url'] ?? ''); if ($url === '' || !preg_match('#^(?:https?://|/[^/]|[a-zA-Z0-9_./-])#i', $url) || preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $url)) { $url = ''; } return '<figure><img src="' . esc($url) . '" alt="">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . esc((string) $d['caption']) . '</figcaption>' : '') . '</figure>'; })(),
+            'image'     => (function() use ($d) { $url = (string) ($d['url'] ?? ''); $decoded = html_entity_decode($url, ENT_QUOTES, 'UTF-8'); $lower = strtolower(trim($decoded)); if ($url === '' || !preg_match('#^(?:https?://[^\s<>"]+|/[a-zA-Z0-9_./-][^\s<>"]*|[a-zA-Z0-9_./-][^\s<>"]*)$#', $url) || preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $lower)) { $url = ''; } return '<figure><img src="' . esc($url) . '" alt="' . esc((string) ($d['caption'] ?? '')) . '">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . esc((string) $d['caption']) . '</figcaption>' : '') . '</figure>'; })(),
             default     => '',
         };
         $html .= "\n";
@@ -59,12 +59,16 @@ function renderMarkdownToHtml(string $md): string
     $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html) ?? $html;
     $html = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function ($m) {
         $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
-        if (preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $url)) { return esc($m[0]); }
-        return '<img src="' . esc($url) . '" alt="' . $m[1] . '">';
+        $urlDouble = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
+        $lower = strtolower(trim($urlDouble));
+        if (preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $lower)) { return esc($m[0]); }
+        return '<img src="' . esc($url) . '" alt="' . esc($m[1]) . '">';
     }, $html) ?? $html;
     $html = preg_replace_callback('/\[([^\]]+)\]\(([^)]+)\)/', function ($m) {
         $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
-        if (preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $url)) { return esc($m[0]); }
+        $urlDouble = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
+        $lower = strtolower(trim($urlDouble));
+        if (preg_match('/^\s*(javascript|vbscript|data)\s*:/i', $lower)) { return esc($m[0]); }
         return '<a href="' . esc($url) . '">' . $m[1] . '</a>';
     }, $html) ?? $html;
     $html = preg_replace('/^\- (.+)$/m', '<li>$1</li>', $html) ?? $html;

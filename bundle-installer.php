@@ -139,7 +139,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
         }
     }
 
-    // Save config
+    // Save config via temp file to prevent partial state
     $config = [
         'title' => $siteName,
         'language' => $locale,
@@ -152,8 +152,19 @@ function install_execute(string $siteName, string $locale, string $password): ar
         'copyright' => '&copy;' . date('Y') . ' ' . $siteName,
     ];
 
-    $result = $storage->writeConfig($config);
-    if (!$result) {
+    $configJson = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($configJson === false) {
+        return ['ok' => false, 'message' => 'Failed to encode config JSON'];
+    }
+    $configPath = __DIR__ . '/data/config.json';
+    $tmpConfig = tempnam(dirname($configPath), '.tmp_');
+    if ($tmpConfig === false || file_put_contents($tmpConfig, $configJson, LOCK_EX) === false) {
+        if ($tmpConfig !== false) { @unlink($tmpConfig); }
+        return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
+    }
+    chmod($tmpConfig, 0600);
+    if (!rename($tmpConfig, $configPath)) {
+        @unlink($tmpConfig);
         return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
     }
 
@@ -171,15 +182,14 @@ function install_execute(string $siteName, string $locale, string $password): ar
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
     }
-    $lockResult = file_put_contents(
-        __DIR__ . '/data/system/install.lock',
-        $lockJson
-    );
+    $lockPath = __DIR__ . '/data/system/install.lock';
+    $lockResult = file_put_contents($lockPath, $lockJson);
 
     if ($lockResult === false) {
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
+    chmod($lockPath, 0600);
 
     return ['ok' => true, 'message' => 'Installation completed successfully'];
 }
