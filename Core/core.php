@@ -31,7 +31,7 @@ final class FileStorage
     private const CONFIG_KEYS = [
         'password', 'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
-        'language',
+        'language', 'page_order', 'sidebar_blocks',
     ];
 
     /** Maximum number of config backup generations to retain */
@@ -590,5 +590,75 @@ final class FileStorage
         $blocks = $data['blocks'] ?? null;
         $status = $data['status'] ?? 'published';
         return $this->writePage($slug, $data['content'], $format, $blocks, $status);
+    }
+
+    public function getPageOrder(): array
+    {
+        $config = $this->readConfig();
+        $raw = $config['page_order'] ?? '';
+        if ($raw === '') {
+            return [];
+        }
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
+
+    public function savePageOrder(array $slugs): bool
+    {
+        return $this->writeConfigValue('page_order', json_encode($slugs, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function listAllRevisions(): array
+    {
+        $result = [];
+        if (!is_dir($this->revisionsDir)) {
+            return $result;
+        }
+        $dirs = glob($this->revisionsDir . '/*', GLOB_ONLYDIR);
+        if (!is_array($dirs)) {
+            return $result;
+        }
+        foreach ($dirs as $dir) {
+            $slug = basename($dir);
+            if (!self::validateSlug($slug)) {
+                continue;
+            }
+            $files = glob($dir . '/*.json');
+            if (!is_array($files)) {
+                continue;
+            }
+            rsort($files);
+            $revs = [];
+            foreach ($files as $file) {
+                $revs[] = ['timestamp' => basename($file, '.json')];
+            }
+            if ($revs !== []) {
+                $result[$slug] = $revs;
+            }
+        }
+        return $result;
+    }
+
+    public function getRevisionData(string $slug, string $timestamp): array|false
+    {
+        if (!self::validateSlug($slug)) {
+            return false;
+        }
+        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
+            return false;
+        }
+        $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
+        if (!file_exists($revFile)) {
+            return false;
+        }
+        $json = $this->lockedRead($revFile);
+        if ($json === false) {
+            return false;
+        }
+        $data = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            return false;
+        }
+        return $data;
     }
 }

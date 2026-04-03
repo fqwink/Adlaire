@@ -47,8 +47,11 @@ handleEdit();
 
 $app = App::getInstance();
 
+$nonce = bin2hex(random_bytes(16));
+$app->nonce = $nonce;
+
 // --- Security headers ---
-header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -56,10 +59,31 @@ if (isset($_GET['admin'])) {
         header('Location: ?login');
         exit;
     }
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
     require __DIR__ . '/Core/admin-ui.php';
     ob_end_flush();
     exit;
+}
+
+// --- Preview routing ---
+if (isset($_GET['preview'])) {
+    $previewSlug = $_GET['preview'];
+    if (!$app->isLoggedIn()) {
+        header('Location: ?login');
+        exit;
+    }
+    if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
+        $previewData = $app->storage->readPageData($previewSlug);
+        if ($previewData !== false) {
+            $app->config['page'] = $previewSlug;
+            $app->config['content'] = $previewData['content'];
+            $app->config['pageFormat'] = $previewData['format'] ?? 'blocks';
+            $app->config['pageStatus'] = $previewData['status'] ?? 'published';
+            if (isset($previewData['blocks'])) {
+                $app->config['pageBlocks'] = $previewData['blocks'];
+            }
+        }
+    }
 }
 
 // --- Public page rendering ---

@@ -32,6 +32,7 @@ final class App
     public readonly string $requestPage;
     public string $credit;
     public readonly string $language;
+    public string $nonce = '';
 
     public readonly FileStorage $storage;
 
@@ -385,11 +386,43 @@ final class App
         $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
         $safeLang = json_encode($this->language, JSON_HEX_TAG | JSON_HEX_AMP);
         $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', JSON_HEX_TAG | JSON_HEX_AMP);
-        echo "\t<script>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
-        echo "\t<script>i18n.init({$safeLang});</script>\n";
+        $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
+        echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
+        echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
         foreach ($this->hooks['admin-head'] ?? [] as $tag) {
             echo "\t" . esc($tag) . "\n";
         }
+    }
+
+    public function loadThemeJson(string $themeName): array
+    {
+        $path = dirname(__DIR__) . '/themes/' . basename($themeName) . '/theme.json';
+        if (is_file($path)) {
+            $json = file_get_contents($path);
+            if ($json !== false) {
+                $data = json_decode($json, true);
+                if (is_array($data)) {
+                    return $data;
+                }
+            }
+        }
+        return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
+    }
+
+    public function getSidebarBlocks(): array
+    {
+        $config = $this->storage->readConfig();
+        $raw = $config['sidebar_blocks'] ?? '';
+        if ($raw === '') {
+            return [];
+        }
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
+    }
+
+    public function saveSidebarBlocks(array $blocks): bool
+    {
+        return $this->storage->writeConfigValue('sidebar_blocks', json_encode($blocks, JSON_UNESCAPED_UNICODE));
     }
 
     public function scriptTags(bool $adminMode = false): void

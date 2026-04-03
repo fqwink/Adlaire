@@ -63,14 +63,19 @@ function handleApiGenerate(FileStorage $storage): void
     $theme = basename($app->config['themeSelect']);
     $themePath = dirname(__DIR__) . '/themes/' . $theme;
     $count = 0;
+    $skipped = 0;
+    $failed = 0;
+    $details = [];
+    $startTime = hrtime(true);
 
-    // Copy theme CSS
+    // Copy theme CSS (prefer minimal.css for static output)
     $cssDir = $distDir . '/themes/' . $theme;
     if (!is_dir($cssDir)) {
         mkdir($cssDir, 0755, true);
     }
-    if (is_file($themePath . '/style.css')) {
-        if (!copy($themePath . '/style.css', $cssDir . '/style.css')) {
+    $cssSource = is_file($themePath . '/minimal.css') ? '/minimal.css' : '/style.css';
+    if (is_file($themePath . $cssSource)) {
+        if (!copy($themePath . $cssSource, $cssDir . '/style.css')) {
             error_log('Adlaire: Failed to copy theme CSS');
         }
     }
@@ -114,13 +119,14 @@ function handleApiGenerate(FileStorage $storage): void
         $updatedTime = strtotime($data['updated_at'] ?? '');
         $buildTime = strtotime($lastBuildTime);
         if ($lastBuildTime !== '' && $updatedTime !== false && $buildTime !== false && $updatedTime <= $buildTime) {
-            continue; // Skip unchanged pages in diff build
+            $skipped++;
+            $details[] = ['slug' => $slug, 'result' => 'skipped'];
+            continue;
         }
         $format = $data['format'] ?? 'blocks';
         $contentHtml = '';
 
         if ($format === 'blocks' && isset($data['blocks'])) {
-            // Server-side block rendering
             $contentHtml = renderBlocksToHtml($data['blocks']);
         } elseif ($format === 'markdown') {
             $contentHtml = renderMarkdownToHtml($data['content']);
@@ -130,11 +136,10 @@ function handleApiGenerate(FileStorage $storage): void
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
 
-        // Write to dist
+        $writeFailed = false;
         if ($slug === 'home') {
             if (file_put_contents($distDir . '/index.html', $pageHtml) === false) {
-                apiError(500, 'Failed to write index.html');
-                return;
+                $writeFailed = true;
             }
         }
         $pageDir = $distDir . '/' . $slug;
@@ -142,10 +147,16 @@ function handleApiGenerate(FileStorage $storage): void
             mkdir($pageDir, 0755, true);
         }
         if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
-            apiError(500, 'Failed to write ' . $slug . '/index.html');
-            return;
+            $writeFailed = true;
         }
-        $count++;
+
+        if ($writeFailed) {
+            $failed++;
+            $details[] = ['slug' => $slug, 'result' => 'failed'];
+        } else {
+            $count++;
+            $details[] = ['slug' => $slug, 'result' => 'generated'];
+        }
     }
 
     // Generate sitemap.xml
@@ -175,7 +186,20 @@ function handleApiGenerate(FileStorage $storage): void
         return;
     }
 
-    echo json_encode(['status' => 'ok', 'pages' => $count, 'output' => 'dist/']);
+    $buildTimeMs = (int) ((hrtime(true) - $startTime) / 1_000_000);
+    $pagesTotal = count($pages);
+
+    echo json_encode([
+        'status' => 'ok',
+        'pages' => $count,
+        'output' => 'dist/',
+        'pages_total' => $pagesTotal,
+        'pages_generated' => $count,
+        'pages_skipped' => $skipped,
+        'pages_failed' => $failed,
+        'build_time_ms' => $buildTimeMs,
+        'details' => $details,
+    ]);
 }
 
 /**

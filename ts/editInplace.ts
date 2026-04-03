@@ -182,8 +182,11 @@ function initBlockEditor(): void {
 
             lastSavedJson = json;
             showSaveIndicator(wrapper, 'saving');
-            api.savePage(slug, json, 'blocks').then(() => {
+            api.savePage(slug, json, 'blocks').then((result) => {
                 showSaveIndicator(wrapper, 'saved');
+                if (result.warnings && result.warnings.length > 0) {
+                    showWarnings(result.warnings);
+                }
             }).catch(() => {
                 showSaveIndicator(wrapper, 'error');
             });
@@ -205,6 +208,59 @@ function initBlockEditor(): void {
             flushSave();
         });
     });
+
+    // #18: Sidebar editor
+    const sidebarEl = document.querySelector<HTMLElement>('#sidebar-editor');
+    if (sidebarEl) {
+        let sidebarBlocksRaw = sidebarEl.dataset.blocks || '';
+        const sidebarB64 = sidebarEl.dataset.blocksB64;
+        if (sidebarB64) {
+            try { sidebarBlocksRaw = atob(sidebarB64); } catch { /* empty */ }
+        }
+        let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
+        if (sidebarBlocksRaw) {
+            try { sidebarBlocks = JSON.parse(sidebarBlocksRaw); } catch { /* empty */ }
+        }
+
+        const sidebarData: EditorData = {
+            time: Date.now(),
+            version: '1.0',
+            blocks: sidebarBlocks.length > 0 ? sidebarBlocks : [{ type: 'paragraph', data: { text: '' } }],
+        };
+
+        const sidebarEditor = Editor.create(sidebarEl, { data: sidebarData });
+
+        let sidebarSaveTimer: ReturnType<typeof setTimeout> | null = null;
+        let sidebarLastJson = '';
+
+        const flushSidebarSave = (): void => {
+            const saved = sidebarEditor.save();
+            const json = JSON.stringify(saved.blocks);
+            if (json === sidebarLastJson) return;
+            sidebarLastJson = json;
+            showSaveIndicator(sidebarEl, 'saving');
+            api.saveSidebar(json).then(() => {
+                showSaveIndicator(sidebarEl, 'saved');
+            }).catch(() => {
+                showSaveIndicator(sidebarEl, 'error');
+            });
+        };
+
+        sidebarEl.addEventListener('focusout', (e) => {
+            const related = (e as FocusEvent).relatedTarget as Node | null;
+            if (related && sidebarEl.contains(related)) return;
+            if (sidebarSaveTimer) clearTimeout(sidebarSaveTimer);
+            sidebarSaveTimer = setTimeout(flushSidebarSave, 300);
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (sidebarSaveTimer) {
+                clearTimeout(sidebarSaveTimer);
+                sidebarSaveTimer = null;
+            }
+            flushSidebarSave();
+        });
+    }
 }
 
 // --- Save indicator ---
@@ -310,6 +366,291 @@ function switchFormat(slug: string, newFormat: string): void {
     }
 }
 
+// --- Page reorder D&D (#16) ---
+
+function initPageReorder(): void {
+    const table = document.querySelector<HTMLTableElement>('.ce-page-list');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    let dragRow: HTMLTableRowElement | null = null;
+
+    tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
+        const handle = document.createElement('td');
+        handle.className = 'ce-drag-handle';
+        handle.textContent = '\u2630';
+        handle.draggable = true;
+        row.insertBefore(handle, row.firstChild);
+
+        handle.addEventListener('dragstart', (e) => {
+            dragRow = row;
+            row.classList.add('ce-row--dragging');
+            e.dataTransfer!.effectAllowed = 'move';
+        });
+
+        handle.addEventListener('dragend', () => {
+            row.classList.remove('ce-row--dragging');
+            tbody.querySelectorAll('.ce-row--dragover').forEach(el =>
+                el.classList.remove('ce-row--dragover')
+            );
+            dragRow = null;
+        });
+
+        row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer!.dropEffect = 'move';
+            row.classList.add('ce-row--dragover');
+        });
+
+        row.addEventListener('dragleave', () => {
+            row.classList.remove('ce-row--dragover');
+        });
+
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            row.classList.remove('ce-row--dragover');
+            if (!dragRow || dragRow === row) return;
+            tbody.insertBefore(dragRow, row.nextSibling);
+            const slugs: string[] = [];
+            tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(r => {
+                const slug = r.dataset.slug;
+                if (slug) slugs.push(slug);
+            });
+            api.reorderPages(slugs).catch(() => { location.reload(); });
+        });
+    });
+
+    const headerRow = table.querySelector('thead tr');
+    if (headerRow) {
+        const th = document.createElement('th');
+        th.className = 'ce-drag-handle-header';
+        headerRow.insertBefore(th, headerRow.firstChild);
+    }
+}
+
+// --- Page search/filter (#A) ---
+
+function initPageSearch(): void {
+    const input = document.querySelector<HTMLInputElement>('#page-search');
+    if (!input) return;
+
+    const table = document.querySelector<HTMLTableElement>('.ce-page-list');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    input.addEventListener('input', () => {
+        const query = input.value.toLowerCase();
+        tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
+            const text = row.textContent?.toLowerCase() || '';
+            row.style.display = text.includes(query) ? '' : 'none';
+        });
+    });
+}
+
+// --- Bulk actions (#D) ---
+
+function initBulkActions(): void {
+    const selectAll = document.querySelector<HTMLInputElement>('#ce-bulk-select-all');
+    if (!selectAll) return;
+
+    const table = document.querySelector<HTMLTableElement>('.ce-page-list');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    selectAll.addEventListener('change', () => {
+        tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check').forEach(cb => {
+            cb.checked = selectAll.checked;
+        });
+    });
+
+    tbody.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
+        if (!target.classList.contains('ce-bulk-check')) return;
+        const all = tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check');
+        let allChecked = true;
+        all.forEach(cb => { if (!cb.checked) allChecked = false; });
+        selectAll.checked = allChecked;
+    });
+
+    const getSelectedSlugs = (): string[] => {
+        const slugs: string[] = [];
+        tbody.querySelectorAll<HTMLInputElement>('.ce-bulk-check:checked').forEach(cb => {
+            const row = cb.closest('tr');
+            if (row?.dataset.slug) slugs.push(row.dataset.slug);
+        });
+        return slugs;
+    };
+
+    const statusBtn = document.querySelector<HTMLButtonElement>('#ce-bulk-status');
+    if (statusBtn) {
+        statusBtn.addEventListener('click', () => {
+            const slugs = getSelectedSlugs();
+            if (slugs.length === 0) return;
+            const statusSelect = document.querySelector<HTMLSelectElement>('#ce-bulk-status-select');
+            const status = statusSelect?.value;
+            if (!status) return;
+            api.bulkStatus(slugs, status).then(() => { location.reload(); }).catch(() => {
+                alert(i18n.t('bulk_status_error'));
+            });
+        });
+    }
+
+    const deleteBtn = document.querySelector<HTMLButtonElement>('#ce-bulk-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            const slugs = getSelectedSlugs();
+            if (slugs.length === 0) return;
+            if (!confirm(i18n.t('confirm_bulk_delete', { count: String(slugs.length) }))) return;
+            api.bulkDelete(slugs).then(() => { location.reload(); }).catch(() => {
+                alert(i18n.t('bulk_delete_error'));
+            });
+        });
+    }
+}
+
+// --- Publish warnings (#B) ---
+
+function showWarnings(warnings: string[]): void {
+    let container = document.querySelector<HTMLElement>('.ce-warnings');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'ce-warnings';
+        const editor = document.querySelector('.ce-editor-wrapper');
+        if (editor?.parentElement) {
+            editor.parentElement.insertBefore(container, editor);
+        } else {
+            document.body.prepend(container);
+        }
+    }
+    container.innerHTML = '';
+    warnings.forEach(msg => {
+        const item = document.createElement('div');
+        item.className = 'ce-warnings__item';
+        item.textContent = msg;
+        container!.appendChild(item);
+    });
+    setTimeout(() => { container!.innerHTML = ''; }, 8000);
+}
+
+// --- Revision diff (#C) ---
+
+function initRevisionDiff(): void {
+    const list = document.querySelector<HTMLElement>('.ce-revision-list');
+    if (!list) return;
+
+    const slug = list.dataset.slug;
+    if (!slug) return;
+
+    const items = list.querySelectorAll<HTMLElement>('.ce-revision-item');
+    items.forEach((item, idx) => {
+        if (idx >= items.length - 1) return;
+        const btn = document.createElement('button');
+        btn.className = 'ce-btn ce-btn--diff';
+        btn.textContent = i18n.t('show_diff');
+        btn.addEventListener('click', () => {
+            const t2 = item.dataset.timestamp || '';
+            const t1 = items[idx + 1]?.dataset.timestamp || '';
+            if (!t1 || !t2) return;
+
+            api.getRevisionDiff(slug, t1, t2).then(diff => {
+                showRevisionDiffModal(diff);
+            }).catch(() => {
+                alert(i18n.t('diff_error'));
+            });
+        });
+        item.appendChild(btn);
+    });
+}
+
+function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; changed: unknown[] }): void {
+    let modal = document.querySelector<HTMLElement>('.ce-diff-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'ce-diff-modal';
+        document.body.appendChild(modal);
+    }
+
+    const renderItems = (items: unknown[], cls: string): string => {
+        return items.map(item => `<div class="${cls}">${escHtml(String(item))}</div>`).join('');
+    };
+
+    modal.innerHTML = `
+        <div class="ce-diff-modal__backdrop"></div>
+        <div class="ce-diff-modal__content">
+            <button class="ce-diff-modal__close">&times;</button>
+            <div class="ce-diff-added">${renderItems(diff.added, 'ce-diff-line--added')}</div>
+            <div class="ce-diff-removed">${renderItems(diff.removed, 'ce-diff-line--removed')}</div>
+            <div class="ce-diff-changed">${renderItems(diff.changed, 'ce-diff-line--changed')}</div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+
+    const closeModal = (): void => { modal!.style.display = 'none'; };
+    modal.querySelector('.ce-diff-modal__backdrop')?.addEventListener('click', closeModal);
+    modal.querySelector('.ce-diff-modal__close')?.addEventListener('click', closeModal);
+}
+
+// --- Generate report (#F) ---
+
+function showGenerateReport(report: { success: number; failed: number; skipped: number; time: number }): void {
+    let container = document.querySelector<HTMLElement>('.ce-generate-report');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'ce-generate-report';
+        const genBtn = document.querySelector('.ce-generate-btn');
+        if (genBtn?.parentElement) {
+            genBtn.parentElement.insertBefore(container, genBtn.nextSibling);
+        } else {
+            document.body.prepend(container);
+        }
+    }
+    container.innerHTML = '';
+
+    const line = (label: string, value: string): void => {
+        const row = document.createElement('div');
+        row.className = 'ce-generate-report__row';
+        row.textContent = `${label}: ${value}`;
+        container!.appendChild(row);
+    };
+
+    line(i18n.t('report_success'), String(report.success));
+    line(i18n.t('report_failed'), String(report.failed));
+    line(i18n.t('report_skipped'), String(report.skipped));
+    line(i18n.t('report_time'), `${report.time}ms`);
+}
+
+function initGenerateReport(): void {
+    const btn = document.querySelector<HTMLButtonElement>('.ce-generate-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        btn.disabled = true;
+        fetch('index.php?api=generate', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+        })
+        .then(res => {
+            updateCsrfFromResponse(res);
+            return res.json();
+        })
+        .then(json => {
+            if (json.report) {
+                showGenerateReport(json.report);
+            }
+        })
+        .catch(() => {
+            alert(i18n.t('generate_error'));
+        })
+        .finally(() => { btn.disabled = false; });
+    });
+}
+
 // --- Main initialization ---
 
 function initEditInplace(): void {
@@ -321,6 +662,11 @@ function initEditInplace(): void {
     const initEditorUI = (): void => {
         initBlockEditor();
         initFormatSwitcher();
+        initPageReorder();
+        initPageSearch();
+        initBulkActions();
+        initRevisionDiff();
+        initGenerateReport();
     };
     if (typeof i18n !== 'undefined' && i18n.ready) {
         i18n.ready.then(initEditorUI);

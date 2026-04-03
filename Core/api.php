@@ -133,6 +133,23 @@ function handleApiPages(FileStorage $storage, string $method): void
 
     $action = $_REQUEST['action'] ?? '';
 
+    if ($method === 'POST' && $action === 'reorder') {
+        apiPageReorder($storage);
+        return;
+    }
+    if ($method === 'POST' && $action === 'bulk-status') {
+        apiBulkStatus($storage);
+        return;
+    }
+    if ($method === 'POST' && $action === 'bulk-delete') {
+        apiBulkDelete($storage);
+        return;
+    }
+    if ($action === 'sidebar') {
+        apiSidebar($storage, $method);
+        return;
+    }
+
     match ($method) {
         'GET' => $slug !== null
             ? apiPageGet($storage, $slug)
@@ -217,7 +234,30 @@ function apiPageSave(FileStorage $storage): void
         return;
     }
 
-    echo json_encode(['status' => 'ok', 'slug' => $slug]);
+    $warnings = [];
+    if ($status === 'published') {
+        if (trim($content) === '' && ($blocks === null || $blocks === [])) {
+            $warnings[] = 'empty_content';
+        }
+        if ($format === 'blocks' && is_array($blocks)) {
+            $hasHeading = false;
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? '') === 'heading') {
+                    $hasHeading = true;
+                    break;
+                }
+            }
+            if (!$hasHeading) {
+                $warnings[] = 'no_heading';
+            }
+        }
+    }
+
+    $response = ['status' => 'ok', 'slug' => $slug];
+    if ($warnings !== []) {
+        $response['warnings'] = $warnings;
+    }
+    echo json_encode($response);
 }
 
 function apiPageStatusUpdate(FileStorage $storage): void
@@ -274,6 +314,12 @@ function handleApiRevisions(FileStorage $storage, string $method): void
     $slug = $_REQUEST['slug'] ?? null;
     if ($slug === null || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
+        return;
+    }
+
+    $action = $_REQUEST['action'] ?? '';
+    if ($method === 'GET' && $action === 'diff') {
+        apiRevisionDiff($storage, $slug);
         return;
     }
 
@@ -410,6 +456,21 @@ function handleApiExport(FileStorage $storage): void
         'pages'     => $storage->listPages(),
     ];
 
+    if (($_GET['revisions'] ?? '') === '1') {
+        $export['revisions'] = $storage->listAllRevisions();
+        $revisionData = [];
+        foreach ($export['revisions'] as $slug => $revs) {
+            foreach ($revs as $rev) {
+                $ts = $rev['timestamp'];
+                $data = $storage->getRevisionData($slug, $ts);
+                if ($data !== false) {
+                    $revisionData[$slug][$ts] = $data;
+                }
+            }
+        }
+        $export['revision_data'] = $revisionData;
+    }
+
     header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
     echo json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -484,6 +545,30 @@ function handleApiImport(FileStorage $storage): void
         }
     }
 
+    if (isset($data['revision_data']) && is_array($data['revision_data'])) {
+        $revCount = 0;
+        foreach ($data['revision_data'] as $slug => $revisions) {
+            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($revisions)) {
+                continue;
+            }
+            $revDir = 'data/revisions/' . $slug;
+            if (!is_dir($revDir)) {
+                mkdir($revDir, 0755, true);
+            }
+            foreach ($revisions as $ts => $revData) {
+                if (!is_array($revData)) {
+                    continue;
+                }
+                $revFile = $revDir . '/' . $ts . '.json';
+                if (!file_exists($revFile)) {
+                    file_put_contents($revFile, json_encode($revData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                    $revCount++;
+                }
+            }
+        }
+        $imported['revisions'] = $revCount;
+    }
+
     echo json_encode(['status' => 'ok', 'imported' => $imported]);
 }
 
@@ -509,6 +594,156 @@ function handleApiVersion(): void
         'installed' => $installed,
         'installed_at' => $installedAt,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+function apiPageReorder(FileStorage $storage): void
+{
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
+
+    $raw = $_POST['slugs'] ?? '';
+    $slugs = is_array($raw) ? $raw : json_decode($raw, true);
+    if (!is_array($slugs)) {
+        apiError(400, 'Invalid slugs');
+        return;
+    }
+
+    foreach ($slugs as $s) {
+        if (!is_string($s) || !FileStorage::validateSlug($s)) {
+            apiError(400, 'Invalid slug in list');
+            return;
+        }
+    }
+
+    $result = $storage->savePageOrder($slugs);
+    if (!$result) {
+        apiError(500, 'Write failed');
+        return;
+    }
+
+    echo json_encode(['status' => 'ok']);
+}
+
+function apiSidebar(FileStorage $storage, string $method): void
+{
+    $app = App::getInstance();
+    if ($method === 'GET') {
+        $blocks = $app->getSidebarBlocks();
+        echo json_encode(['blocks' => $blocks], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $raw = $_POST['blocks'] ?? '';
+        $blocks = json_decode($raw, true);
+        if (!is_array($blocks)) {
+            apiError(400, 'Invalid blocks JSON');
+            return;
+        }
+        $result = $app->saveSidebarBlocks($blocks);
+        if (!$result) {
+            apiError(500, 'Write failed');
+            return;
+        }
+        echo json_encode(['status' => 'ok']);
+        return;
+    }
+    apiError(405, 'Method not allowed');
+}
+
+function apiBulkStatus(FileStorage $storage): void
+{
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
+
+    $slugs = $_POST['slugs'] ?? [];
+    $status = $_POST['status'] ?? '';
+    if (!is_array($slugs) || !in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid parameters');
+        return;
+    }
+
+    $updated = 0;
+    foreach ($slugs as $slug) {
+        if (is_string($slug) && FileStorage::validateSlug($slug)) {
+            if ($storage->updatePageStatus($slug, $status)) {
+                $updated++;
+            }
+        }
+    }
+
+    echo json_encode(['status' => 'ok', 'updated' => $updated]);
+}
+
+function apiBulkDelete(FileStorage $storage): void
+{
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
+
+    $slugs = $_POST['slugs'] ?? [];
+    if (!is_array($slugs)) {
+        apiError(400, 'Invalid parameters');
+        return;
+    }
+
+    $deleted = 0;
+    foreach ($slugs as $slug) {
+        if (is_string($slug) && FileStorage::validateSlug($slug)) {
+            if ($storage->deletePage($slug)) {
+                $deleted++;
+            }
+        }
+    }
+
+    echo json_encode(['status' => 'ok', 'deleted' => $deleted]);
+}
+
+function apiRevisionDiff(FileStorage $storage, string $slug): void
+{
+    $t1 = $_GET['t1'] ?? '';
+    $t2 = $_GET['t2'] ?? '';
+    if ($t1 === '' || $t2 === '') {
+        apiError(400, 'Missing t1 or t2');
+        return;
+    }
+
+    $data1 = $storage->getRevisionData($slug, $t1);
+    $data2 = $storage->getRevisionData($slug, $t2);
+    if ($data1 === false || $data2 === false) {
+        apiError(404, 'Revision not found');
+        return;
+    }
+
+    $blocks1 = $data1['blocks'] ?? [];
+    $blocks2 = $data2['blocks'] ?? [];
+
+    $added = [];
+    $removed = [];
+    $changed = [];
+
+    $max = max(count($blocks1), count($blocks2));
+    for ($i = 0; $i < $max; $i++) {
+        $b1 = $blocks1[$i] ?? null;
+        $b2 = $blocks2[$i] ?? null;
+        if ($b1 === null && $b2 !== null) {
+            $added[] = ['index' => $i, 'block' => $b2];
+        } elseif ($b1 !== null && $b2 === null) {
+            $removed[] = ['index' => $i, 'block' => $b1];
+        } elseif ($b1 !== null && $b2 !== null && $b1 !== $b2) {
+            $changed[] = ['index' => $i, 'before' => $b1, 'after' => $b2];
+        }
+    }
+
+    echo json_encode(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiError(int $code, string $message): void
