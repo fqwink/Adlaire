@@ -11,7 +11,7 @@
     "settings": "設定",
     "settings_theme": "テーマ",
     "settings_menu": "メニュー",
-    "settings_menu_hint": "下にページ名を追加して<a href=\"javascript:location.reload(true);\">更新</a>",
+    "settings_menu_hint": "下にページ名を追加して更新してください",
     "settings_language": "言語",
     "default_title": "ウェブサイトタイトル",
     "default_subside": "<h3>このウェブサイトについて</h3><br />\n\nこのコンテンツは全ページに表示される固定コンテンツです。",
@@ -23,7 +23,7 @@
     "new_page_admin": "ページ <b>:page</b> を作成しました。<br /><br />\n\nここをクリックして編集を開始してください！",
     "new_page_visitor": "<b>:page</b> は存在しません。",
     "click_to_edit": "クリックして編集！",
-    "credit": "Powered by <a href=\"\">Adlaire Static CMS</a>",
+    "credit": "Powered by Adlaire Static CMS",
     "permission_error": "filesフォルダに755のパーミッションを設定してください。",
     "login_rate_limited": "ログイン試行回数が上限に達しました。しばらくお待ちください。",
     "settings_format": "ページ形式",
@@ -69,5 +69,9 @@
     "admin_bulk_delete": "一括削除",
     "confirm_bulk_delete": "選択したページを一括削除しますか？",
     "preview_draft_notice": "これはプレビューです。このページはまだ公開されていません。",
-    "admin_import_result": "インポート完了"
+    "admin_import_result": "インポート完了",
+    "csrf_error": "セキュリティトークンの検証に失敗しました。もう一度お試しください。",
+    "admin_system": "システム情報",
+    "admin_no_pages": "ページがありません",
+    "block_delimiter": "区切り線"
 }

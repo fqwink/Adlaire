@@ -53,6 +53,7 @@ function autosize(textarea: HTMLTextAreaElement): void {
     }
 
     // #4: WeakRef-based GC guard for destroy event not firing
+    // #34: gcCheckInterval 5000ms → 10000ms に最適化（頻度を下げてCPU負荷軽減）
     const weakRef = new WeakRef(textarea);
     const gcCheckInterval = setInterval(() => {
         if (!weakRef.deref()) {
@@ -60,7 +61,7 @@ function autosize(textarea: HTMLTextAreaElement): void {
             observer.disconnect();
             clearInterval(gcCheckInterval);
         }
-    }, 5000);
+    }, 10000);
 
     textarea.addEventListener('autosize:destroy', () => {
         ac.abort();

@@ -32,37 +32,42 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 // --- Detect functions ---
 
+/** @return array{ok: bool, version: string, message: string} */
 function detect_php_version(): array
 {
     $ok = version_compare(PHP_VERSION, '8.3.0', '>=');
     return ['ok' => $ok, 'version' => PHP_VERSION, 'message' => $ok ? 'PHP ' . PHP_VERSION : 'PHP 8.3+ required (current: ' . PHP_VERSION . ')'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_files_writable(): array
 {
-    $dir = __DIR__ . '/files';
+    $dir = __DIR__ . '/data';
     if (!is_dir($dir)) {
         $created = @mkdir($dir, 0755, true);
         if (!$created) {
-            return ['ok' => false, 'message' => 'Cannot create files/ directory'];
+            return ['ok' => false, 'message' => 'Cannot create data/ directory'];
         }
     }
     $ok = is_writable($dir);
-    return ['ok' => $ok, 'message' => $ok ? 'files/ is writable' : 'files/ is not writable (set 755)'];
+    return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_session(): array
 {
     $ok = session_status() === PHP_SESSION_ACTIVE;
     return ['ok' => $ok, 'message' => $ok ? 'Sessions available' : 'Sessions not available'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_password_hash(): array
 {
     $ok = function_exists('password_hash');
     return ['ok' => $ok, 'message' => $ok ? 'password_hash() available' : 'password_hash() not available'];
 }
 
+/** @return array{ok: bool, message: string, warning?: bool} */
 function detect_https(): array
 {
     $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
@@ -71,6 +76,7 @@ function detect_https(): array
 
 // --- Load functions ---
 
+/** @return array<string, mixed>|false */
 function load_manifest(): array|false
 {
     $path = __DIR__ . '/release-manifest.json';
@@ -96,6 +102,16 @@ function load_version(): string
 
 // --- Validate functions ---
 
+/** Minimum password length */
+define('INSTALLER_MIN_PASSWORD_LENGTH', 8);
+
+/** Weak passwords blacklist */
+define('INSTALLER_WEAK_PASSWORDS', ['admin', 'password', '12345678', 'adlaire']);
+
+/** Supported locales */
+define('INSTALLER_SUPPORTED_LOCALES', ['ja', 'en']);
+
+/** @return list<string> */
 function validate_input(array $post): array
 {
     $errors = [];
@@ -107,14 +123,13 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
-    if (!in_array($locale, ['ja', 'en'], true)) {
+    if (!in_array($locale, INSTALLER_SUPPORTED_LOCALES, true)) {
         $errors[] = 'Invalid language selection';
     }
-    if (strlen($password) < 8) {
-        $errors[] = 'Password must be at least 8 characters';
+    if (strlen($password) < INSTALLER_MIN_PASSWORD_LENGTH) {
+        $errors[] = 'Password must be at least ' . INSTALLER_MIN_PASSWORD_LENGTH . ' characters';
     }
-    $weak = ['admin', 'password', '12345678', 'adlaire'];
-    if (in_array(mb_strtolower($password, 'UTF-8'), $weak, true)) {
+    if (in_array(mb_strtolower($password, 'UTF-8'), INSTALLER_WEAK_PASSWORDS, true)) {
         $errors[] = 'That password is too weak';
     }
     if ($password !== $confirm) {
@@ -126,6 +141,7 @@ function validate_input(array $post): array
 
 // --- Install functions ---
 
+/** @return array{ok: bool, message: string} */
 function install_execute(string $siteName, string $locale, string $password): array
 {
     $storage = new FileStorage('data');
@@ -134,12 +150,12 @@ function install_execute(string $siteName, string $locale, string $password): ar
     // Create system directory
     $systemDir = __DIR__ . '/data/system';
     if (!is_dir($systemDir)) {
-        if (!mkdir($systemDir, 0755, true)) {
+        if (!@mkdir($systemDir, 0755, true) && !is_dir($systemDir)) {
             return ['ok' => false, 'message' => 'Failed to create system directory'];
         }
     }
 
-    // Save config
+    // Save config via temp file to prevent partial state
     $config = [
         'title' => $siteName,
         'language' => $locale,
@@ -152,8 +168,19 @@ function install_execute(string $siteName, string $locale, string $password): ar
         'copyright' => '&copy;' . date('Y') . ' ' . $siteName,
     ];
 
-    $result = $storage->writeConfig($config);
-    if (!$result) {
+    $configJson = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($configJson === false) {
+        return ['ok' => false, 'message' => 'Failed to encode config JSON'];
+    }
+    $configPath = __DIR__ . '/data/config.json';
+    $tmpConfig = tempnam(dirname($configPath), '.tmp_');
+    if ($tmpConfig === false || file_put_contents($tmpConfig, $configJson, LOCK_EX) === false) {
+        if ($tmpConfig !== false) { @unlink($tmpConfig); }
+        return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
+    }
+    chmod($tmpConfig, 0600);
+    if (!rename($tmpConfig, $configPath)) {
+        @unlink($tmpConfig);
         return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
     }
 
@@ -171,15 +198,14 @@ function install_execute(string $siteName, string $locale, string $password): ar
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
     }
-    $lockResult = file_put_contents(
-        __DIR__ . '/data/system/install.lock',
-        $lockJson
-    );
+    $lockPath = __DIR__ . '/data/system/install.lock';
+    $lockResult = file_put_contents($lockPath, $lockJson);
 
     if ($lockResult === false) {
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
+    chmod($lockPath, 0600);
 
     return ['ok' => true, 'message' => 'Installation completed successfully'];
 }
@@ -382,8 +408,10 @@ $csrf = security_csrf_token();
 
         <label>Default Language *</label>
         <select name="default_locale">
-            <option value="ja" <?= ($_POST['default_locale'] ?? 'ja') === 'ja' ? 'selected' : '' ?>>日本語</option>
-            <option value="en" <?= ($_POST['default_locale'] ?? '') === 'en' ? 'selected' : '' ?>>English</option>
+<?php foreach (INSTALLER_SUPPORTED_LOCALES as $loc): ?>
+<?php $labels = ['ja' => '日本語', 'en' => 'English']; ?>
+            <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc] ?? $loc) ?></option>
+<?php endforeach; ?>
         </select>
 
         <label>Admin Password * (min 8 characters)</label>

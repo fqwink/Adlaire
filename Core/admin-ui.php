@@ -12,10 +12,11 @@ declare(strict_types=1);
 
 $c = $app->config;
 $adminAction = $_REQUEST['admin'] ?? 'dashboard';
-if (!is_string($adminAction) || !in_array($adminAction, ['dashboard', '', 'edit', 'new'], true)) {
+$allowedActions = ['dashboard', '', 'edit', 'new'];
+if (!is_string($adminAction) || !in_array($adminAction, $allowedActions, true)) {
     $adminAction = 'dashboard';
 }
-$n = $app->nonce !== '' ? " nonce=\"{$app->nonce}\"" : '';
+$n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
 ?>
 <!doctype html>
 <html lang="<?= esc($app->language) ?>">
@@ -24,6 +25,7 @@ $n = $app->nonce !== '' ? " nonce=\"{$app->nonce}\"" : '';
     <title><?= esc($c['title']) ?> - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <link rel="stylesheet" href="themes/<?= esc($c['themeSelect']) ?>/style.css">
     <link rel="stylesheet" href="themes/admin.css">
 <?php $app->scriptTags(true); ?>
@@ -60,6 +62,15 @@ match ($adminAction) {
 </html>
 <?php
 
+function sortPagesByUpdated(array &$pages): void
+{
+    uasort($pages, function (array $a, array $b): int {
+        $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
+        $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
+        return $ta <=> $tb;
+    });
+}
+
 function renderAdminDashboard(App $app, string $n): void
 {
     $pages = $app->storage->listPages();
@@ -77,19 +88,9 @@ function renderAdminDashboard(App $app, string $n): void
                 $ordered[$slug] = $data;
             }
         }
-        $unordered = array_diff_key($pages, array_flip($pageOrder));
-        uasort($unordered, function ($a, $b) {
-            $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
-            $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
-            return $ta <=> $tb;
-        });
         $pages = $ordered;
     } else {
-        uasort($pages, function ($a, $b) {
-            $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
-            $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
-            return $ta <=> $tb;
-        });
+        sortPagesByUpdated($pages);
     }
 
     // --- Page List ---
@@ -100,10 +101,11 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
     echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
     echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
-    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_reorder')) . '</button>';
+    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE);
+    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
-    echo '<thead><tr><th><input type="checkbox" id="select-all"></th><th>Slug</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
+    echo '<thead><tr><th style="width:30px;"><input type="checkbox" id="select-all"></th><th>' . esc($app->t('admin_slug')) . '</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
     echo '<tbody id="page-list">';
     foreach ($pages as $slug => $data) {
         $safeSlug = esc($slug);
@@ -115,14 +117,14 @@ function renderAdminDashboard(App $app, string $n): void
         echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
         echo "<td>{$format}</td>";
-        echo "<td class='{$statusClass}'>{$status}</td>";
-        echo "<td>{$updated}</td>";
+        echo "<td class='{$statusClass}'>" . esc($status) . "</td>";
+        echo "<td>" . esc($updated) . "</td>";
         $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
+        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
         echo "</tr>";
     }
     if (empty($pages)) {
-        echo '<tr><td colspan="6" style="text-align:center;color:#999;">No pages yet</td></tr>';
+        echo '<tr><td colspan="6" style="text-align:center;color:#999;">' . esc($app->t('admin_no_pages')) . '</td></tr>';
     }
     echo '</tbody></table>';
     echo '</section>';
@@ -290,7 +292,7 @@ function renderAdminDashboard(App $app, string $n): void
 
     // --- System Info ---
     echo '<section class="admin-section">';
-    echo '<h2>System</h2>';
+    echo '<h2>' . esc($app->t('admin_system')) . '</h2>';
     $versionFile = dirname(__DIR__) . '/VERSION';
     $fileVersion = file_exists($versionFile) ? esc(trim((string) file_get_contents($versionFile))) : '—';
     $appVersion = esc(App::VERSION);
@@ -314,7 +316,7 @@ function renderAdminDashboard(App $app, string $n): void
 
 function renderAdminEditor(App $app, string $n): void
 {
-    $slug = $_REQUEST['page'] ?? '';
+    $slug = is_string($_REQUEST['page'] ?? '') ? ($_REQUEST['page'] ?? '') : '';
     if ($slug === '' || !FileStorage::validateSlug($slug)) {
         echo '<p>Invalid page slug.</p>';
         return;
@@ -330,7 +332,10 @@ function renderAdminEditor(App $app, string $n): void
     $content = $pageData['content'] ?? '';
     $blocksB64 = '';
     if (isset($pageData['blocks'])) {
-        $blocksB64 = base64_encode(json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE));
+        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE);
+        if ($blocksJson !== false) {
+            $blocksB64 = base64_encode($blocksJson);
+        }
     }
 
     $safeSlug = esc($slug);
@@ -358,7 +363,7 @@ function renderAdminEditor(App $app, string $n): void
     echo "<option value='draft'{$draftSelected}>Draft</option>";
     echo "</select>";
     echo "<button class='admin-btn' id='save-status-btn' style='font-size:12px;padding:4px 12px;'>Save Status</button>";
-    echo "<a href='?preview={$safeSlug}' target='_blank' class='admin-btn admin-btn--outline' style='font-size:12px;padding:4px 12px;'>" . esc($app->t('admin_preview')) . "</a>";
+    echo "<a href='?preview={$safeSlug}' target='_blank' rel='noopener' class='admin-btn admin-btn--outline' style='font-size:12px;padding:4px 12px;'>" . esc($app->t('admin_preview')) . "</a>";
     $jsonSafeSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo "<script{$n}>document.getElementById('save-status-btn').addEventListener('click',function(){";
     echo "var s=document.getElementById('status-select').value;";
@@ -373,7 +378,7 @@ function renderAdminEditor(App $app, string $n): void
     // Editor area
     if ($format === 'blocks') {
         echo "<div class='admin-editor-area'>";
-        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='{$blocksB64}'></div>";
+        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         echo "</div>";
     } elseif ($format === 'markdown') {
         echo "<div class='admin-editor-area'>";

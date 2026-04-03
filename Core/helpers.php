@@ -33,13 +33,14 @@ function csrf_verify(): bool
     return true;
 }
 
-/**
- * @return bool true if attempt is allowed, false if rate-limited
- */
+/** Maximum login attempts within the rate limit window */
+const LOGIN_MAX_ATTEMPTS = 5;
+
+/** Rate limit window in seconds */
+const LOGIN_WINDOW_SECONDS = 300;
+
 function login_rate_check(): bool
 {
-    $maxAttempts = 5;
-    $windowSeconds = 300;
     $now = time();
 
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
@@ -66,10 +67,10 @@ function login_rate_check(): bool
         }
     }
 
-    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < $windowSeconds));
+    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < LOGIN_WINDOW_SECONDS));
     $attemptCount = count($attempts);
 
-    if ($attemptCount >= $maxAttempts) {
+    if ($attemptCount >= LOGIN_MAX_ATTEMPTS) {
         return false;
     }
 
@@ -81,7 +82,14 @@ function login_rate_check(): bool
     if ($fp !== false) {
         flock($fp, LOCK_EX);
         ftruncate($fp, 0);
-        fwrite($fp, json_encode($attempts));
+        rewind($fp);
+        $encoded = json_encode($attempts);
+        if ($encoded === false || fwrite($fp, $encoded) === false) {
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, '[]');
+        }
+        fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
         @chmod($rateFile, 0600);

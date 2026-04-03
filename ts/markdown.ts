@@ -10,6 +10,11 @@
  * Spec: RULEBOOK.md Section 6.5
  */
 
+// #51: regex再コンパイル最適化 — 非グローバルな共通パターンを事前コンパイル
+const _mdSepTest = /^\|[\s\-:|]+\|$/;
+const _mdDangerousProto = /^\s*(javascript|data|vbscript)\s*:/i;
+const _mdSafeIdStrip = /[^a-zA-Z0-9_-]/g;
+
 function markdownToHtml(md: string): string {
     let html = md;
 
@@ -20,7 +25,11 @@ function markdownToHtml(md: string): string {
         // #50: langをescHtml()でエスケープ
         const escapeLang = (s: string): string =>
             s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        const cls = lang ? ` class="language-${escapeLang(lang)}"` : '';
+        // #46: code block language validation強化 — 英数字・ハイフン・プラスのみ許可
+        let cls = '';
+        if (lang && /^[a-zA-Z0-9+#._-]+$/.test(lang)) {
+            cls = ` class="language-${escapeLang(lang)}"`;
+        }
         codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
         return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
     });
@@ -28,16 +37,32 @@ function markdownToHtml(md: string): string {
     // Escape HTML entities (after code blocks are extracted)
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    // Inline code (skip placeholder patterns)
-    html = html.replace(/`([^`]+)`/g, (m, code) => {
+    // Inline code (skip placeholder patterns) — #25: 複数行対応（[\s\S]で改行を含む）
+    html = html.replace(/`([^`]+?)`/g, (m, code) => {
         if (m.includes('%%CODEBLOCK_')) return m;
         return `<code>${code}</code>`;
     });
 
+    // #8: 属性値エスケープヘルパー
+    const escAttr = (s: string): string =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes: Record<string, string> = {};
+    // #63: safeId重複保証 — 重複時にサフィックスを付与
+    const footnoteIdSet = new Set<string>();
     html = html.replace(/^\[\^(\w+)\]:\s*(.+)$/gm, (_m, id, text) => {
-        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        // #8: safeIdをさらに属性値エスケープ
+        let safeId = escAttr(id.replace(_mdSafeIdStrip, ''));
+        // #63: 重複IDの場合はサフィックスで一意化
+        let uniqueId = safeId;
+        let counter = 2;
+        while (footnoteIdSet.has(uniqueId)) {
+            uniqueId = `${safeId}-${counter}`;
+            counter++;
+        }
+        safeId = uniqueId;
+        footnoteIdSet.add(safeId);
         footnotes[safeId] = text;
         return '';
     });
@@ -45,15 +70,16 @@ function markdownToHtml(md: string): string {
     // Footnote references: [^id] → superscript link (unique IDs per occurrence)
     let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
-        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        // #8: safeIdを属性値エスケープ
+        const safeId = escAttr(id.replace(_mdSafeIdStrip, ''));
         fnRefCount++;
         return `<sup><a href="#fn-${safeId}" id="fnref-${safeId}-${fnRefCount}">${safeId}</a></sup>`;
     });
 
-    // Headings (### > ## > #)
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // Headings (### > ## > #) — #22: 末尾の強調記号ネスト処理（#, =を除去）
+    html = html.replace(/^### (.+?)[\s#]*$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+?)[\s#]*$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+?)[\s#]*$/gm, '<h1>$1</h1>');
 
     // Horizontal rule
     html = html.replace(/^---$/gm, '<hr>');
@@ -65,13 +91,13 @@ function markdownToHtml(md: string): string {
 
     // Images ![alt](url) — must come before links
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, url: string) => {
-        if (/^\s*(javascript|data|vbscript)\s*:/i.test(url)) return `<img src="" alt="${alt}">`;
+        if (_mdDangerousProto.test(url)) return `<img src="" alt="${alt}">`;
         return `<img src="${url}" alt="${alt}">`;
     });
 
     // Links [text](url)
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, url: string) => {
-        if (/^\s*(javascript|vbscript|data)\s*:/i.test(url)) return `<a href="">${text}</a>`;
+        if (_mdDangerousProto.test(url)) return `<a href="">${text}</a>`;
         return `<a href="${url}">${text}</a>`;
     });
 
@@ -85,21 +111,41 @@ function markdownToHtml(md: string): string {
 
         const headerCells = parseRow(rows[0]);
 
-        // Check if row 2 is separator (|---|---|)
+        // Check if row 2 is separator (|---|---|) — #23: alignment情報保持
         const sep = rows[1];
-        if (!/^\|[\s\-:|]+\|$/.test(sep)) return tableBlock;
+        if (!_mdSepTest.test(sep)) return tableBlock;
         const sepCols = sep.split('|').slice(1, -1);
         if (sepCols.length !== headerCells.length) return tableBlock;
 
+        // #23: parse alignment from separator columns
+        const alignments: (string | null)[] = sepCols.map(col => {
+            const trimmed = col.trim();
+            const left = trimmed.startsWith(':');
+            const right = trimmed.endsWith(':');
+            if (left && right) return 'center';
+            if (right) return 'right';
+            if (left) return 'left';
+            return null;
+        });
+
         let tableHtml = '<table><thead><tr>';
-        headerCells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });
+        // #10: Table内セル内容のHTMLエスケープ（二重エスケープ防止のため&amp;は除外）
+        const escCell = (s: string): string =>
+            s.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        headerCells.forEach((cell, ci) => {
+            const align = alignments[ci] ? ` style="text-align:${alignments[ci]}"` : '';
+            tableHtml += `<th${align}>${escCell(cell)}</th>`;
+        });
         tableHtml += '</tr></thead><tbody>';
 
         for (let i = 2; i < rows.length; i++) {
             if (rows[i].trim() === '') continue;
             const cells = parseRow(rows[i]);
             tableHtml += '<tr>';
-            cells.forEach(cell => { tableHtml += `<td>${cell}</td>`; });
+            cells.forEach((cell, ci) => {
+                const align = alignments[ci] ? ` style="text-align:${alignments[ci]}"` : '';
+                tableHtml += `<td${align}>${escCell(cell)}</td>`;
+            });
             tableHtml += '</tr>';
         }
         tableHtml += '</tbody></table>';
@@ -108,7 +154,8 @@ function markdownToHtml(md: string): string {
 
     // --- Task lists ---
     // - [x] done → checked checkbox, - [ ] todo → unchecked checkbox
-    html = html.replace(/^\- \[x\] (.+)$/gm, '<li class="task done"><input type="checkbox" checked disabled> $1</li>');
+    // #24: [X]大文字X対応 — フラグにiを追加
+    html = html.replace(/^\- \[x\] (.+)$/gim, '<li class="task done"><input type="checkbox" checked disabled> $1</li>');
     html = html.replace(/^\- \[ \] (.+)$/gm, '<li class="task"><input type="checkbox" disabled> $1</li>');
 
     // Unordered list items (must come after task lists)
@@ -141,7 +188,8 @@ function markdownToHtml(md: string): string {
     if (fnIds.length > 0) {
         html += '\n<section class="footnotes"><hr><ol>';
         fnIds.forEach(id => {
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">↩</a></li>`;
+            // #8: footnote IDは既にescAttr済み、テキストもエスケープ
+            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">\u21A9</a></li>`;
         });
         html += '</ol></section>';
     }

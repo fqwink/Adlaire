@@ -1,5 +1,6 @@
 /* Adlaire Admin UI Stylesheet */
-.admin-wrap{max-width:960px;margin:20px auto;padding:0 20px;color:#333;font-family:Verdana,sans-serif;}
+/* #71: font-family fallback追加 — system-ui, セグメントUI, メイリオ */
+.admin-wrap{max-width:960px;margin:20px auto;padding:0 20px;color:#333;font-family:Verdana,system-ui,"Segoe UI","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;}
 .admin-header{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:2px solid #1ab;}
 .admin-header h1{margin:0;font-size:20px;color:#1f2b33;}
 .admin-header a{color:#1ab;text-decoration:none;border:none;margin-left:16px;}
@@ -27,7 +28,12 @@
 .admin-btn--outline{background:none;border:1px solid #ddd;color:#666;}
 .admin-btn--outline:hover{background:#f5f5f5;}
 .admin-editor-area{margin:16px 0;background:#fff;border:1px solid #ddd;border-radius:4px;padding:16px;min-height:300px;}
-.ce-code code{white-space:pre-wrap;}
+/* #67: .ce-code tab-size指定 */
+.ce-code code{white-space:pre-wrap;tab-size:4;-moz-tab-size:4;}
+/* #68: InlineToolbarのz-index */
+.ce-inline-toolbar{position:fixed;z-index:9999;}
+/* #69: Toolboxのz-index */
+.ce-toolbox{position:absolute;z-index:9998;}
 .admin-sidebar{margin:20px 0;padding:16px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;}
 .admin-sidebar h3{margin:0 0 8px;font-size:14px;}
 .admin-sidebar ul{list-style:none;padding:0;margin:0;}
@@ -37,8 +43,10 @@
 .admin-meta select,.admin-meta button{font-size:13px;}
 
 /* Dark mode */
+/* #70: dark mode base color定義 — CSS custom properties */
 @media (prefers-color-scheme: dark) {
-    .admin-wrap{color:#ddd;background:#1a1a2e;}
+    :root{--dm-bg:#1a1a2e;--dm-bg-alt:#2a2a3e;--dm-text:#ddd;--dm-text-muted:#aaa;--dm-border:#444;--dm-accent:#1ab;}
+    .admin-wrap{color:var(--dm-text);background:var(--dm-bg);}
     .admin-header h1{color:#eee;}
     .admin-section h2{color:#eee;border-color:#444;}
     .admin-table th{background:#2a2a3e;color:#aaa;}
@@ -58,6 +66,10 @@
     .ce-inline-toolbar{background:#2a2a3e;}
     .ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
     .ce-quote{border-left-color:#1ab;color:#aaa;}
+    .admin-table .status-draft{color:#ffb347;}
+    .admin-table .status-published{color:#6fdc6f;}
+    .admin-header{border-bottom-color:var(--dm-border);}
+    .admin-meta select,.admin-meta button{background:var(--dm-bg-alt);border-color:var(--dm-border);color:var(--dm-text);}
 }
 
 /* Responsive */

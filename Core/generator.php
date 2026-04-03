@@ -59,7 +59,10 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
     if (!is_dir($distDir)) {
-        mkdir($distDir, 0755, true);
+        if (!mkdir($distDir, 0755, true)) {
+            apiError(500, 'Failed to create dist directory');
+            return;
+        }
     }
 
     $pages = $storage->listPublishedPages();
@@ -83,18 +86,19 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
 
-    // Copy JS
+    // Copy only public JS (exclude admin-only scripts from static output)
     $jsSrc = dirname(__DIR__) . '/js';
     $jsDst = $distDir . '/js';
+    $publicJs = ['markdown.js', 'editInplace.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
             mkdir($jsDst, 0755, true);
         }
-        $jsFiles = glob($jsSrc . '/*.js');
-        if (is_array($jsFiles)) {
-            foreach ($jsFiles as $jsFile) {
-                if (!copy($jsFile, $jsDst . '/' . basename($jsFile))) {
-                    error_log('Adlaire: Failed to copy JS file: ' . basename($jsFile));
+        foreach ($publicJs as $jsName) {
+            $jsPath = $jsSrc . '/' . $jsName;
+            if (is_file($jsPath)) {
+                if (!copy($jsPath, $jsDst . '/' . $jsName)) {
+                    error_log('Adlaire: Failed to copy JS file: ' . $jsName);
                 }
             }
         }
@@ -146,14 +150,18 @@ function handleApiGenerate(FileStorage $storage): void
             }
         }
         $pageDir = $distDir . '/' . $slug;
-        if (!is_dir($pageDir)) {
-            mkdir($pageDir, 0755, true);
+        if (!is_dir($pageDir) && !mkdir($pageDir, 0755, true) && !is_dir($pageDir)) {
+            error_log('Adlaire: Failed to create page directory: ' . $pageDir);
+            $failed++;
+            $details[] = ['slug' => $slug, 'result' => 'failed'];
+            continue;
         }
         if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
             $writeFailed = true;
         }
 
         if ($writeFailed) {
+            error_log('Adlaire: Failed to write page HTML: ' . $slug);
             $failed++;
             $details[] = ['slug' => $slug, 'result' => 'failed'];
         } else {
@@ -170,7 +178,7 @@ function handleApiGenerate(FileStorage $storage): void
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = substr($data['updated_at'] ?? '', 0, 10);
+        $lastmod = htmlspecialchars(substr($data['updated_at'] ?? '', 0, 10), ENT_XML1, 'UTF-8');
         $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
     }
     $xml .= '</urlset>';
@@ -192,7 +200,7 @@ function handleApiGenerate(FileStorage $storage): void
     $buildTimeMs = (int) ((hrtime(true) - $startTime) / 1_000_000);
     $pagesTotal = count($pages);
 
-    echo json_encode([
+    apiResponse([
         'status' => 'ok',
         'pages' => $count,
         'output' => 'dist/',
@@ -218,6 +226,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     $lang = esc($app->language);
     $copyright = esc((string) ($c['copyright'] ?? ''));
     $credit = esc($app->credit);
+    $safeTheme = esc($theme);
 
     // Build menu
     $menuHtml = '<ul>';
@@ -242,11 +251,10 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <meta charset="utf-8">
         <title>{$title} - {$pageTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="themes/{$theme}/style.css">
+        <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
-        <script src="js/markdown.js"></script>
-        <script src="js/editInplace.js"></script>
+        <meta name="generator" content="Adlaire Static CMS">
     </head>
     <body>
         <nav id="nav">

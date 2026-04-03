@@ -26,7 +26,19 @@ interface BlockToolConfig {
     save(el: HTMLElement): Record<string, unknown>;
 }
 
-type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
+// #65: BlockToolFactory data型を専用interfaceに改善
+interface BlockToolData {
+    [key: string]: unknown;
+    text?: string;
+    level?: number;
+    style?: string;
+    items?: string[];
+    code?: string;
+    url?: string;
+    alt?: string;
+    caption?: string;
+}
+type BlockToolFactory = (data: BlockToolData) => BlockToolConfig;
 
 // --- Helper: get Editor from element ---
 
@@ -82,7 +94,9 @@ function attachListItemHandlers(li: HTMLLIElement): void {
 
 // --- Sanitize: strip dangerous tags from block content ---
 
+// #47: replace chain順序保証 — 1) 危険タグ除去 → 2) Unicode decode → 3) on*属性除去 → 4) プロトコル除去
 function sanitizeHtml(html: string): string {
+    // Phase 1: 危険タグの除去（最初に実行）
     let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
     s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
@@ -95,14 +109,21 @@ function sanitizeHtml(html: string): string {
     s = s.replace(/<meta\b[^>]*\/?>/gi, '');
     s = s.replace(/<base\b[^>]*\/?>/gi, '');
     s = s.replace(/<link\b[^>]*\/?>/gi, '');
-    // #6: 属性値内の改行/タブを除去してからイベントハンドラを検出
+    // Phase 2: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
+    s = s.replace(/\\u(00[0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    s = s.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // Phase 3: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
     s = s.replace(/(<[^>]*?)[\r\n\t]+/gi, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-    // #8: javascript:プロトコルフィルタにユニコードエスケープ対応
+    // #2: 属性値内改行/タブ除去後のon*再チェック（二重パス）
+    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    // Phase 4: javascript:プロトコルフィルタにユニコードエスケープ対応
     const jsProtoPattern = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
     s = s.replace(jsProtoPattern, '$1=""');
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    // #4: about: / data: プロトコルフィルタ追加
+    s = s.replace(/(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi, '$1=""');
     s = s.replace(/\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '');
     return s;
 }
@@ -112,7 +133,12 @@ function sanitizeHtml(html: string): string {
 class UndoManager {
     private stack: string[] = [];
     private pointer: number = -1;
-    private readonly maxSize = 50;
+    // #97: maxSize設定可能化 — コンストラクタで指定可能
+    private readonly maxSize: number;
+
+    constructor(maxSize: number = 50) {
+        this.maxSize = maxSize;
+    }
 
     push(state: EditorData): void {
         const json = JSON.stringify(state);
@@ -166,8 +192,21 @@ const builtinTools: Record<string, BlockToolFactory> = {
                         e.preventDefault();
                         const editor = getEditorFromElement(el);
                         if (editor) {
+                            // #88: Enter時の選択範囲保存 — カーソル以降のテキストを新ブロックに移動
+                            const sel = window.getSelection();
+                            let trailingHtml = '';
+                            if (sel && sel.rangeCount) {
+                                const range = sel.getRangeAt(0);
+                                const tailRange = range.cloneRange();
+                                tailRange.selectNodeContents(el);
+                                tailRange.setStart(range.endContainer, range.endOffset);
+                                const fragment = tailRange.extractContents();
+                                const tmp = document.createElement('div');
+                                tmp.appendChild(fragment);
+                                trailingHtml = tmp.innerHTML;
+                            }
                             const idx = editor.getBlockIndex(el.closest('.ce-block') as HTMLElement);
-                            editor.insertBlock('paragraph', {}, idx + 1);
+                            editor.insertBlock('paragraph', { text: trailingHtml }, idx + 1);
                         }
                     }
                 });
@@ -206,6 +245,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const text = headingEl.textContent || '';
                     level = level >= 3 ? 1 : level + 1;
                     const newEl = document.createElement(`h${level}`);
+                    // #54: contentEditable属性を確実に設定
                     newEl.contentEditable = 'true';
                     newEl.className = 'ce-heading';
                     newEl.textContent = text;
@@ -283,7 +323,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
             save() {
                 const lis = listEl.querySelectorAll('li');
                 const savedItems: string[] = [];
-                lis.forEach(li => savedItems.push(li.innerHTML));
+                // #58: list item save時にsanitizeHtml適用
+                lis.forEach(li => savedItems.push(sanitizeHtml(li.innerHTML)));
                 return { style, items: savedItems };
             },
         };
@@ -297,6 +338,21 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const code = document.createElement('code');
                 code.contentEditable = 'true';
                 code.textContent = (data.code as string) || '';
+                // #73: code blockでtabキー入力対応（インデント挿入）
+                code.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const sel = window.getSelection();
+                        if (sel && sel.rangeCount) {
+                            const range = sel.getRangeAt(0);
+                            range.deleteContents();
+                            range.insertNode(document.createTextNode('    '));
+                            range.collapse(false);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        }
+                    }
+                });
                 pre.appendChild(code);
                 pre.addEventListener('click', () => code.focus());
                 return pre;
@@ -316,11 +372,20 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 bq.contentEditable = 'true';
                 bq.innerHTML = sanitizeHtml((data.text as string) || '');
                 attachBackspaceHandler(bq);
+                // #74: blockquoteのネスト防止（paste時にblockquoteタグを除去）
+                bq.addEventListener('paste', (e) => {
+                    e.preventDefault();
+                    const text = e.clipboardData?.getData('text/plain') || '';
+                    document.execCommand('insertText', false, text);
+                });
                 // #17: blockquote focusoutでのセーブ検知改善
+                // #75: delimiter含むfocusout処理
+                // #91: quote focusout saveUndoState一貫性 — dirtyフラグチェック追加
                 bq.addEventListener('focusout', () => {
                     const editor = getEditorFromElement(bq);
-                    if (editor) {
+                    if (editor && (editor as any).dirty) {
                         (editor as any).saveUndoState();
+                        (editor as any).dirty = false;
                     }
                 });
                 return bq;
@@ -336,7 +401,39 @@ const builtinTools: Record<string, BlockToolFactory> = {
             render() {
                 const el = document.createElement('div');
                 el.className = 'ce-delimiter';
+                // #21: delimiter blockのkeyboard navigation対応
+                el.tabIndex = 0;
                 el.innerHTML = '<hr>';
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const editor = getEditorFromElement(el);
+                        if (editor) {
+                            const block = el.closest('.ce-block') as HTMLElement;
+                            const idx = editor.getBlockIndex(block);
+                            if (idx >= 0) editor.focusBlock(idx + 1);
+                        }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const editor = getEditorFromElement(el);
+                        if (editor) {
+                            const block = el.closest('.ce-block') as HTMLElement;
+                            const idx = editor.getBlockIndex(block);
+                            if (idx > 0) editor.focusBlock(idx - 1);
+                        }
+                    } else if (e.key === 'Backspace') {
+                        e.preventDefault();
+                        const editor = getEditorFromElement(el);
+                        if (editor) {
+                            const block = el.closest('.ce-block') as HTMLElement;
+                            const idx = editor.getBlockIndex(block);
+                            if (idx >= 0) {
+                                editor.removeBlock(idx);
+                                if (idx > 0) editor.focusBlock(idx - 1);
+                            }
+                        }
+                    }
+                });
                 return el;
             },
             save() {
@@ -350,6 +447,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
             render() {
                 const wrap = document.createElement('figure');
                 wrap.className = 'ce-image';
+                // #56: block wrapperにrole属性追加
+                wrap.setAttribute('role', 'figure');
 
                 const img = document.createElement('img');
                 const initialUrl = (data.url as string) || '';
@@ -357,7 +456,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const isDangerousUrl = (url: string): boolean =>
                     /^\s*(javascript|data|vbscript)\s*:/i.test(url) || /^\s*\/\//.test(url.trim());
                 img.src = isDangerousUrl(initialUrl) ? '' : initialUrl;
-                img.alt = '';
+                // #60: alt属性にtextContentで安全に設定
+                img.alt = (data.alt as string) || '';
                 // #19: onerror属性をnullに設定
                 img.onerror = null;
 
@@ -375,6 +475,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
 
                 const cap = document.createElement('figcaption');
                 cap.contentEditable = 'true';
+                // #20: captionはtextContentで安全にXSS防止
                 cap.textContent = (data.caption as string) || '';
                 const placeholderText = 'Caption...';
                 cap.setAttribute('placeholder', placeholderText.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
@@ -401,6 +502,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
 class InlineToolbar {
     private el: HTMLElement;
     private selectionHandler: () => void;
+    // #32: selectionchange多重登録防止用AbortController
+    private selectionAc: AbortController;
 
     constructor() {
         this.el = document.createElement('div');
@@ -412,6 +515,8 @@ class InlineToolbar {
         `;
         this.el.style.display = 'none';
         document.body.appendChild(this.el);
+        // #32: AbortControllerで多重登録防止
+        this.selectionAc = new AbortController();
 
         this.el.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
             btn.addEventListener('mousedown', (e) => {
@@ -431,6 +536,8 @@ class InlineToolbar {
                         } catch {
                             return; // 無効なURLは無視
                         }
+                        // #4: about:/data:/javascript: プロトコル拒否
+                        if (/^\s*(javascript|data|about|vbscript)\s*:/i.test(url)) return;
                         this.wrapWithLink(url);
                     }
                 }
@@ -438,11 +545,13 @@ class InlineToolbar {
         });
 
         this.selectionHandler = () => this.update();
-        document.addEventListener('selectionchange', this.selectionHandler);
+        // #32: signal指定でselectionchangeリスナー多重登録防止
+        document.addEventListener('selectionchange', this.selectionHandler, { signal: this.selectionAc.signal });
     }
 
     destroy(): void {
-        document.removeEventListener('selectionchange', this.selectionHandler);
+        // #32: AbortControllerでリスナーを確実に解除
+        this.selectionAc.abort();
         this.el.remove();
     }
 
@@ -452,8 +561,10 @@ class InlineToolbar {
 
         const range = sel.getRangeAt(0);
         let node: Node | null = range.commonAncestorContainer;
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-        const existing = (node as HTMLElement).closest?.(tagName);
+        // #57: TEXT_NODEの場合はparentElementで安全にHTMLElementを取得
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+        if (!node || !(node instanceof HTMLElement)) return;
+        const existing = node.closest?.(tagName);
 
         if (existing && existing.closest('.ce-editor')) {
             if (!existing.parentNode) return;
@@ -465,6 +576,11 @@ class InlineToolbar {
         } else {
             const wrapper = document.createElement(tagName);
             const savedRange = range.cloneRange();
+            // #3: surroundContents失敗時のHTML構造復元 - 親要素のHTML保存
+            const ancestor = range.commonAncestorContainer;
+            const restoreTarget = ancestor.nodeType === Node.TEXT_NODE
+                ? ancestor.parentElement : ancestor as HTMLElement;
+            const restoreHtml = restoreTarget?.innerHTML ?? '';
             try {
                 range.surroundContents(wrapper);
             } catch {
@@ -473,7 +589,10 @@ class InlineToolbar {
                     wrapper.appendChild(contents);
                     range.insertNode(wrapper);
                 } catch {
-                    // #23: finally で状態復元保証 (catch内のフォールバック)
+                    // #3: HTML構造復元 - extractContentsも失敗した場合に元のHTMLを復元
+                    if (restoreTarget) {
+                        restoreTarget.innerHTML = restoreHtml;
+                    }
                     sel.removeAllRanges();
                     sel.addRange(savedRange);
                 }
@@ -523,6 +642,7 @@ class InlineToolbar {
 
         const range = sel.getRangeAt(0);
         const ancestor = range.commonAncestorContainer;
+        // #57: TEXT_NODEの場合はparentElementで安全にHTMLElementを取得
         const el = ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentElement : ancestor as HTMLElement;
         if (!el || !el.closest('.ce-editor')) {
             this.el.style.display = 'none';
@@ -531,8 +651,18 @@ class InlineToolbar {
 
         const rect = range.getBoundingClientRect();
         this.el.style.display = 'flex';
-        this.el.style.top = `${rect.top + window.scrollY - 40}px`;
-        this.el.style.left = `${rect.left + window.scrollX + rect.width / 2 - this.el.offsetWidth / 2}px`;
+        // #66: InlineToolbar position計算のviewport制限
+        let top = rect.top + window.scrollY - 40;
+        let left = rect.left + window.scrollX + rect.width / 2 - this.el.offsetWidth / 2;
+        // 上端制限
+        if (top < window.scrollY) top = rect.bottom + window.scrollY + 4;
+        // 左端制限
+        if (left < 0) left = 4;
+        // 右端制限
+        const maxLeft = document.documentElement.clientWidth - this.el.offsetWidth - 4;
+        if (left > maxLeft) left = maxLeft;
+        this.el.style.top = `${top}px`;
+        this.el.style.left = `${left}px`;
     }
 }
 
@@ -551,11 +681,14 @@ class Editor {
     private undoManager = new UndoManager();
     private isUndoRedoing = false;
 
-    // #26: Drag & Drop
+    // #26: Drag & Drop (#78: インスタンス変数として明示宣言)
     private dragSourceIndex: number = -1;
 
-    // #27: Block clipboard
+    // #27: Block clipboard (#79: インスタンス変数として明示宣言)
     private clipboardBlock: BlockData | null = null;
+
+    // #11: ブロック内容変更追跡フラグ
+    private dirty = false;
 
     constructor(container: HTMLElement, tools?: Record<string, BlockToolFactory>) {
         this.container = container;
@@ -585,6 +718,9 @@ class Editor {
             }
         });
 
+        // #11: input/keyupでdirtyフラグを立て、focusoutで未保存チェック
+        this.container.addEventListener('input', () => { this.dirty = true; });
+
         // #25: Save state on content changes (focusout)
         this.container.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
@@ -597,8 +733,10 @@ class Editor {
             )) {
                 return;
             }
-            if (!this.isUndoRedoing) {
+            // #11: dirtyフラグがある場合のみ保存（不要な保存回避）
+            if (!this.isUndoRedoing && this.dirty) {
                 this.saveUndoState();
+                this.dirty = false;
             }
         });
     }
@@ -626,11 +764,17 @@ class Editor {
         for (let i = 0; i < this.blockElements.length; i++) {
             // #28: セレクタを.ce-block__content > :first-childに限定し確実化
             const contentEl = this.blockElements[i].querySelector('.ce-block__content > :first-child') as HTMLElement;
-            if (contentEl && this.blockTools[i]) {
-                blocks.push({
-                    type: this.blockTypes[i],
-                    data: this.blockTools[i].save(contentEl),
-                });
+            // #61: blockTools[i]のnullチェック強化
+            if (contentEl && this.blockTools[i] && typeof this.blockTools[i].save === 'function') {
+                try {
+                    blocks.push({
+                        type: this.blockTypes[i],
+                        data: this.blockTools[i].save(contentEl),
+                    });
+                } catch {
+                    // #61: save失敗時はスキップしてデータ損失を防止
+                    console.warn(`Block save failed at index ${i}, type: ${this.blockTypes[i]}`);
+                }
             }
         }
         return {
@@ -658,13 +802,16 @@ class Editor {
     insertBlock(type: string, data: Record<string, unknown>, index: number): void {
         // #29: index負数チェック追加
         index = Math.max(0, index);
+        // #72: createBlockWrapperのtype検証（ツールが存在しない場合は無視）
         const factory = this.tools[type];
-        if (!factory) return;
+        if (!factory || typeof factory !== 'function') return;
 
         const tool = factory(data);
         const blockEl = this.createBlockWrapper(type, tool);
 
-        if (index >= this.blockElements.length) {
+        // #49: length参照の最適化 — ローカル変数にキャッシュ
+        const len = this.blockElements.length;
+        if (index >= len) {
             this.container.appendChild(blockEl);
             this.blockElements.push(blockEl);
             this.blockTools.push(tool);
@@ -698,6 +845,8 @@ class Editor {
     }
 
     moveBlock(from: number, to: number): void {
+        // #37: moveBlock境界チェック改善（整数チェック追加）
+        if (!Number.isInteger(from) || !Number.isInteger(to)) return;
         if (from < 0 || from >= this.blockElements.length) return;
         if (to < 0 || to >= this.blockElements.length) return;
         if (from === to) return;
@@ -743,22 +892,44 @@ class Editor {
     private undo(): void {
         const state = this.undoManager.undo();
         if (!state) return;
+        // #55: undo/redo中のfocus保持 — 現在のfocusインデックスを記憶
+        const focusedBlock = this.container.querySelector('[contenteditable]:focus');
+        let focusIdx = -1;
+        if (focusedBlock) {
+            const blockEl = focusedBlock.closest('.ce-block') as HTMLElement;
+            if (blockEl) focusIdx = this.getBlockIndex(blockEl);
+        }
         this.isUndoRedoing = true;
         try {
             this.render(state);
         } finally {
             this.isUndoRedoing = false;
         }
+        // #55: focusを復元
+        if (focusIdx >= 0 && focusIdx < this.blockElements.length) {
+            this.focusBlock(focusIdx);
+        }
     }
 
     private redo(): void {
         const state = this.undoManager.redo();
         if (!state) return;
+        // #55: undo/redo中のfocus保持
+        const focusedBlock = this.container.querySelector('[contenteditable]:focus');
+        let focusIdx = -1;
+        if (focusedBlock) {
+            const blockEl = focusedBlock.closest('.ce-block') as HTMLElement;
+            if (blockEl) focusIdx = this.getBlockIndex(blockEl);
+        }
         this.isUndoRedoing = true;
         try {
             this.render(state);
         } finally {
             this.isUndoRedoing = false;
+        }
+        // #55: focusを復元
+        if (focusIdx >= 0 && focusIdx < this.blockElements.length) {
+            this.focusBlock(focusIdx);
         }
     }
 
@@ -789,6 +960,8 @@ class Editor {
 
     private pasteCopiedBlock(e: KeyboardEvent): void {
         if (!this.clipboardBlock) return;
+        // #27: clipboard blockのtypeチェック
+        if (!this.clipboardBlock.type || !this.tools[this.clipboardBlock.type]) return;
 
         // Only intercept if no text is selected (block-level paste)
         const sel = window.getSelection();
@@ -807,6 +980,10 @@ class Editor {
             { ...this.clipboardBlock.data },
             idx + 1,
         );
+        // #81: paste block後のfocus確認（新しいブロックにfocus）
+        if (idx + 1 < this.blockElements.length) {
+            this.focusBlock(idx + 1);
+        }
     }
 
     // --- Block wrapper creation ---
@@ -820,11 +997,13 @@ class Editor {
         const toolbar = document.createElement('div');
         toolbar.className = 'ce-block__toolbar';
 
-        // #26: Drag handle
+        // #26: Drag handle (#26中: aria-label追加)
         const dragHandle = document.createElement('span');
         dragHandle.className = 'ce-btn ce-btn--drag';
         dragHandle.textContent = '\u2630';
         dragHandle.title = 'Drag to reorder';
+        dragHandle.setAttribute('aria-label', 'Drag to reorder');
+        dragHandle.setAttribute('role', 'button');
         dragHandle.draggable = true;
         dragHandle.addEventListener('dragstart', (e) => {
             this.dragSourceIndex = this.getBlockIndex(wrapper);
@@ -894,9 +1073,14 @@ class Editor {
             e.preventDefault();
             wrapper.classList.remove('ce-block--dragover');
             const toIndex = this.getBlockIndex(wrapper);
-            if (this.dragSourceIndex >= 0 && this.dragSourceIndex !== toIndex) {
+            // #80: drag & dropのindex境界チェック強化
+            if (this.dragSourceIndex >= 0 && this.dragSourceIndex < this.blockElements.length &&
+                toIndex >= 0 && toIndex < this.blockElements.length &&
+                this.dragSourceIndex !== toIndex) {
                 this.moveBlock(this.dragSourceIndex, toIndex);
             }
+            // #80: ドロップ後にdragSourceIndexを確実にリセット
+            this.dragSourceIndex = -1;
         });
 
         // Content
@@ -915,6 +1099,9 @@ class Editor {
 
         const toolbox = document.createElement('div');
         toolbox.className = 'ce-toolbox';
+        // #35: toolboxのキーボードアクセシビリティ（role, aria-label）
+        toolbox.setAttribute('role', 'toolbar');
+        toolbox.setAttribute('aria-label', 'Block type selection');
 
         const toolTypes: { type: string; label: string }[] = [
             { type: 'paragraph', label: i18n.t('block_text') },

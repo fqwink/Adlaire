@@ -16,12 +16,33 @@ RewriteRule .* - [F,L]
 <Files "VERSION">
     Require all denied
 </Files>
+<Files ".htaccess">
+    Require all denied
+</Files>
 
 ErrorDocument 403 &nbsp;
 Options -Indexes
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+</IfModule>
 
 # Clean URLs
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond $1#%{REQUEST_URI} ([^#]*)#(.*)\1$
-RewriteRule ^([^\.]+)$ %2?page=$1 [QSA,L]
+RewriteRule ^([^\.]+)$ %2?page=$1 [QSA,L,R=200]

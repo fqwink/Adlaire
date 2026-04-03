@@ -16,15 +16,27 @@ const i18n = {
     /**
      * Initialize i18n by loading the translation file for the given language.
      */
+    // #45: fetch失敗時のPromise確実resolve
     init(lang) {
         if (lang !== 'ja' && lang !== 'en') {
             lang = 'ja';
         }
         this.lang = lang;
         this.ready = fetch(`data/lang/${lang}.json`)
-            .then(response => response.ok ? response.json() : {})
-            .then(data => { this.translations = data; })
-            .catch(() => { });
+            .then(response => {
+            if (!response.ok)
+                return {};
+            return response.json().catch(() => ({}));
+        })
+            .then(data => {
+            if (data && typeof data === 'object') {
+                this.translations = data;
+            }
+        })
+            .catch(() => {
+            // #45: fetch失敗時もPromiseをresolveし、空翻訳でフォールバック
+            this.translations = {};
+        });
         return this.ready;
     },
     /**
