@@ -12,6 +12,7 @@
 | 初版 | 2026-04-02 | RULEBOOK_Ver1.md / RULEBOOK_Ver2.md を統合して新設 |
 | 改訂 | 2026-04-02 | §10-11 リリース計画を RELEASE_PLAN_RULEBOOK.md に移動、§8 セットアップツールのパスを Core/ / data/ に更新 |
 | 改訂 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
+| 改訂 | 2026-04-03 | §8 セットアップツール: メインマスター管理者ログインID入力追加、users.json生成、config.jsonパスワード保存禁止、権限0600追加 |
 
 ## DIRECTION_RULEBOOK.md（製品方向性）
 
@@ -39,6 +40,7 @@
 | Ver.1.0-1 | 2026-04-01 | 初版 |
 | Ver.1.0-2 | 2026-04-02 | §5 必須アーキテクチャに現行実装との整合注記追加、関連文書セクション既存確認 |
 | Ver.1.0-3 | 2026-04-02 | 対象製品名を Adlaire Static CMS (ASCMS) に変更 |
+| Ver.1.0-4 | 2026-04-03 | §9.1 メインマスター管理者ログインID必須化・users.json要件追加、§12 users.jsonセキュリティ要件追記 |
 
 ## ARCHITECTURE_RULEBOOK.md（アーキテクチャ）
 
@@ -48,6 +50,7 @@
 | Ver.1.1 | 2026-04-02 | Core/ ディレクトリ導入、data/ 統合、静的生成を GENERATOR_RULEBOOK に分離、セキュリティ基盤を Core 責務として明記 |
 | Ver.1.2 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | Ver.1.3 | 2026-04-02 | §2.2/§5 に Core/license.php・LICENSE_SYSTEM_RULEBOOK.md・Licenses/・REVISION_HISTORY.md を追加 |
+| Ver.1.4 | 2026-04-03 | §3.1 data/system/users.json追加、§6.1 認証方式をマスター管理者モデル(メイン+サブ)に変更、マイグレーション規則追記 |
 
 ## API_RULEBOOK.md（API・データ）
 
@@ -56,6 +59,7 @@
 | Ver.1.0 | 2026-04-02 | 初版（旧 RULEBOOK_Ver1/Ver2 から移行） |
 | Ver.1.1 | 2026-04-02 | §2.6 required_files を Core/ パスに更新、§6.5 admin-ui.php パス修正、ヘッダー移行元記載整理、関連文書セクション追加 |
 | Ver.1.2 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
+| Ver.1.3 | 2026-04-03 | §2.1 config.jsonからpasswordキー廃止、§2.7 users.jsonをメイン/サブマスター対応に更新、§4.8 ユーザー管理API新設 |
 
 ## GENERATOR_RULEBOOK.md（静的サイト生成）
 
@@ -85,6 +89,8 @@
 | Ver.2.4 | 2026-04-03 | Ver.2.7 追加バグ修正150件精査・全件実装完了（PHP100件+TS50件、致命的4+重大22+中程度124） |
 | Ver.2.5 | 2026-04-03 | §4.2 Ver.2.8 バグ修正300件（PHP200件+TS100件）を策定 |
 | Ver.2.6 | 2026-04-03 | Ver.2.8 バグ修正300件全件実装完了、§3.1 にリリース履歴追加、現行バージョンを Ver.2.8-41 に更新 |
+| Ver.2.7 | 2026-04-03 | §4.1 Ver.2.9 マスター管理者M1-M10策定、追加品質確定360件策定 |
+| Ver.2.8 | 2026-04-03 | Ver.2.9 マスター管理者+品質確定448件全件実装完了、現行バージョンを Ver.2.9-46 に更新 |
 
 ## LICENSE_SYSTEM_RULEBOOK.md（ライセンスシステム）
 

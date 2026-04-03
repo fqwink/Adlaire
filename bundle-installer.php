@@ -27,6 +27,10 @@ require __DIR__ . '/Core/helpers.php';
 require __DIR__ . '/Core/core.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Strict');
+    ini_set('session.use_only_cookies', '1');
     session_start();
 }
 
@@ -70,7 +74,7 @@ function detect_password_hash(): array
 /** @return array{ok: bool, message: string, warning?: bool} */
 function detect_https(): array
 {
-    $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
     return ['ok' => $ok, 'message' => $ok ? 'HTTPS enabled' : 'HTTPS not detected (recommended)', 'warning' => !$ok];
 }
 
@@ -123,6 +127,16 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
+    if (mb_strlen($siteName, 'UTF-8') > 100) {
+        $errors[] = 'Site name must be 100 characters or less';
+    }
+    $adminUsername = trim($post['admin_username'] ?? '');
+    if ($adminUsername === '') {
+        $adminUsername = 'admin';
+    }
+    if (!preg_match('/^[a-zA-Z0-9_-]{2,32}$/', $adminUsername)) {
+        $errors[] = 'Invalid admin username (2-32 chars, alphanumeric, dash, underscore only)';
+    }
     if (!in_array($locale, INSTALLER_SUPPORTED_LOCALES, true)) {
         $errors[] = 'Invalid language selection';
     }
@@ -159,7 +173,6 @@ function install_execute(string $siteName, string $locale, string $password): ar
     $config = [
         'title' => $siteName,
         'language' => $locale,
-        'password' => password_hash($password, PASSWORD_DEFAULT),
         'themeSelect' => 'AP-Default',
         'menu' => "Home<br />\nExample",
         'subside' => '',
@@ -184,6 +197,39 @@ function install_execute(string $siteName, string $locale, string $password): ar
         return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
     }
 
+    // Create users.json
+    $adminUsername = $GLOBALS['_installer_username'] ?? 'admin';
+    $usersData = [
+        'users' => [
+            $adminUsername => [
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'role' => 'master',
+                'is_main' => true,
+                'created_at' => date('c'),
+                'last_login' => '',
+            ],
+        ],
+        'max_users' => 3,
+    ];
+    $usersJson = json_encode($usersData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($usersJson === false) {
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to encode users.json'];
+    }
+    $usersPath = $systemDir . '/users.json';
+    $tmpUsers = tempnam(dirname($usersPath), '.tmp_');
+    if ($tmpUsers === false || file_put_contents($tmpUsers, $usersJson, LOCK_EX) === false) {
+        if ($tmpUsers !== false) { @unlink($tmpUsers); }
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to write users.json'];
+    }
+    chmod($tmpUsers, 0600);
+    if (!rename($tmpUsers, $usersPath)) {
+        @unlink($tmpUsers);
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to write users.json'];
+    }
+
     // Create install.lock
     $lock = [
         'installed' => true,
@@ -199,13 +245,18 @@ function install_execute(string $siteName, string $locale, string $password): ar
         return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
     }
     $lockPath = __DIR__ . '/data/system/install.lock';
-    $lockResult = file_put_contents($lockPath, $lockJson);
-
-    if ($lockResult === false) {
+    $tmpLock = tempnam(dirname($lockPath), '.tmp_');
+    if ($tmpLock === false || file_put_contents($tmpLock, $lockJson, LOCK_EX) === false) {
+        if ($tmpLock !== false) { @unlink($tmpLock); }
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
-    chmod($lockPath, 0600);
+    chmod($tmpLock, 0600);
+    if (!rename($tmpLock, $lockPath)) {
+        @unlink($tmpLock);
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to create install.lock'];
+    }
 
     return ['ok' => true, 'message' => 'Installation completed successfully'];
 }
@@ -242,6 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validate and install
         $errors = validate_input($_POST);
         if (empty($errors)) {
+            $GLOBALS['_installer_username'] = trim($_POST['admin_username'] ?? 'admin');
             $result = install_execute(
                 trim($_POST['site_name']),
                 $_POST['default_locale'],
@@ -275,6 +327,7 @@ $csrf = security_csrf_token();
     <title>Adlaire Setup — Step <?= (int) $step ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
     <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         body{font-family:Verdana,sans-serif;background:#f5f5f5;color:#333;line-height:1.6;}
@@ -375,6 +428,12 @@ $csrf = security_csrf_token();
     }
     ?>
 
+    <?php
+    $httpsCheck = detect_https();
+    if (!$httpsCheck['ok']): ?>
+        <div class="warning"><strong>Security Warning:</strong> HTTPS is not enabled. All data including passwords will be transmitted in plaintext. It is strongly recommended to enable HTTPS before proceeding with installation.</div>
+    <?php endif; ?>
+
     <?php if ($allOk): ?>
         <form method="POST" action="?step=2">
             <input type="hidden" name="csrf" value="<?= esc($csrf) ?>">
@@ -413,6 +472,9 @@ $csrf = security_csrf_token();
             <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc] ?? $loc) ?></option>
 <?php endforeach; ?>
         </select>
+
+        <label>Admin Username</label>
+        <input type="text" name="admin_username" value="<?= esc($_POST['admin_username'] ?? 'admin') ?>" pattern="[a-zA-Z0-9_\-]{2,32}" maxlength="32" minlength="2">
 
         <label>Admin Password * (min 8 characters)</label>
         <input type="password" name="admin_password" minlength="8" required>

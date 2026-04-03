@@ -14,7 +14,9 @@ declare(strict_types=1);
  * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
-ob_start();
+if (ob_get_level() === 0) {
+    ob_start();
+}
 
 register_shutdown_function(function (): void {
     if (ob_get_level() > 0) {
@@ -25,10 +27,15 @@ register_shutdown_function(function (): void {
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Strict');
-if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
+ini_set('session.use_only_cookies', '1');
+ini_set('session.use_trans_sid', '0');
+$isHttpsDetected = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+if ($isHttpsDetected) {
     ini_set('session.cookie_secure', '1');
 }
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 require __DIR__ . '/Core/helpers.php';
 require __DIR__ . '/Core/core.php';
@@ -58,6 +65,7 @@ $cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'no
 header($cspHeader);
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -65,7 +73,19 @@ if (isset($_GET['admin'])) {
         header('Location: ?login');
         exit;
     }
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('Pragma: no-cache');
     require __DIR__ . '/Core/admin-ui.php';
+    ob_end_flush();
+    exit;
+}
+
+if ($app->is404() && !$app->isLoggedIn()) {
+    http_response_code(404);
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo '<!doctype html><html><head><meta charset="utf-8"><title>404</title></head><body>';
+    echo '<h1>404 Not Found</h1><p>' . esc($app->config['content'] ?? '') . '</p>';
+    echo '</body></html>';
     ob_end_flush();
     exit;
 }
@@ -78,12 +98,6 @@ if (isset($_GET['preview'])) {
         exit;
     }
     header('X-Robots-Tag: noindex, nofollow');
-    if (is_string($previewSlug)) {
-        $decoded = rawurldecode($previewSlug);
-        if ($decoded === $previewSlug || rawurldecode($decoded) === $decoded) {
-            $previewSlug = $decoded;
-        }
-    }
     if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
         $previewData = $app->storage->readPageData($previewSlug);
         if ($previewData !== false) {

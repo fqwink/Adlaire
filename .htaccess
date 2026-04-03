@@ -19,6 +19,20 @@ RewriteRule .* - [F,L]
 <Files ".htaccess">
     Require all denied
 </Files>
+<Files "tsconfig.json">
+    Require all denied
+</Files>
+<Files "package.json">
+    Require all denied
+</Files>
+<Files "package-lock.json">
+    Require all denied
+</Files>
+
+# Block access to hidden files (except .htaccess)
+<FilesMatch "^\.(?!htaccess)">
+    Require all denied
+</FilesMatch>
 
 ErrorDocument 403 &nbsp;
 Options -Indexes
@@ -28,6 +42,7 @@ Options -Indexes
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set X-Permitted-Cross-Domain-Policies "none"
 </IfModule>
 
 # Cache static assets
@@ -39,6 +54,18 @@ Options -Indexes
     ExpiresByType image/jpeg "access plus 1 month"
     ExpiresByType image/gif "access plus 1 month"
     ExpiresByType image/svg+xml "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    ExpiresByType application/json "access plus 0 seconds"
+</IfModule>
+
+# Cache-Control for CSS/JS
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+    <FilesMatch "\.(png|jpg|jpeg|gif|svg|webp)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
 </IfModule>
 
 # Clean URLs

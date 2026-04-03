@@ -12,10 +12,33 @@ declare(strict_types=1);
  * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
+// --- Auth verification helper ---
+
+function verifyApiAuth(FileStorage $storage): bool
+{
+    $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+    $sessionHash = is_string($_SESSION['l'] ?? null) ? ($_SESSION['l'] ?? '') : '';
+    if ($sessionUser === '' || $sessionHash === '') {
+        return false;
+    }
+    $userData = $storage->getUser($sessionUser);
+    if ($userData === false || !isset($userData['password'])) {
+        return false;
+    }
+    if (isset($userData['enabled']) && $userData['enabled'] === false) {
+        return false;
+    }
+    return hash_equals((string) $userData['password'], $sessionHash);
+}
+
 // --- Admin edit handler ---
 
 function handleEdit(): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return;
+    }
+
     $fieldname = $_POST['fieldname'] ?? null;
     $content = $_POST['content'] ?? null;
 
@@ -23,7 +46,10 @@ function handleEdit(): void
         return;
     }
 
-    $fieldname = basename($fieldname);
+    $fieldname = basename(trim($fieldname));
+    if ($fieldname === '') {
+        return;
+    }
     $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'content', 'status', 'format', 'blocks'];
     if (!in_array($fieldname, $allowedConfigFields, true) && !FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
@@ -36,10 +62,7 @@ function handleEdit(): void
     }
 
     $storage = new FileStorage('data');
-    $config = $storage->readConfig();
-    $storedPassword = $config['password'] ?? '';
-    $sessionToken = $_SESSION['l'] ?? '';
-    if ($storedPassword === '' || $sessionToken === '' || !hash_equals($storedPassword, $sessionToken)) {
+    if (!verifyApiAuth($storage)) {
         header('HTTP/1.1 401 Unauthorized');
         exit;
     }
@@ -70,11 +93,11 @@ function handleEdit(): void
         exit;
     }
 
-    // Return new CSRF token for subsequent requests (one-time token)
     header('Content-Type: text/plain; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
     $csrfValue = $_SESSION['csrf'] ?? '';
-    if ($csrfValue !== '') {
+    if (is_string($csrfValue) && $csrfValue !== '' && preg_match('/^[a-f0-9]+$/', $csrfValue)) {
         header('X-CSRF-Token: ' . $csrfValue);
     }
     echo $content;
@@ -101,14 +124,25 @@ function handleApi(): void
 
     header('Content-Type: application/json; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    $allowedHost = $_SERVER['HTTP_HOST'] ?? '';
+    header('Cache-Control: no-store');
+    $origin = is_string($_SERVER['HTTP_ORIGIN'] ?? null) ? ($_SERVER['HTTP_ORIGIN'] ?? '') : '';
+    $allowedHost = is_string($_SERVER['HTTP_HOST'] ?? null) ? ($_SERVER['HTTP_HOST'] ?? '') : '';
     if ($origin === 'null' || $origin === '') {
         // Reject null and empty origins
     } elseif ($allowedHost !== '') {
-        $parsed = parse_url($origin, PHP_URL_HOST);
-        if (is_string($parsed) && $parsed === $allowedHost) {
-            header('Access-Control-Allow-Origin: ' . $origin);
+        $parsedHost = parse_url($origin, PHP_URL_HOST);
+        $parsedPort = parse_url($origin, PHP_URL_PORT);
+        $hostWithPort = $allowedHost;
+        $hostOnly = str_contains($allowedHost, ':') ? strstr($allowedHost, ':', true) : $allowedHost;
+        if (is_string($parsedHost) && $parsedHost === $hostOnly) {
+            $allowedPort = str_contains($allowedHost, ':') ? (int) substr($allowedHost, (int) strpos($allowedHost, ':') + 1) : null;
+            if ($allowedPort === null && $parsedPort === null) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            } elseif ($parsedPort !== null && $allowedPort !== null && (int) $parsedPort === $allowedPort) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            } elseif ($parsedPort === null && $allowedPort === null) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+            }
         }
     }
 
@@ -122,17 +156,14 @@ function handleApi(): void
         exit;
     }
 
-    $config = $storage->readConfig();
-    $apiPassword = $config['password'] ?? '';
-    $apiSession = $_SESSION['l'] ?? '';
-    if ($apiPassword === '' || $apiSession === '' || !hash_equals($apiPassword, $apiSession)) {
+    if (!verifyApiAuth($storage)) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
     }
 
     $apiCsrf = $_SESSION['csrf'] ?? '';
-    if ($apiCsrf !== '') {
+    if (is_string($apiCsrf) && $apiCsrf !== '' && preg_match('/^[a-f0-9]+$/', $apiCsrf)) {
         header('X-CSRF-Token: ' . $apiCsrf);
     }
 
@@ -142,6 +173,7 @@ function handleApi(): void
         'export'    => handleApiExport($storage),
         'import'    => handleApiImport($storage),
         'generate'  => handleApiGenerate($storage),
+        'users'     => handleApiUsers($storage, $method),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -190,12 +222,11 @@ function apiPageList(FileStorage $storage): void
     $pages = $storage->listPages();
     $summary = [];
     foreach ($pages as $slug => $data) {
-        unset($data['content'], $data['blocks']);
         $summary[$slug] = [
             'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
-            'created_at' => $data['created_at'],
-            'updated_at' => $data['updated_at'],
+            'created_at' => $data['created_at'] ?? '',
+            'updated_at' => $data['updated_at'] ?? '',
         ];
     }
     apiResponse(['pages' => $summary], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -322,7 +353,7 @@ function apiPageStatusUpdate(FileStorage $storage): void
     apiResponse(['status' => 'ok', 'slug' => $slug, 'page_status' => $status]);
 }
 
-function apiPageDelete(FileStorage $storage, mixed $slug): void
+function apiPageDelete(FileStorage $storage, string|null $slug): void
 {
     if (!is_string($slug) || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
@@ -394,11 +425,20 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 // --- Search API ---
 
+/** Maximum search query length */
+const API_SEARCH_MAX_QUERY_LENGTH = 200;
+
+/** Maximum search snippet length */
+const API_SEARCH_SNIPPET_LENGTH = 120;
+
+/** Search snippet context chars before match */
+const API_SEARCH_SNIPPET_CONTEXT = 40;
+
 function handleApiSearch(FileStorage $storage): void
 {
-    $rawQuery = is_string($_REQUEST['q'] ?? '') ? ($_REQUEST['q'] ?? '') : '';
-    if ($rawQuery === '') {
-        echo json_encode(['results' => []]);
+    $rawQuery = is_string($_REQUEST['q'] ?? null) ? trim($_REQUEST['q'] ?? '') : '';
+    if ($rawQuery === '' || mb_strlen($rawQuery, 'UTF-8') > API_SEARCH_MAX_QUERY_LENGTH) {
+        apiResponse(['results' => []]);
         return;
     }
 
@@ -417,9 +457,8 @@ function handleApiSearch(FileStorage $storage): void
             continue;
         }
 
-        // Extract snippet around match
-        $start = max(0, $pos - 40);
-        $snippet = mb_substr($data['content'], $start, 120, 'UTF-8');
+        $start = max(0, $pos - API_SEARCH_SNIPPET_CONTEXT);
+        $snippet = mb_substr($data['content'], $start, API_SEARCH_SNIPPET_LENGTH, 'UTF-8');
         if ($start > 0) {
             $snippet = '...' . $snippet;
         }
@@ -442,9 +481,11 @@ function handleApiSitemap(FileStorage $storage): void
 {
     header('Content-Type: application/xml; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: public, max-age=3600');
 
     $app = App::getInstance();
-    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $httpsVal = $_SERVER['HTTPS'] ?? '';
+    $isHttps = is_string($httpsVal) && $httpsVal !== '' && $httpsVal !== 'off';
     $rawHost = rtrim($app->host, '/');
     $host = ($isHttps ? 'https' : 'http') . ':' . $rawHost;
 
@@ -462,10 +503,13 @@ function handleApiSitemap(FileStorage $storage): void
 
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = substr($data['updated_at'], 0, 10); // YYYY-MM-DD
+        $updatedAt = $data['updated_at'] ?? '';
+        $lastmod = strlen($updatedAt) >= 10 ? htmlspecialchars(substr($updatedAt, 0, 10), ENT_XML1, 'UTF-8') : '';
         $xml .= "  <url>\n";
         $xml .= "    <loc>{$loc}</loc>\n";
-        $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+        if ($lastmod !== '') {
+            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+        }
         $xml .= "  </url>\n";
     }
 
@@ -483,7 +527,7 @@ function handleApiExport(FileStorage $storage): void
     }
 
     $config = $storage->readConfig();
-    unset($config['password']);
+    unset($config['password'], $config['session'], $config['csrf'], $config['loggedin']);
 
     $export = [
         'version'   => App::VERSION,
@@ -507,18 +551,24 @@ function handleApiExport(FileStorage $storage): void
         $export['revision_data'] = $revisionData;
     }
 
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="adlaire-export-' . date('Ymd_His') . '.json"');
-    header('X-Content-Type-Options: nosniff');
     $exportJson = json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     if ($exportJson === false) {
+        header('Content-Type: application/json; charset=UTF-8');
         apiError(500, 'Export JSON encoding failed');
         return;
     }
+    $safeDate = preg_replace('/[^0-9_]/', '', date('Ymd_His'));
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="adlaire-export-' . $safeDate . '.json"');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
     echo $exportJson;
 }
 
 // --- Import API ---
+
+/** Maximum import file size in bytes (16 MB) */
+const API_MAX_IMPORT_SIZE = 16 * 1024 * 1024;
 
 function handleApiImport(FileStorage $storage): void
 {
@@ -532,17 +582,29 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    $maxImportSize = API_MAX_IMPORT_SIZE;
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($contentLength > $maxImportSize) {
+        apiError(413, 'Import data exceeds 16MB limit');
+        return;
+    }
+
     static $rawInput = null;
     if ($rawInput === null) {
-        $rawInput = file_get_contents('php://input');
+        $rawInput = file_get_contents('php://input', false, null, 0, $maxImportSize + 1);
     }
     $input = ($rawInput !== false && $rawInput !== '') ? $rawInput : '';
     if ($input === '') {
-        $input = $_POST['data'] ?? '';
+        $input = is_string($_POST['data'] ?? null) ? ($_POST['data'] ?? '') : '';
     }
 
     if ($input === '') {
         apiError(400, 'Empty request body');
+        return;
+    }
+
+    if (strlen($input) > $maxImportSize) {
+        apiError(413, 'Import data exceeds 16MB limit');
         return;
     }
 
@@ -653,15 +715,19 @@ function handleApiImport(FileStorage $storage): void
 
 function handleApiVersion(): void
 {
+    header('Cache-Control: public, max-age=60');
     $versionFile = dirname(__DIR__) . '/VERSION';
     $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
     $lockFile = dirname(__DIR__) . '/data/system/install.lock';
-    $installed = file_exists($lockFile);
+    $installed = file_exists($lockFile) && !is_link($lockFile);
     $installedAt = '';
     if ($installed) {
-        $lock = json_decode((string) file_get_contents($lockFile), true);
-        $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
+        $lockContent = file_get_contents($lockFile);
+        if ($lockContent !== false) {
+            $lock = json_decode($lockContent, true);
+            $installedAt = is_array($lock) ? ($lock['installed_at'] ?? '') : '';
+        }
     }
 
     apiResponse([
@@ -673,6 +739,168 @@ function handleApiVersion(): void
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
+
+// --- Users API ---
+
+function isMainMasterSession(FileStorage $storage): bool
+{
+    $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+    if ($sessionUser === '') {
+        return false;
+    }
+    $userData = $storage->getUser($sessionUser);
+    if ($userData === false) {
+        return false;
+    }
+    return ($userData['is_main'] ?? false) === true;
+}
+
+function handleApiUsers(FileStorage $storage, string $method): void
+{
+    if (!isMainMasterSession($storage)) {
+        apiError(403, 'Main master access required');
+        return;
+    }
+
+    if ($method === 'GET') {
+        $users = $storage->listUsers();
+        apiResponse(['users' => $users], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $action = $_POST['action'] ?? '';
+
+        if ($action === 'generate') {
+            $credentials = $storage->generateSubMasterCredentials();
+            $loginId = $credentials['login_id'];
+            $password = $credentials['password'];
+            $token = $credentials['token'];
+
+            $existing = $storage->getUser($loginId);
+            if ($existing !== false) {
+                apiError(409, 'ID collision, please try again');
+                return;
+            }
+
+            $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+            $userData = [
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'role' => 'master',
+                'is_main' => false,
+                'token' => password_hash($token, PASSWORD_DEFAULT),
+                'enabled' => true,
+                'created_by' => $sessionUser,
+                'created_at' => date('c'),
+                'last_login' => '',
+            ];
+            if (!$storage->writeUser($loginId, $userData)) {
+                apiError(400, 'Maximum user limit reached');
+                return;
+            }
+            apiResponse([
+                'status' => 'ok',
+                'credentials' => [
+                    'login_id' => $loginId,
+                    'password' => $password,
+                    'token' => $token,
+                ],
+            ]);
+            return;
+        }
+
+        if ($action === 'disable') {
+            $username = is_string($_POST['user'] ?? null) ? trim($_POST['user'] ?? '') : '';
+            if ($username === '') {
+                apiError(400, 'Invalid username');
+                return;
+            }
+            $targetUser = $storage->getUser($username);
+            if ($targetUser === false) {
+                apiError(404, 'User not found');
+                return;
+            }
+            if (!empty($targetUser['is_main'])) {
+                apiError(400, 'Cannot disable main master');
+                return;
+            }
+            if (!$storage->disableUser($username)) {
+                apiError(500, 'Failed to disable user');
+                return;
+            }
+            apiResponse(['status' => 'ok', 'disabled' => $username]);
+            return;
+        }
+
+        if ($action === 'password') {
+            $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+            $password = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
+            if ($password === '' || strlen($password) < 8) {
+                apiError(400, 'Password must be at least 8 characters');
+                return;
+            }
+            if (strlen($password) > 256) {
+                apiError(400, 'Password is too long');
+                return;
+            }
+            $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
+            if (in_array(strtolower($password), $weakPasswords, true)) {
+                apiError(400, 'Password is too weak');
+                return;
+            }
+            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            if (!$storage->writeUser($sessionUser, ['password' => $newHash])) {
+                apiError(500, 'Failed to update password');
+                return;
+            }
+            $_SESSION['l'] = $newHash;
+            apiResponse(['status' => 'ok']);
+            return;
+        }
+
+        apiError(400, 'Invalid action');
+        return;
+    }
+
+    if ($method === 'DELETE') {
+        $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (is_string($csrfHeader) && $csrfHeader !== '') {
+            $_POST['csrf'] = $csrfHeader;
+        }
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $username = is_string($_REQUEST['username'] ?? null) ? trim($_REQUEST['username'] ?? '') : '';
+        if ($username === '') {
+            apiError(400, 'Invalid username');
+            return;
+        }
+        $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+        if ($username === $sessionUser) {
+            apiError(400, 'Cannot delete yourself');
+            return;
+        }
+        $targetUser = $storage->getUser($username);
+        if ($targetUser !== false && !empty($targetUser['is_main'])) {
+            apiError(400, 'Cannot delete main master');
+            return;
+        }
+        if (!$storage->deleteUser($username)) {
+            apiError(400, 'Cannot delete user (not found or last remaining)');
+            return;
+        }
+        apiResponse(['status' => 'ok', 'deleted' => $username]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
+}
+
 function apiPageReorder(FileStorage $storage): void
 {
     if (!csrf_verify()) {
@@ -681,8 +909,8 @@ function apiPageReorder(FileStorage $storage): void
     }
 
     $raw = $_POST['slugs'] ?? '';
-    $slugs = is_array($raw) ? $raw : json_decode($raw, true);
-    if (!is_array($slugs)) {
+    $slugs = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : null);
+    if (!is_array($slugs) || $slugs === []) {
         apiError(400, 'Invalid slugs');
         return;
     }
@@ -800,8 +1028,8 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         return;
     }
 
-    $blocks1 = $data1['blocks'] ?? [];
-    $blocks2 = $data2['blocks'] ?? [];
+    $blocks1 = is_array($data1['blocks'] ?? null) ? $data1['blocks'] : [];
+    $blocks2 = is_array($data2['blocks'] ?? null) ? $data2['blocks'] : [];
 
     $added = [];
     $removed = [];

@@ -1,5 +1,159 @@
 # CHANGES - 変更履歴
 
+## Ver.2.9-46 (2026-04-03)
+
+### 追加品質確定TS側軽微改善（60件精査・60件実装）
+
+#### パフォーマンス（#61-#70）
+* markdown.ts: headings/bold/italic/image/link/taskList/list/blockquote/paragraph正規表現を事前コンパイル化(#61-#66)
+* editor.ts: sanitizeHtml正規表現22パターンを事前コンパイル化(#67)
+* editInplace.ts: sortedReplacer関数のDRY化（flushSave/beforeunload共通化）(#69,#75)
+* editor.ts: createBlockWrapperボタンにaria-label一括追加(#70)
+
+#### コード品質（#71-#80）
+* editor.ts: BlockToolData interfaceにlanguageフィールド追加(#71)
+* api.ts: エラーメッセージ取得をextractApiErrorヘルパーに統一（15箇所DRY化）(#73)
+* editInplace.ts: sortedReplacerをモジュールスコープ_sortedReplacerに移動(#75)
+* markdown.ts: escAttrヘルパーをモジュールスコープ_mdEscAttrに昇格(#77)
+* editor.ts: saveUndoState/dirtyをpublic化しas anyキャスト6箇所削減(#78)
+* editInplace.ts: マジックナンバー5件を定数化（SAVE_DEBOUNCE_MS等）(#79)
+* editInplace.ts: showRevisionDiffModal innerHTML→DOM API化(#80)
+
+#### 型改善（#81-#85）
+* globals.d.ts: GenerateReport型定義追加(#82)
+* editInplace.ts: showGenerateReport引数型をGenerateReport型に統一(#83)
+
+#### エラーハンドリング（#86-#90）
+* api.ts: listUsers/saveSidebar失敗時console.warn追加(#86,#90)
+* editInplace.ts: renderMarkdownContent/renderBlocksContent atob失敗時console.warn(#88,#89)
+
+#### null安全（#91-#93）
+* editor.ts: image block save時img要素フォールバック追加(#91)
+* editInplace.ts: showFieldFeedback borderColor orig null安全(#92)
+
+#### UX・i18n（#94-#100）
+* editInplace.ts: downloadCredentialsファイル内テキストi18n化(#94)
+* editInplace.ts: showSaveIndicator状態テキストi18n化(#95)
+* editInplace.ts: bulk操作エラーメッセージi18nフォールバック追加(#96)
+* editor.ts: toolboxボタンにtitle属性追加(#97)
+* editor.ts: image URL/captionプレースホルダーi18n化(#98,#99)
+* editInplace.ts: パスワード変更成功時フォームフォーカス制御(#100)
+
+#### アクセシビリティ（#101-#105）
+* editor.ts: heading levelボタンにaria-label追加（レベル変更時も更新）(#101)
+* editor.ts: list toggleボタンにaria-label追加(#102)
+* editor.ts: delete/moveUp/moveDown/addブロックボタンにaria-label追加(#103-#105)
+
+#### CSS（#106-#115）
+* admin.css: ce-heading-wrap/ce-list-wrap/ce-sub-master-credentials/ce-warnings__item/ce-generate-report/ce-diff-modalスタイル追加(#106-#110)
+* admin.css: dark mode heading/list toggle/credentials/warnings/report/diffスタイル(#111)
+* AP-Default/style.css: heading/list wrapスタイル追加+dark mode対応(#112)
+* AP-Adlaire/style.css: heading/list wrapスタイル追加+dark mode対応(#113)
+* AP-Default/minimal.css: font-family system-uiフォールバック追加(#114)
+* AP-Adlaire/minimal.css: font-family system-uiフォールバック追加(#115)
+
+#### i18n（#116-#119）
+* ja.json: downloadCredentials/save状態/image/bulk/diff/reorder/format/generate/report/user管理翻訳キー36件追加(#116,#118)
+* en.json: 同上英語翻訳キー36件追加(#117,#119)
+
+#### ビルド設定（#120）
+* tsconfig.json: noUnusedLocals/noUnusedParameters追加（未使用コード検出強化）(#120)
+
+## Ver.2.9-45 (2026-04-03)
+
+### 追加品質確定TS側バグ修正（60件精査・60件実装）
+* editor.ts: surroundContents失敗後HTML復元+sanitizeHtml適用(#2,#8)
+* editor.ts: isConnected失敗時Observer/Interval自動クリーンアップ(#4)
+* editor.ts: 複数エディタInlineToolbar競合→インスタンスベース化(#6)
+* editor.ts: focusout重複防止デバウンスタイマー(#20)
+* editor.ts: UndoManager連続pushデバウンス300ms+clear()追加(#21)
+* editor.ts: InlineToolbar位置計算改善 下端制限/空選択非表示(#23,#45)
+* editor.ts: list初期化items配列Array.isArrayチェック(#10)
+* editor.ts: heading形式切替innerHTML保持+サニタイズ(#13)
+* editor.ts: ブロック削除DOM接続確認(#14)
+* editor.ts: removeBlock削除前undo状態保存(#17)
+* editor.ts: ツールボックスEscape閉じ(#19)
+* editor.ts: insertBlock未知typeチェック(#27)
+* editor.ts: renderBlocks空data安全処理+Array.isArray(#35)
+* editor.ts: wrapWithLink選択範囲検証+プロトコル拒否拡大(#36)
+* editor.ts: リスト入力空li→paragraph+Backspace空li削除(#38)
+* editor.ts: リストトグルlistEl DOM未接続再取得(#42)
+* editor.ts: Tab Shift+Tabインデント解除(#47)
+* editor.ts: Undo/Redo dirtyフラグリセット(#49)
+* editor.ts: paragraph paste sanitizeHtml適用(#50)
+* editInplace.ts: downloadCredentials XSS対策escHtml+ファイル名サニタイズ(#1)
+* editInplace.ts: beforeunload sendBeacon CSRF _lastValidCsrfTokenキャッシュ(#3,#7)
+* editInplace.ts: 複数エディタactiveEditor focusin更新(#9)
+* editInplace.ts: save大規模content上限チェック(#11)
+* editInplace.ts: switchFormat newFormat入力検証(#43)
+* editInplace.ts: sendBeacon失敗XHR同期フォールバック(#16,#18)
+* editInplace.ts: ページ検索デバウンス150ms(#37)
+* editInplace.ts: ユーザー削除ボタン無効化(#46)
+* editInplace.ts: パスワード最小長8文字+現パスワード同一チェック(#33)
+* editInplace.ts: revokeObjectURL遅延実行(#40)
+* editInplace.ts: showWarnings isConnected確認(#41)
+* editInplace.ts: refreshUserList競合防止フラグ(#56)
+* editInplace.ts: generateSubMasterレスポンス検証(#57)
+* markdown.ts: footnote IDダブルエスケープ修正(#5)
+* markdown.ts: タスクリスト行頭スペース許容(#25)
+* markdown.ts: 脚注参照escAttrダブルエスケープ防止(#28)
+* markdown.ts: image/link正規表現タイトル属性対応(#34)
+* markdown.ts: テーブルセル数正規化(#39)
+* markdown.ts: コードブロック<p>ラップ除去(#44)
+* markdown.ts: テーブルalignment配列超過防止(#54)
+* markdown.ts: 脚注複数行対応(#55)
+* i18n.ts: パラメータnullフォールバック+has()メソッド追加(#22)
+* api.ts: disableUser/deleteUser username入力検証(#32,#46)
+* api.ts: updateMainPassword パスワード長チェック(#33)
+
+## Ver.2.9-43 (2026-04-03)
+
+### マスター管理者アクセス権限（M1-M10）
+* M1: ユーザーモデル刷新 — メインmaster(1名)+サブmaster(最大2名)、合計3名制限
+* M2: data/system/users.json — is_main, token, enabled, created_by フィールド追加
+* M3: config.json:password → users.json 強制マイグレーション（is_main=true付与）
+* M4: ログイン画面にユーザー名+トークン入力フィールド追加
+* M5: $_SESSION にuser/role/is_main情報追加、disabled userの即ログアウト
+* M6: ユーザー管理画面（サブmaster生成/無効化/削除/パスワード変更、メインmasterのみ）
+* M7: ?api=users エンドポイント（generate/disable/password/delete、メインmaster認証必須）
+* M8: users.json symlink検出、排他ロック、アトミック書き込み
+* M9: bundle-installer — ユーザー名2-32文字バリデーション、is_main=true設定
+* M10: ログイン状態表示にユーザー名、ナビUsersメニューはメインmasterのみ
+
+### 品質確定バグ修正（63件精査・63件実装）
+* core.php: ensureDirectories() mkdir戻り値チェック追加(#1)
+* core.php: readPageData() realPath使用+JSONエラーログ(#2,#17)
+* core.php: writeConfig/writePage/updatePageStatus json_encode falseチェック(#3,#4,#5)
+* core.php: deletePage/getRevisionData/restoreRevision/listRevisions symlink検出(#6,#7,#8,#10)
+* core.php: savePageOrder slugバリデーション(#9)
+* core.php: deleteUser メインmaster削除防止(#11)
+* core.php: usersFileExists/readUsers symlink検出(#12,#13)
+* core.php: atomicWrite 冗長umask除去+mkdir失敗ハンドリング(#54,#55)
+* core.php: removeConfigKey json_encodeエラーログ(#53)
+* app.php: getSlug特殊文字除去強化(#14)
+* app.php: session timeout型チェック(#15)
+* app.php: logout session変数クリア(#16)
+* app.php: login サブmaster enabled/token認証(#18,#19)
+* app.php: editTags hooks型チェック(#20)
+* app.php: menu config型チェック(#21)
+* app.php: loadLanguage basename()パストラバーサル防止(#56)
+* api.php: sitemap updated_at長さ検証(#23)
+* api.php: export session key除去(#24)
+* api.php: version install.lock symlink検出(#25)
+* api.php: revisionDiff blocks型チェック(#26)
+* api.php: verifyApiAuth disabled user検出(#27)
+* helpers.php: rate_check配列要素型チェック(#33)
+* helpers.php: csrf_verify token型チェック(#34)
+* renderer.php: list items配列型チェック(#35)
+* generator.php: dist clean getRealPath falseチェック(#36)
+* generator.php: sidebar blocks静的レンダリング(#37)
+* generator.php: mkdir戻り値チェック3件(#38,#39,#40)
+* bundle-installer.php: username空文字列バリデーション(#41)
+* index.php: preview slug double decode簡素化(#44)
+* admin-ui.php: VERSION/install.lock symlink検出(#45,#46)
+* admin-ui.php: theme.json version nullチェック(#47)
+* admin-ui.php: sortPagesByUpdated変数名修正(#48)
+
 ## Ver.2.3-35 (2026-04-02)
 
 ### アーキテクチャ刷新（機能ベースファイル分離）

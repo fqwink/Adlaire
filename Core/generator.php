@@ -15,6 +15,12 @@ declare(strict_types=1);
 /**
  * Handle the static site generation API endpoint.
  */
+/** Directory permission for generated output */
+const GENERATOR_DIR_PERMISSION = 0755;
+
+/** File permission for generated output */
+const GENERATOR_FILE_PERMISSION = 0644;
+
 function handleApiGenerate(FileStorage $storage): void
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -39,7 +45,7 @@ function handleApiGenerate(FileStorage $storage): void
         $lastBuildTime = is_array($state) ? ($state['built_at'] ?? '') : '';
     }
 
-    // Full rebuild: clean dist directory
+    // Full rebuild: clean dist directory (preserve .build_state.json)
     if ($force || $lastBuildTime === '') {
         if (is_dir($distDir)) {
             $files = new RecursiveIteratorIterator(
@@ -48,18 +54,27 @@ function handleApiGenerate(FileStorage $storage): void
             );
             foreach ($files as $file) {
                 $path = $file->getPathname();
+                if (basename($path) === '.build_state.json') {
+                    continue;
+                }
                 if (is_link($path)) {
-                    unlink($path);
+                    @unlink($path);
                 } elseif ($file->isDir()) {
-                    rmdir($file->getRealPath());
+                    $realPath = $file->getRealPath();
+                    if ($realPath !== false) {
+                        @rmdir($realPath);
+                    }
                 } else {
-                    unlink($file->getRealPath());
+                    $realPath = $file->getRealPath();
+                    if ($realPath !== false) {
+                        @unlink($realPath);
+                    }
                 }
             }
         }
     }
     if (!is_dir($distDir)) {
-        if (!mkdir($distDir, 0755, true)) {
+        if (!mkdir($distDir, GENERATOR_DIR_PERMISSION, true)) {
             apiError(500, 'Failed to create dist directory');
             return;
         }
@@ -77,12 +92,17 @@ function handleApiGenerate(FileStorage $storage): void
     // Copy theme CSS (prefer minimal.css for static output)
     $cssDir = $distDir . '/themes/' . $theme;
     if (!is_dir($cssDir)) {
-        mkdir($cssDir, 0755, true);
+        if (!@mkdir($cssDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($cssDir)) {
+            error_log('Adlaire: Failed to create theme CSS directory: ' . $cssDir);
+        }
     }
     $cssSource = is_file($themePath . '/minimal.css') ? '/minimal.css' : '/style.css';
     if (is_file($themePath . $cssSource)) {
-        if (!copy($themePath . $cssSource, $cssDir . '/style.css')) {
-            error_log('Adlaire: Failed to copy theme CSS');
+        $cssDest = $cssDir . '/style.css';
+        if (!copy($themePath . $cssSource, $cssDest)) {
+            error_log('Adlaire: Failed to copy theme CSS: ' . $cssSource);
+        } else {
+            @chmod($cssDest, GENERATOR_FILE_PERMISSION);
         }
     }
 
@@ -92,13 +112,18 @@ function handleApiGenerate(FileStorage $storage): void
     $publicJs = ['markdown.js', 'editInplace.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
-            mkdir($jsDst, 0755, true);
+            if (!@mkdir($jsDst, GENERATOR_DIR_PERMISSION, true) && !is_dir($jsDst)) {
+                error_log('Adlaire: Failed to create JS directory: ' . $jsDst);
+            }
         }
         foreach ($publicJs as $jsName) {
             $jsPath = $jsSrc . '/' . $jsName;
             if (is_file($jsPath)) {
-                if (!copy($jsPath, $jsDst . '/' . $jsName)) {
+                $jsDstPath = $jsDst . '/' . $jsName;
+                if (!copy($jsPath, $jsDstPath)) {
                     error_log('Adlaire: Failed to copy JS file: ' . $jsName);
+                } else {
+                    @chmod($jsDstPath, GENERATOR_FILE_PERMISSION);
                 }
             }
         }
@@ -109,13 +134,20 @@ function handleApiGenerate(FileStorage $storage): void
     $langDst = $distDir . '/data/lang';
     if (is_dir($langSrc)) {
         if (!is_dir($langDst)) {
-            mkdir($langDst, 0755, true);
+            if (!@mkdir($langDst, GENERATOR_DIR_PERMISSION, true) && !is_dir($langDst)) {
+                error_log('Adlaire: Failed to create lang directory: ' . $langDst);
+            }
         }
         $langFiles = glob($langSrc . '/*.json');
-        if (is_array($langFiles)) {
+        if ($langFiles === false) {
+            error_log('Adlaire: glob() failed for lang directory: ' . $langSrc);
+        } else {
             foreach ($langFiles as $langFile) {
-                if (!copy($langFile, $langDst . '/' . basename($langFile))) {
+                $langDstFile = $langDst . '/' . basename($langFile);
+                if (!copy($langFile, $langDstFile)) {
                     error_log('Adlaire: Failed to copy lang file: ' . basename($langFile));
+                } else {
+                    @chmod($langDstFile, GENERATOR_FILE_PERMISSION);
                 }
             }
         }
@@ -123,8 +155,9 @@ function handleApiGenerate(FileStorage $storage): void
 
     // Generate each page (diff build: skip unchanged pages)
     foreach ($pages as $slug => $data) {
-        $updatedTime = strtotime($data['updated_at'] ?? '');
-        $buildTime = strtotime($lastBuildTime);
+        $updatedAt = $data['updated_at'] ?? '';
+        $updatedTime = is_string($updatedAt) && $updatedAt !== '' ? strtotime($updatedAt) : false;
+        $buildTime = $lastBuildTime !== '' ? strtotime($lastBuildTime) : false;
         if ($lastBuildTime !== '' && $updatedTime !== false && $buildTime !== false && $updatedTime <= $buildTime) {
             $skipped++;
             $details[] = ['slug' => $slug, 'result' => 'skipped'];
@@ -138,7 +171,7 @@ function handleApiGenerate(FileStorage $storage): void
         } elseif ($format === 'markdown') {
             $contentHtml = renderMarkdownToHtml($data['content']);
         } else {
-            $contentHtml = $data['content'] ?? '';
+            $contentHtml = esc($data['content'] ?? '');
         }
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
@@ -150,7 +183,7 @@ function handleApiGenerate(FileStorage $storage): void
             }
         }
         $pageDir = $distDir . '/' . $slug;
-        if (!is_dir($pageDir) && !mkdir($pageDir, 0755, true) && !is_dir($pageDir)) {
+        if (!is_dir($pageDir) && !mkdir($pageDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($pageDir)) {
             error_log('Adlaire: Failed to create page directory: ' . $pageDir);
             $failed++;
             $details[] = ['slug' => $slug, 'result' => 'failed'];
@@ -171,15 +204,21 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Generate sitemap.xml
-    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $httpsVal = $_SERVER['HTTPS'] ?? '';
+    $isHttps = is_string($httpsVal) && $httpsVal !== '' && $httpsVal !== 'off';
     $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
     $basePath = '';
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
     foreach ($pages as $slug => $data) {
         $loc = htmlspecialchars("{$host}{$basePath}/{$slug}", ENT_XML1, 'UTF-8');
-        $lastmod = htmlspecialchars(substr($data['updated_at'] ?? '', 0, 10), ENT_XML1, 'UTF-8');
-        $xml .= "  <url><loc>{$loc}</loc><lastmod>{$lastmod}</lastmod></url>\n";
+        $updatedAt = $data['updated_at'] ?? '';
+        $lastmod = (is_string($updatedAt) && strlen($updatedAt) >= 10) ? htmlspecialchars(substr($updatedAt, 0, 10), ENT_XML1, 'UTF-8') : '';
+        $xml .= "  <url><loc>{$loc}</loc>";
+        if ($lastmod !== '') {
+            $xml .= "<lastmod>{$lastmod}</lastmod>";
+        }
+        $xml .= "</url>\n";
     }
     $xml .= '</urlset>';
     if (file_put_contents($distDir . '/sitemap.xml', $xml) === false) {
@@ -219,22 +258,24 @@ function handleApiGenerate(FileStorage $storage): void
 function generatePageHtml(App $app, string $slug, string $contentHtml, string $theme): string
 {
     $c = $app->config;
-    $title = esc($c['title']);
+    $title = esc((string) ($c['title'] ?? ''));
     $pageTitle = esc($slug);
-    $desc = esc($c['description']);
-    $keywords = esc($c['keywords']);
+    $desc = esc((string) ($c['description'] ?? ''));
+    $keywords = esc((string) ($c['keywords'] ?? ''));
     $lang = esc($app->language);
     $copyright = esc((string) ($c['copyright'] ?? ''));
     $credit = esc($app->credit);
     $safeTheme = esc($theme);
 
-    // Build menu
     $menuHtml = '<ul>';
-    $menu = str_replace("\r\n", "\n", $c['menu']);
+    $menuRaw = $c['menu'] ?? '';
+    $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
     $items = explode("<br />\n", $menu);
     foreach ($items as $item) {
-        $item = trim($item);
-        if ($item === '') continue;
+        $item = trim(strip_tags($item));
+        if ($item === '') {
+            continue;
+        }
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';
         $safeItemSlug = esc($itemSlug);
@@ -242,7 +283,13 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     }
     $menuHtml .= '</ul>';
 
-    $sideContent = esc((string) ($c['subside'] ?? ''));
+    $sidebarBlocks = $app->getSidebarBlocks();
+    $sideContent = '';
+    if ($sidebarBlocks !== []) {
+        $sideContent = renderBlocksToHtml($sidebarBlocks);
+    } else {
+        $sideContent = esc((string) ($c['subside'] ?? ''));
+    }
 
     return <<<HTML
     <!doctype html>

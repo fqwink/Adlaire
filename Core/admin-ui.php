@@ -11,9 +11,13 @@ declare(strict_types=1);
  */
 
 $c = $app->config;
-$adminAction = $_REQUEST['admin'] ?? 'dashboard';
-$allowedActions = ['dashboard', '', 'edit', 'new'];
-if (!is_string($adminAction) || !in_array($adminAction, $allowedActions, true)) {
+$adminActionRaw = $_GET['admin'] ?? null;
+$adminAction = is_string($adminActionRaw) ? $adminActionRaw : 'dashboard';
+$allowedActions = ['dashboard', '', 'edit', 'new', 'users'];
+if (!in_array($adminAction, $allowedActions, true)) {
+    $adminAction = 'dashboard';
+}
+if ($adminAction === 'users' && !$app->isMainMaster()) {
     $adminAction = 'dashboard';
 }
 $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
@@ -33,12 +37,15 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
 </head>
 <body>
 <div class="admin-wrap">
-    <?php if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off'): ?>
+    <?php $isAdminHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'; if (!$isAdminHttps): ?>
         <div style="background:#fff3cd;color:#856404;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:8px;">⚠ HTTPS is not enabled. Admin operations over HTTP are not secure.</div>
     <?php endif; ?>
     <header class="admin-header">
         <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= esc(App::VERSION) ?></small></h1>
         <div>
+            <?php if ($app->getCurrentUser() !== ''): ?>
+            <span style="font-size:13px;color:#666;margin-right:8px;"><?= esc($app->getCurrentUser()) ?></span>
+            <?php endif; ?>
             <a href="./">← <?= esc($app->t('admin_view_site')) ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>
         </div>
@@ -47,12 +54,16 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
     <nav class="admin-nav">
         <a href="?admin" class="<?= $adminAction === 'dashboard' || $adminAction === '' ? 'active' : '' ?>"><?= esc($app->t('admin_dashboard')) ?></a>
         <a href="?admin=new"><?= esc($app->t('admin_new_page')) ?></a>
+        <?php if ($app->isMainMaster()): ?>
+        <a href="?admin=users" class="<?= $adminAction === 'users' ? 'active' : '' ?>"><?= esc($app->t('admin_users')) ?></a>
+        <?php endif; ?>
     </nav>
 
 <?php
 match ($adminAction) {
     'edit'      => renderAdminEditor($app, $n),
     'new'       => renderAdminNewPage($app, $n),
+    'users'     => renderAdminUsers($app, $n),
     default     => renderAdminDashboard($app, $n),
 };
 ?>
@@ -62,12 +73,15 @@ match ($adminAction) {
 </html>
 <?php
 
+/** @param array<string, array<string, mixed>> $pages */
 function sortPagesByUpdated(array &$pages): void
 {
-    uasort($pages, function (array $a, array $b): int {
-        $ta = strtotime($b['updated_at'] ?? '1970-01-01') ?: 0;
-        $tb = strtotime($a['updated_at'] ?? '1970-01-01') ?: 0;
-        return $ta <=> $tb;
+    uasort($pages, static function (array $a, array $b): int {
+        $rawA = $a['updated_at'] ?? '1970-01-01';
+        $rawB = $b['updated_at'] ?? '1970-01-01';
+        $ta = is_string($rawA) ? (strtotime($rawA) ?: 0) : 0;
+        $tb = is_string($rawB) ? (strtotime($rawB) ?: 0) : 0;
+        return $tb <=> $ta;
     });
 }
 
@@ -101,7 +115,7 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
     echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
     echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
-    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE);
+    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
@@ -113,7 +127,8 @@ function renderAdminDashboard(App $app, string $n): void
         $status = $data['status'] ?? 'published';
         $statusClass = $status === 'draft' ? 'status-draft' : 'status-published';
         $updated = substr($data['updated_at'] ?? '', 0, 10);
-        echo "<tr data-slug='" . esc($slug) . "' data-status='" . esc($status) . "'>";
+        $safeStatus = esc($status);
+        echo "<tr data-slug=\"" . esc($slug) . "\" data-status=\"" . $safeStatus . "\">";
         echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
         echo "<td>{$format}</td>";
@@ -156,14 +171,16 @@ function renderAdminDashboard(App $app, string $n): void
     $themesDir = dirname(__DIR__) . '/themes';
     if (is_dir($themesDir)) {
         $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
-        if (is_array($dirs)) {
+        if ($dirs !== false && $dirs !== []) {
             foreach ($dirs as $dir) {
                 $val = basename($dir);
                 $selected = ($val === $app->config['themeSelect']) ? ' selected' : '';
                 $themeMeta = $app->loadThemeJson($val);
                 $themeDesc = '';
-                if (($themeMeta['description'] ?? '') !== '' || ($themeMeta['version'] ?? '') !== '') {
-                    $themeDesc = ' (' . esc($themeMeta['description'] ?? '') . ($themeMeta['version'] !== '' ? ' v' . esc($themeMeta['version']) : '') . ')';
+                $tdesc = $themeMeta['description'] ?? '';
+                $tver = $themeMeta['version'] ?? '';
+                if ($tdesc !== '' || $tver !== '') {
+                    $themeDesc = ' (' . esc($tdesc) . ($tver !== '' ? ' v' . esc($tver) : '') . ')';
                 }
                 echo "<option value='" . esc($val) . "'{$selected}>" . esc($val) . $themeDesc . "</option>";
             }
@@ -179,7 +196,7 @@ function renderAdminDashboard(App $app, string $n): void
     $langOptions = [];
     if (is_dir($langDir)) {
         $langFiles = glob($langDir . '/*.json');
-        if (is_array($langFiles)) {
+        if ($langFiles !== false && $langFiles !== []) {
             foreach ($langFiles as $langFile) {
                 $code = basename($langFile, '.json');
                 $langData = json_decode((string) file_get_contents($langFile), true);
@@ -235,8 +252,8 @@ function renderAdminDashboard(App $app, string $n): void
     echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
     echo 'fetch("index.php?api=generate",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
     echo '.then(function(r){return r.json();})';
-    echo '.then(function(d){if(d.status==="ok"){el.textContent="' . esc($app->t('admin_generate_report')) . ': "+d.pages_generated+" generated, "+d.pages_skipped+" skipped, "+d.pages_failed+" failed ("+d.build_time_ms+"ms)";el.style.color="#0a0";}else{el.textContent="Error: "+d.error;el.style.color="#c00";}})';
-    echo '.catch(function(err){el.textContent="Error: "+err.message;el.style.color="#c00";});';
+    echo '.then(function(d){if(d.status==="ok"){el.textContent="' . esc($app->t('admin_generate_report')) . ': "+String(parseInt(d.pages_generated,10))+" generated, "+String(parseInt(d.pages_skipped,10))+" skipped, "+String(parseInt(d.pages_failed,10))+" failed ("+String(parseInt(d.build_time_ms,10))+"ms)";el.style.color="#0a0";}else{el.textContent="Error: "+(typeof d.error==="string"?d.error:"Unknown");el.style.color="#c00";}})';
+    echo '.catch(function(err){el.textContent="Error: "+String(err.message||err);el.style.color="#c00";});';
     echo '});';
     echo '</script>';
 
@@ -294,11 +311,11 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<section class="admin-section">';
     echo '<h2>' . esc($app->t('admin_system')) . '</h2>';
     $versionFile = dirname(__DIR__) . '/VERSION';
-    $fileVersion = file_exists($versionFile) ? esc(trim((string) file_get_contents($versionFile))) : '—';
+    $fileVersion = (file_exists($versionFile) && !is_link($versionFile)) ? esc(trim((string) file_get_contents($versionFile))) : '—';
     $appVersion = esc(App::VERSION);
     $lockFile = dirname(__DIR__) . '/data/system/install.lock';
     $installedAt = '—';
-    if (file_exists($lockFile)) {
+    if (file_exists($lockFile) && !is_link($lockFile)) {
         $lockRaw = file_get_contents($lockFile);
         $lock = ($lockRaw !== false) ? json_decode($lockRaw, true) : null;
         if (is_array($lock) && isset($lock['installed_at']) && is_string($lock['installed_at'])) {
@@ -316,7 +333,7 @@ function renderAdminDashboard(App $app, string $n): void
 
 function renderAdminEditor(App $app, string $n): void
 {
-    $slug = is_string($_REQUEST['page'] ?? '') ? ($_REQUEST['page'] ?? '') : '';
+    $slug = is_string($_GET['page'] ?? null) ? trim($_GET['page'] ?? '') : '';
     if ($slug === '' || !FileStorage::validateSlug($slug)) {
         echo '<p>Invalid page slug.</p>';
         return;
@@ -331,8 +348,8 @@ function renderAdminEditor(App $app, string $n): void
     $status = $pageData['status'] ?? 'published';
     $content = $pageData['content'] ?? '';
     $blocksB64 = '';
-    if (isset($pageData['blocks'])) {
-        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE);
+    if (isset($pageData['blocks']) && is_array($pageData['blocks'])) {
+        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
         if ($blocksJson !== false) {
             $blocksB64 = base64_encode($blocksJson);
         }
@@ -424,13 +441,143 @@ function renderAdminEditor(App $app, string $n): void
     echo "</section>";
 }
 
+function renderAdminUsers(App $app, string $n): void
+{
+    if (!$app->isMainMaster()) {
+        echo '<section class="admin-section"><p>' . esc($app->t('admin_cannot_delete_self')) . '</p></section>';
+        return;
+    }
+
+    $users = $app->storage->listUsers();
+    $userCount = $app->storage->getUserCount();
+    $currentUser = $app->getCurrentUser();
+
+    echo '<section class="admin-section">';
+    echo '<h2>' . esc($app->t('admin_users')) . '</h2>';
+
+    echo '<table class="admin-table">';
+    echo '<thead><tr><th>' . esc($app->t('admin_username')) . '</th><th>Role</th><th>Type</th><th>Status</th><th>' . esc($app->t('admin_last_login')) . '</th><th>Actions</th></tr></thead>';
+    echo '<tbody>';
+    foreach ($users as $username => $data) {
+        $safeUser = esc($username);
+        $lastLogin = $data['last_login'] !== '' ? esc(substr($data['last_login'], 0, 19)) : '—';
+        $isSelf = ($username === $currentUser);
+        $isMain = $data['is_main'] ?? false;
+        $enabled = $data['enabled'] ?? true;
+        $typeLabel = $isMain ? 'Main' : 'Sub';
+        $statusLabel = $enabled ? 'Active' : 'Disabled';
+        $statusClass = $enabled ? 'status-published' : 'status-draft';
+        echo "<tr>";
+        echo "<td>{$safeUser}" . ($isSelf ? ' <small>(you)</small>' : '') . "</td>";
+        echo "<td>" . esc($data['role']) . "</td>";
+        echo "<td>{$typeLabel}</td>";
+        echo "<td class='{$statusClass}'>{$statusLabel}</td>";
+        echo "<td>{$lastLogin}</td>";
+        echo "<td class='actions'>";
+        $jsonUser = json_encode($username, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        if ($isMain && $isSelf) {
+            echo "<a href='#' class='admin-btn admin-btn--outline' style='font-size:12px;padding:2px 8px;' data-action='change-pw' data-user={$jsonUser}>" . esc($app->t('admin_change_password')) . "</a> ";
+        }
+        if (!$isMain && $enabled) {
+            echo "<a href='#' class='admin-btn admin-btn--outline' style='font-size:12px;padding:2px 8px;color:#f90;' data-action='disable-user' data-user={$jsonUser}>" . esc($app->t('admin_disable_user')) . "</a> ";
+        }
+        if (!$isSelf) {
+            echo "<a href='#' class='admin-btn admin-btn--danger' style='font-size:12px;padding:2px 8px;' data-action='delete-user' data-user={$jsonUser} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete_user')) . "</a>";
+        }
+        echo "</td></tr>";
+    }
+    echo '</tbody></table>';
+
+    $subCount = 0;
+    foreach ($users as $data) {
+        if (!($data['is_main'] ?? false)) {
+            $subCount++;
+        }
+    }
+
+    if ($subCount < 2 && $userCount < 3) {
+        echo '<h3 style="margin-top:16px;">' . esc($app->t('admin_generate_sub')) . '</h3>';
+        echo '<div class="admin-form" style="max-width:400px;">';
+        echo '<button class="admin-btn" data-action="generate-sub" style="margin-top:8px;">' . esc($app->t('admin_generate_sub')) . '</button>';
+        echo '</div>';
+    } else {
+        echo '<p style="margin-top:12px;color:#999;">' . esc($app->t('admin_max_users')) . '</p>';
+    }
+
+    echo '<div id="user-result" style="margin-top:8px;font-size:13px;"></div>';
+    echo '<div id="sub-credentials" style="display:none;margin-top:12px;padding:16px;background:#f0f8ff;border:2px solid #1ab;border-radius:8px;">';
+    echo '<h3>' . esc($app->t('admin_sub_credentials')) . '</h3>';
+    echo '<p style="color:#c00;font-weight:bold;">' . esc($app->t('admin_credentials_warning')) . '</p>';
+    echo '<table class="admin-table" id="cred-table"><tbody></tbody></table>';
+    echo '<button class="admin-btn" id="download-cred" style="margin-top:8px;">' . esc($app->t('admin_download_credentials')) . '</button>';
+    echo '</div>';
+
+    echo "<script{$n}>";
+    echo 'document.addEventListener("click",function(e){';
+
+    echo 'var genBtn=e.target.closest("[data-action=\"generate-sub\"]");';
+    echo 'if(genBtn){';
+    echo 'genBtn.disabled=true;';
+    echo 'var body=new URLSearchParams();body.append("action","generate");body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=users",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(d){';
+    echo 'if(d.status==="ok"&&d.credentials){';
+    echo 'var c=d.credentials;';
+    echo 'var tbl=document.querySelector("#cred-table tbody");';
+    echo 'function escH(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}';
+    echo 'tbl.innerHTML="<tr><th>Login ID</th><td>"+escH(c.login_id)+"</td></tr><tr><th>Password</th><td>"+escH(c.password)+"</td></tr><tr><th>Token</th><td>"+escH(c.token)+"</td></tr>";';
+    echo 'document.getElementById("sub-credentials").style.display="block";';
+    echo 'genBtn.style.display="none";';
+    echo 'var blob=new Blob(["Login ID: "+c.login_id+"\\nPassword: "+c.password+"\\nToken: "+c.token+"\\n"],{type:"text/plain"});';
+    echo 'var url=URL.createObjectURL(blob);';
+    echo 'var a=document.createElement("a");a.href=url;a.download="sub-master-credentials.txt";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);';
+    echo 'document.getElementById("download-cred").addEventListener("click",function(){';
+    echo 'var blob2=new Blob(["Login ID: "+c.login_id+"\\nPassword: "+c.password+"\\nToken: "+c.token+"\\n"],{type:"text/plain"});';
+    echo 'var url2=URL.createObjectURL(blob2);';
+    echo 'var a2=document.createElement("a");a2.href=url2;a2.download="sub-master-credentials.txt";document.body.appendChild(a2);a2.click();document.body.removeChild(a2);URL.revokeObjectURL(url2);';
+    echo '});';
+    echo '}else{document.getElementById("user-result").textContent="Error: "+(d.error||"Unknown");document.getElementById("user-result").style.color="#c00";genBtn.disabled=false;}});';
+    echo 'return;}';
+
+    echo 'var del=e.target.closest("[data-action=\"delete-user\"]");';
+    echo 'if(del){';
+    echo 'var user=JSON.parse(del.getAttribute("data-user"));';
+    echo 'if(!confirm("Delete user: "+user+"?"))return;';
+    echo 'fetch("index.php?api=users&username="+encodeURIComponent(user),{method:"DELETE",headers:{"X-CSRF-Token":csrfToken}})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){location.reload();}else{alert("Error: "+d.error);}});';
+    echo 'return;}';
+
+    echo 'var dis=e.target.closest("[data-action=\"disable-user\"]");';
+    echo 'if(dis){';
+    echo 'var user=JSON.parse(dis.getAttribute("data-user"));';
+    echo 'if(!confirm("Disable user: "+user+"? This cannot be undone."))return;';
+    echo 'var body=new URLSearchParams();body.append("action","disable");body.append("user",user);body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=users",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){location.reload();}else{alert("Error: "+d.error);}});';
+    echo 'return;}';
+
+    echo 'var pw=e.target.closest("[data-action=\"change-pw\"]");';
+    echo 'if(pw){';
+    echo 'var user=JSON.parse(pw.getAttribute("data-user"));';
+    echo 'var np=prompt("New password for "+user+" (min 8 chars):");';
+    echo 'if(!np||np.length<8){if(np!==null)alert("Password must be at least 8 characters");return;}';
+    echo 'var body=new URLSearchParams();body.append("action","password");body.append("password",np);body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=users",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){alert("Password changed");}else{alert("Error: "+d.error);}});';
+    echo 'return;}';
+    echo '});';
+    echo '</script>';
+
+    echo '</section>';
+}
+
 function renderAdminNewPage(App $app, string $n): void
 {
     echo "<section class='admin-section'>";
     echo "<h2>" . esc($app->t('admin_new_page_title')) . "</h2>";
     echo "<div class='admin-form'>";
     echo "<label>" . esc($app->t('admin_slug')) . "</label>";
-    echo "<input type='text' id='new-slug' placeholder='page-name' pattern='[a-zA-Z0-9_\\-]+'>";
+    echo "<input type='text' id='new-slug' placeholder='page-name' pattern='[a-zA-Z0-9_\\-]+' maxlength='128'>";
     echo "<label>Format</label>";
     echo "<select id='new-format'><option value='blocks'>Blocks</option><option value='markdown'>Markdown</option></select>";
     echo "<br><br>";

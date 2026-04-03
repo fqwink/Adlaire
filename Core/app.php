@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 8;
-    public const VERSION_BUILD = 41;
-    public const VERSION = 'Ver.2.8-41';
+    public const VERSION_MINOR = 9;
+    public const VERSION_BUILD = 45;
+    public const VERSION = 'Ver.2.9-45';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -25,8 +25,23 @@ final class App
     /** Minimum password length */
     private const MIN_PASSWORD_LENGTH = 8;
 
+    /** Maximum password length */
+    private const MAX_PASSWORD_LENGTH = 256;
+
+    /** Maximum username length */
+    private const MAX_USERNAME_LENGTH = 64;
+
     /** Weak passwords blacklist */
     private const WEAK_PASSWORDS = ['admin', 'password', '12345678', 'adlaire'];
+
+    /** Allowed languages */
+    private const ALLOWED_LANGUAGES = ['en', 'ja'];
+
+    /** Host validation pattern */
+    private const HOST_PATTERN = '/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/';
+
+    /** Slug sanitization pattern */
+    private const SLUG_SANITIZE_PATTERN = '/[^a-zA-Z0-9_\-]/';
 
     /** JSON encoding flags for safe JS embedding */
     private const JSON_JS_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
@@ -54,6 +69,8 @@ final class App
     /** @var string[]|null */
     private ?array $menuItems = null;
 
+    private bool $is404 = false;
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -69,6 +86,7 @@ final class App
         $this->initDefaults();
         $this->storage->ensureDirectories();
         $this->storage->migrate();
+        $this->migrateUsersFromConfig();
         $this->loadConfig();
         $this->loadLanguage();
         $this->initTranslatableDefaults();
@@ -85,9 +103,12 @@ final class App
             : '';
         $rp = is_string($rpRaw) ? $rpRaw : '';
 
-        $httpHost = filter_input(INPUT_SERVER, 'HTTP_HOST') ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (preg_match('/^[a-zA-Z0-9.\-]+(:\d+)?$/', $httpHost) !== 1) {
-            $httpHost = 'localhost';
+        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        if (!is_string($httpHost) || preg_match(self::HOST_PATTERN, $httpHost) !== 1) {
+            $httpHost = $_SERVER['SERVER_NAME'] ?? 'localhost';
+            if (!is_string($httpHost) || preg_match(self::HOST_PATTERN, $httpHost) !== 1) {
+                $httpHost = 'localhost';
+            }
         }
 
         $rawUri = $_SERVER['REQUEST_URI'] ?? '/';
@@ -102,7 +123,7 @@ final class App
         $hostResult = preg_replace('#/+#', '/', $host);
         $host = '//' . (is_string($hostResult) ? $hostResult : $host);
 
-        $rpResult = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rpResult = ($rp !== '') ? preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp) : '';
         $rp = is_string($rpResult) ? trim($rpResult, '/') : '';
 
         return [$host, $rp];
@@ -111,7 +132,6 @@ final class App
     private function initDefaults(): void
     {
         $this->config = [
-            'password'    => 'admin',
             'loggedin'    => false,
             'page'        => 'home',
             'themeSelect' => 'AP-Default',
@@ -174,38 +194,47 @@ final class App
             } elseif (!isset($this->config[$key]) || $this->config[$key] === '') {
                 $this->config[$key] = $this->defaults[$key] ?? $val;
             }
-
-            match ($key) {
-                'password' => $this->handlePassword($stored[$key] ?? false, $val),
-                default    => null,
-            };
-        }
-    }
-
-    private function handlePassword(mixed $fval, string $val): void
-    {
-        if (!is_string($fval) || $fval === '') {
-            $this->config['password'] = $this->savePassword($val);
         }
     }
 
     private function handleAuth(): void
     {
-        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > self::SESSION_TIMEOUT) {
-            session_regenerate_id(true);
+        $lastActivity = $_SESSION['last_activity'] ?? null;
+        if (is_int($lastActivity) && (time() - $lastActivity) > self::SESSION_TIMEOUT) {
             $_SESSION = [];
-            session_destroy();
-            session_start();
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_regenerate_id(true);
+                session_destroy();
+            }
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                session_start();
+            }
+            return;
         }
         if (isset($_SESSION['l'])) {
             $_SESSION['last_activity'] = time();
         }
 
-        if (isset($_SESSION['l']) && hash_equals($this->config['password'], $_SESSION['l'])) {
-            $this->config['loggedin'] = true;
+        $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
+        $sessionHash = is_string($_SESSION['l'] ?? null) ? ($_SESSION['l'] ?? '') : '';
+        if ($sessionUser !== '' && $sessionHash !== '') {
+            $userData = $this->storage->getUser($sessionUser);
+            if ($userData !== false && isset($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
+                if (isset($userData['enabled']) && $userData['enabled'] === false) {
+                    session_regenerate_id(true);
+                    $_SESSION = [];
+                } else {
+                    $this->config['loggedin'] = true;
+                    $this->config['current_user'] = $sessionUser;
+                    $this->config['current_role'] = $_SESSION['role'] ?? 'master';
+                    $this->config['is_main'] = $_SESSION['is_main'] ?? ($userData['is_main'] ?? false);
+                }
+            }
         }
 
         if (isset($_GET['logout'])) {
+            $_SESSION = [];
+            session_regenerate_id(true);
             session_destroy();
             header('Location: ./');
             exit;
@@ -224,6 +253,8 @@ final class App
 
             $csrf = csrf_token();
             $loginLabel = esc($this->t('login_submit'));
+            $usernameLabel = esc($this->t('admin_username'));
+            $tokenLabel = esc($this->t('admin_token'));
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
@@ -231,7 +262,13 @@ final class App
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
-                <input type='password' name='password'>
+                <label>{$usernameLabel}</label>
+                <input type='text' name='username' autocomplete='username' id='login-username'>
+                <input type='password' name='password' autocomplete='current-password'>
+                <div id='token-field' style='display:none;'>
+                <label>{$tokenLabel}</label>
+                <input type='password' name='token' autocomplete='off'>
+                </div>
                 <input type='submit' name='login' value='{$loginLabel}'> {$msg}
                 <p class='toggle'>{$changePwLabel}</p>
                 <div class='hide'>{$changePwHint}<br />
@@ -263,6 +300,7 @@ final class App
             $isDraft = ($pageData['status'] ?? 'published') === 'draft';
             if ($isDraft && !$this->isLoggedIn()) {
                 http_response_code(404);
+                $this->is404 = true;
                 $this->config['content'] = $this->defaults['new_page']['visitor'];
                 return;
             }
@@ -281,10 +319,35 @@ final class App
         }
 
         http_response_code(404);
+        $this->is404 = true;
         $this->config['content'] = $this->isLoggedIn()
             ? $this->defaults['new_page']['admin']
             : $this->defaults['new_page']['visitor'];
         return;
+    }
+
+    private function migrateUsersFromConfig(): void
+    {
+        if ($this->storage->usersFileExists()) {
+            return;
+        }
+        $config = $this->storage->readConfig();
+        $passwordHash = $config['password'] ?? '';
+        if ($passwordHash === '') {
+            return;
+        }
+        $userData = [
+            'password' => $passwordHash,
+            'role' => 'master',
+            'is_main' => true,
+            'created_at' => date('c'),
+            'last_login' => '',
+        ];
+        if (!$this->storage->writeUser('admin', $userData)) {
+            error_log('Adlaire: Failed to migrate user from config.json to users.json');
+            return;
+        }
+        $this->storage->removeConfigKey('password');
     }
 
     private function loadPlugins(): void
@@ -316,15 +379,21 @@ final class App
     private function loadLanguage(): void
     {
         $lang = $this->config['language'] ?? 'ja';
-        if (!in_array($lang, ['en', 'ja'], true)) {
+        if (!in_array($lang, self::ALLOWED_LANGUAGES, true)) {
             $lang = 'ja';
         }
         $this->language = $lang;
-        $file = dirname(__DIR__) . '/data/lang/' . $lang . '.json';
+        $file = dirname(__DIR__) . '/data/lang/' . basename($lang) . '.json';
         if (!is_file($file)) {
             error_log('Adlaire: Language file not found: ' . $file);
-            $this->translations = [];
-            return;
+            $fallbackFile = dirname(__DIR__) . '/data/lang/ja.json';
+            if ($lang !== 'ja' && is_file($fallbackFile)) {
+                $file = $fallbackFile;
+                error_log('Adlaire: Falling back to ja.json');
+            } else {
+                $this->translations = [];
+                return;
+            }
         }
         $json = file_get_contents($file);
         if ($json === false) {
@@ -344,9 +413,14 @@ final class App
     /** @param array<string, string> $params */
     public function t(string $key, array $params = []): string
     {
+        if ($key === '') {
+            return '';
+        }
         $str = $this->translations[$key] ?? $key;
-        foreach ($params as $k => $v) {
-            $str = str_replace(':' . $k, (string) $v, $str);
+        if ($params !== []) {
+            foreach ($params as $k => $v) {
+                $str = str_replace(':' . $k, (string) $v, $str);
+            }
         }
         $str = preg_replace('/:[a-zA-Z_]+/', '', $str) ?? $str;
         return $str;
@@ -357,19 +431,37 @@ final class App
         return $this->config['loggedin'] === true;
     }
 
+    public function getCurrentUser(): string
+    {
+        return (string) ($this->config['current_user'] ?? '');
+    }
+
     public function getLoginStatus(): string
     {
         $host = esc($this->host);
         if ($this->isLoggedIn()) {
-            return "<a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
+            $username = esc($this->getCurrentUser());
+            return "<span class=\"login-user\">{$username}</span> | <a href=\"{$host}?admin\">Admin</a> | <a href=\"{$host}?logout\">" . esc($this->t('logout')) . "</a>";
         }
-        return "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
+        return "<a href=\"{$host}?login\">" . esc($this->t('login')) . "</a>";
     }
 
     public static function getSlug(string $page): string
     {
         $slug = str_replace(' ', '-', $page);
-        return mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = (string) preg_replace(self::SLUG_SANITIZE_PATTERN, '', $slug);
+        return $slug;
+    }
+
+    public function is404(): bool
+    {
+        return $this->is404;
+    }
+
+    public function isMainMaster(): bool
+    {
+        return $this->isLoggedIn() && ($this->config['is_main'] ?? false) === true;
     }
 
     public function login(): string
@@ -382,44 +474,70 @@ final class App
             return $this->t('login_rate_limited');
         }
 
-        $stored = $this->config['password'];
-        $input = $_POST['password'] ?? '';
+        $username = is_string($_POST['username'] ?? null) ? trim($_POST['username'] ?? '') : '';
+        $input = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
 
+        if ($username === '' || strlen($username) > self::MAX_USERNAME_LENGTH) {
+            return $this->t('wrong_password');
+        }
+
+        if (strlen($input) > self::MAX_PASSWORD_LENGTH) {
+            return $this->t('wrong_password');
+        }
+
+        $userData = $this->storage->getUser($username);
+        if ($userData === false || !isset($userData['password'])) {
+            return $this->t('wrong_password');
+        }
+
+        if (isset($userData['enabled']) && $userData['enabled'] === false) {
+            return $this->t('wrong_password');
+        }
+
+        $stored = (string) $userData['password'];
         if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
         }
 
-        $newPass = $_POST['new'] ?? '';
+        $isMain = $userData['is_main'] ?? false;
+
+        if (!$isMain && isset($userData['token'])) {
+            $tokenInput = is_string($_POST['token'] ?? null) ? ($_POST['token'] ?? '') : '';
+            if ($tokenInput === '' || !password_verify($tokenInput, $userData['token'])) {
+                return $this->t('wrong_password');
+            }
+        }
+
+        $newPass = is_string($_POST['new'] ?? null) ? ($_POST['new'] ?? '') : '';
         if ($newPass !== '') {
+            if (!$isMain) {
+                return $this->t('wrong_password');
+            }
             if (strlen($newPass) < self::MIN_PASSWORD_LENGTH) {
                 return $this->t('password_too_short');
             }
             if (in_array(strtolower($newPass), self::WEAK_PASSWORDS, true)) {
                 return $this->t('password_too_weak');
             }
-            $newHash = $this->savePassword($newPass);
-            $this->config['password'] = $newHash;
+            $newHash = password_hash($newPass, PASSWORD_DEFAULT);
+            $this->storage->writeUser($username, ['password' => $newHash]);
             session_regenerate_id(true);
             $_SESSION['l'] = $newHash;
+            $_SESSION['user'] = $username;
+            $_SESSION['role'] = $userData['role'] ?? 'master';
+            $_SESSION['is_main'] = $isMain;
             return $this->t('password_changed');
         }
 
+        $this->storage->writeUser($username, ['last_login' => date('c')]);
         session_regenerate_id(true);
-        $_SESSION['l'] = $this->config['password'];
+        $_SESSION['l'] = $stored;
+        $_SESSION['user'] = $username;
+        $_SESSION['role'] = $userData['role'] ?? 'master';
+        $_SESSION['is_main'] = $isMain;
         $_SESSION['last_activity'] = time();
         header('Location: ' . $this->host);
         exit;
-    }
-
-    public function savePassword(string $password): string
-    {
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $result = $this->storage->writeConfigValue('password', $hash);
-        if (!$result) {
-            echo $this->t('permission_error');
-            exit;
-        }
-        return $hash;
     }
 
     public function editTags(): void
@@ -434,8 +552,13 @@ final class App
         $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
         echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
-        foreach ($this->hooks['admin-head'] ?? [] as $tag) {
-            echo "\t" . esc($tag) . "\n";
+        $adminHeadHooks = $this->hooks['admin-head'] ?? [];
+        if (is_array($adminHeadHooks)) {
+            foreach ($adminHeadHooks as $tag) {
+                if (is_string($tag)) {
+                    echo "\t" . esc($tag) . "\n";
+                }
+            }
         }
     }
 
@@ -455,6 +578,7 @@ final class App
         return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
     }
 
+    /** @return array<int, array{type: string, data: array<string, mixed>}> */
     public function getSidebarBlocks(): array
     {
         $config = $this->storage->readConfig();
@@ -466,6 +590,7 @@ final class App
         return is_array($data) ? $data : [];
     }
 
+    /** @param array<int, array{type: string, data: array<string, mixed>}> $blocks */
     public function saveSidebarBlocks(array $blocks): bool
     {
         $json = json_encode($blocks, JSON_UNESCAPED_UNICODE);
@@ -490,7 +615,7 @@ final class App
 
     public function content(string $id, string $content): void
     {
-        $format = $this->config['pageFormat'] ?? 'blocks';
+        $format = (string) ($this->config['pageFormat'] ?? 'blocks');
         $isPage = ($id === $this->config['page']);
 
         if ($format === 'blocks' && $isPage) {
@@ -502,25 +627,26 @@ final class App
                     $blocksB64 = base64_encode($json);
                 }
             }
-            echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
+            echo "<div class=\"blocks-content\" data-blocks-b64=\"" . esc($blocksB64) . "\"></div>";
         } elseif ($format === 'markdown' && $isPage) {
             $b64 = base64_encode($content);
-            echo "<div class='markdown-content' data-raw-b64='" . esc($b64) . "'></div>";
+            echo "<div class=\"markdown-content\" data-raw-b64=\"" . esc($b64) . "\"></div>";
         } else {
-            echo $content;
+            echo esc($content);
         }
     }
 
     public function menu(): void
     {
         if ($this->menuItems === null) {
-            $menu = str_replace("\r\n", "\n", $this->config['menu']);
+            $menuRaw = $this->config['menu'] ?? '';
+            $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
             $this->menuItems = explode("<br />\n", $menu);
         }
         $items = $this->menuItems;
         echo '<ul>';
         foreach ($items as $item) {
-            $item = trim($item);
+            $item = trim(strip_tags($item));
             if ($item === '') {
                 continue;
             }
@@ -528,7 +654,7 @@ final class App
             $safeItem = esc($item);
             $safeSlug = esc($slug);
             $active = ($this->config['page'] === $slug) ? ' id="active"' : '';
-            echo "<li{$active}><a href='{$safeSlug}'>{$safeItem}</a></li>";
+            echo "<li{$active}><a href=\"{$safeSlug}\">{$safeItem}</a></li>";
         }
         echo '</ul>';
     }

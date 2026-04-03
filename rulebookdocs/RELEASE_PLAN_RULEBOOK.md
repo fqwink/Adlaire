@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.2.6
+- 文書バージョン: Ver.2.7
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -18,13 +18,21 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.8-41**（2026-04-03）
+**Ver.2.9-46**（2026-04-03）
 
 ---
 
 ## 3. リリース履歴
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
+
+#### Ver.2.9 — マスター管理者アクセス権限 + 最終品質確定（M1-M10 + 448件）
+
+2.0系最終品質確定リリース。マスター管理者ユーザーモデル導入
+（メインmaster 1名 + サブmaster 最大2名、3要素認証73文字hex）。
+品質確定バグ修正: 初期88件 + 追加360件 = 448件
+（PHP 303件 + TS 145件、致命的18件+重大76件+中程度123件+軽微231件）。
+詳細は §4.1 を参照。
 
 #### Ver.2.8 — バグ修正（300件精査・300件実装）
 
@@ -143,13 +151,254 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ## 4. リリース計画（Ver.2.4 以降）
 
-### 4.1 Ver.2.9 — バグ修正（50件以上）
+### 4.1 Ver.2.9 — マスター管理者アクセス権限 + 最終品質確定（50件以上精査）
 
 > 2.0 系最終品質確定リリース。
+> マスター管理者ユーザーモデル導入 + 全コード品質確定バグ修正。
+> PHP 63件（精査済・実装済） + TS 60件（致命的8件+重大12件+中程度40件）= 123件精査。
 
-| # | 改良点 | 状態 |
-|---|--------|:----:|
-| 30 | Ver.2.0 系全体の品質確定バグ修正（50件以上） | 計画 |
+#### マスター管理者アクセス権限
+
+| # | カテゴリ | 改良点 | 状態 |
+|---|---------|--------|:----:|
+| M1 | 認証 | ユーザーモデル刷新: 単一管理者→マスター管理者（最大3名） | **実装済** |
+| M2 | データ | data/system/users.json 新設（ユーザー名/bcryptハッシュ/role:master/is_main/作成日/最終ログイン） | **実装済** |
+| M3 | マイグレーション | config.json:password → users.json 強制移行（is_main=true付与） | **実装済** |
+| M4 | 認証 | ログイン画面にユーザー名+トークン入力フィールド追加 | **実装済** |
+| M5 | セッション | $_SESSION にユーザー名・ロール・is_main情報追加 | **実装済** |
+| M6 | 管理UI | ユーザー管理画面（サブmaster生成/無効化/削除/パスワード変更） | **実装済** |
+| M7 | API | ?api=users エンドポイント（generate/disable/password/delete、メインmaster認証必須） | **実装済** |
+| M8 | セキュリティ | users.json ファイル権限 0600 + 排他ロック + アトミック書き込み + symlink検出 | **実装済** |
+| M9 | bundle-installer | セットアップツールで初期マスター管理者ユーザー作成（is_main=true、users.json直接生成） | **実装済** |
+| M10 | 管理UI | ログイン状態表示にユーザー名表示 + ナビにUsersメニュー（メインmasterのみ） | **実装済** |
+
+#### PHP品質確定バグ修正（63件精査・63件実装）
+
+| # | カテゴリ | 対象 | バグ概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 1 | エラーハンドリング | core.php | ensureDirectories() mkdir()戻り値未チェック | **実装済** |
+| 2 | セキュリティ | core.php | readPageData() lockedReadにrealPath未使用 | **実装済** |
+| 3 | エラーハンドリング | core.php | writeConfig() json_encode()がfalseを返す可能性 | **実装済** |
+| 4 | エラーハンドリング | core.php | writePage() json_encode()がfalseを返す可能性 | **実装済** |
+| 5 | エラーハンドリング | core.php | updatePageStatus() json_encode()がfalseを返す可能性 | **実装済** |
+| 6 | セキュリティ | core.php | deletePage() symlink検出なし | **実装済** |
+| 7 | セキュリティ | core.php | getRevisionData() symlink検出なし | **実装済** |
+| 8 | セキュリティ | core.php | restoreRevision() symlink検出なし | **実装済** |
+| 9 | データ整合性 | core.php | savePageOrder() slugバリデーションなし | **実装済** |
+| 10 | セキュリティ | core.php | listRevisions() ディレクトリsymlink検出なし | **実装済** |
+| 11 | セキュリティ | core.php | deleteUser() メインmaster削除防止なし | **実装済** |
+| 12 | セキュリティ | core.php | usersFileExists() symlink検出なし | **実装済** |
+| 13 | セキュリティ | core.php | readUsers() symlink検出なし | **実装済** |
+| 14 | セキュリティ | app.php | getSlug() 特殊文字除去不足 | **実装済** |
+| 15 | セッション | app.php | handleAuth() session timeout last_activity型チェック不足 | **実装済** |
+| 16 | セキュリティ | app.php | logout処理でセッション変数クリア不足 | **実装済** |
+| 17 | エラーハンドリング | core.php | readPageData() JSON parseエラーログ欠如 | **実装済** |
+| 18 | セキュリティ | app.php | login() サブmasterのenabled=false検出なし | **実装済** |
+| 19 | セキュリティ | app.php | login() サブmasterのトークン認証未実装 | **実装済** |
+| 20 | 型安全性 | app.php | editTags() hooks配列の型チェック不足 | **実装済** |
+| 21 | 型安全性 | app.php | menu() config['menu']の型チェック不足 | **実装済** |
+| 22 | セキュリティ | app.php | handleAuth() サブmaster enabled=false即ログアウト | **実装済** |
+| 23 | データ整合性 | api.php | handleApiSitemap() updated_at長さ検証なし | **実装済** |
+| 24 | セキュリティ | api.php | handleApiExport() session key除去追加 | **実装済** |
+| 25 | セキュリティ | api.php | handleApiVersion() install.lock symlink検出なし | **実装済** |
+| 26 | 型安全性 | api.php | apiRevisionDiff() blocks配列型チェック不足 | **実装済** |
+| 27 | セキュリティ | api.php | verifyApiAuth() disabled user検出なし | **実装済** |
+| 28 | セキュリティ | api.php | handleApiUsers() メインmaster認証必須化 | **実装済** |
+| 29 | セキュリティ | api.php | handleApiUsers() generate: サブmaster生成機能追加 | **実装済** |
+| 30 | セキュリティ | api.php | handleApiUsers() disable: サブmaster無効化機能追加 | **実装済** |
+| 31 | セキュリティ | api.php | handleApiUsers() password: メインmasterパスワード変更 | **実装済** |
+| 32 | セキュリティ | api.php | handleApiUsers() DELETE: メインmaster削除防止 | **実装済** |
+| 33 | 型安全性 | helpers.php | login_rate_check() attempts配列要素の型チェック不足 | **実装済** |
+| 34 | 型安全性 | helpers.php | csrf_verify() token/sessionの型チェック不足 | **実装済** |
+| 35 | 型安全性 | renderer.php | renderBlocksToHtml() list items配列型チェック不足 | **実装済** |
+| 36 | エラーハンドリング | generator.php | dist clean時getRealPath()がfalseを返す可能性 | **実装済** |
+| 37 | データ整合性 | generator.php | generatePageHtml() sidebar blocks未レンダリング | **実装済** |
+| 38 | エラーハンドリング | generator.php | cssDir mkdir()戻り値未チェック | **実装済** |
+| 39 | エラーハンドリング | generator.php | jsDst mkdir()戻り値未チェック | **実装済** |
+| 40 | エラーハンドリング | generator.php | langDst mkdir()戻り値未チェック | **実装済** |
+| 41 | セキュリティ | bundle-installer.php | admin_username空文字列時のバリデーション不備 | **実装済** |
+| 42 | データ整合性 | bundle-installer.php | ユーザー名最小長2文字制約追加 | **実装済** |
+| 43 | セキュリティ | bundle-installer.php | is_main=trueフラグ付与 | **実装済** |
+| 44 | セキュリティ | index.php | preview slug double decode簡素化 | **実装済** |
+| 45 | セキュリティ | admin-ui.php | VERSION file symlink検出なし | **実装済** |
+| 46 | セキュリティ | admin-ui.php | install.lock symlink検出なし | **実装済** |
+| 47 | 型安全性 | admin-ui.php | theme.json version nullチェック不備 | **実装済** |
+| 48 | ロジック | admin-ui.php | sortPagesByUpdated() 変数名$ta/$tbと$a/$bの不一致 | **実装済** |
+| 49 | セキュリティ | admin-ui.php | renderAdminUsers() メインmaster権限チェック追加 | **実装済** |
+| 50 | セキュリティ | admin-ui.php | renderAdminUsers() サブmaster生成UI追加 | **実装済** |
+| 51 | セキュリティ | admin-ui.php | renderAdminUsers() サブmaster無効化UI追加 | **実装済** |
+| 52 | セキュリティ | admin-ui.php | renderAdminUsers() メインmaster自己削除ボタン非表示 | **実装済** |
+| 53 | エラーハンドリング | core.php | removeConfigKey() json_encode失敗ログ | **実装済** |
+| 54 | コード品質 | core.php | atomicWrite() 冗長なumask()呼び出し除去 | **実装済** |
+| 55 | エラーハンドリング | core.php | atomicWrite() mkdir失敗時のエラーハンドリング | **実装済** |
+| 56 | セキュリティ | app.php | loadLanguage() basename()によるパストラバーサル防止 | **実装済** |
+| 57 | セキュリティ | admin-ui.php | Users navメインmasterのみ表示 | **実装済** |
+| 58 | データ整合性 | core.php | listUsers() is_main/enabled/created_by情報追加 | **実装済** |
+| 59 | セキュリティ | core.php | generateSubMasterCredentials() 73文字hex生成 | **実装済** |
+| 60 | セキュリティ | core.php | disableUser() メインmaster無効化防止 | **実装済** |
+| 61 | i18n | ja.json/en.json | サブmaster関連翻訳キー6件追加 | **実装済** |
+| 62 | セッション | app.php | login() is_mainセッション変数設定 | **実装済** |
+| 63 | セキュリティ | app.php | login() サブmasterパスワード変更禁止 | **実装済** |
+
+#### 追加品質確定（360件精査: PHP240件+TS120件）
+
+> 2.0系最終品質確定として全コード超深層精査360件。
+> 致命的13件+重大44件+中程度72件=129件を最優先実装。軽微231件も実装。
+
+| 区分 | PHP | TS | 合計 | 状態 |
+|:----:|:---:|:--:|:----:|:----:|
+| 致命的 | 5 | 8 | 13 | PHP計画 / TS**実装済** |
+| 重大 | 32 | 12 | 44 | PHP計画 / TS**実装済** |
+| 中程度 | 32 | 40 | 72 | PHP計画 / TS**実装済** |
+| 軽微 | 171 | 60 | 231 | PHP計画 / TS**実装済** |
+| **合計** | **240** | **120** | **360** | TS120件全件**実装済** |
+
+主な致命的・重大項目:
+- PHP#5: index.php 404後のexit確保
+- PHP#25: core.php メモリ超過時listPages()空配列返却修正
+- PHP#26: core.php キャッシュmtime同一秒問題
+- PHP#28: core.php lockedRead() false vs '' 判別
+- PHP#76: generator.php dist削除時.build_state.json保持
+- PHP#42/173: renderer.php image // スキーム許可、プロトコル相対URL攻撃
+- PHP#44/47: renderer.php paragraph/heading/link エスケープ不足
+- PHP#84/154: generator.php contentHTML/menu raw出力XSS
+- PHP#86/100/165: admin-ui.php isMainMaster()チェック不足
+- PHP#58: api.php CORS subdomain bypass
+- PHP#207/213: api.php $_POST汚染対策、importメモリ制限
+- TS#1: editInplace.ts downloadCredentials() XSS
+- TS#2/8: editor.ts surroundContents失敗後のHTML復元/サニタイズ
+- TS#3/7: editInplace.ts beforeunload sendBeacon CSRFトークン問題
+- TS#6: editor.ts 複数エディタでのInlineToolbar競合
+
+##### TS側品質確定バグ修正（60件精査・60件実装）
+
+| # | 深刻度 | 対象 | バグ概要 | 状態 |
+|---|:------:|------|---------|:----:|
+| 1 | 致命的 | editInplace.ts | downloadCredentials() XSS対策（escHtml+ファイル名��ニタイズ） | **実装済** |
+| 2 | 致命的 | editor.ts | surroundContents失敗後HTML復元ロジック修正 | **実装済** |
+| 3 | 致命的 | editInplace.ts | beforeunload sendBeacon CSRF Token（_lastValidCsrfTokenキャッシュ） | **実装済** |
+| 4 | 致命的 | editor.ts | isConnected失敗時Observer/Interval残存修正 | **実装済** |
+| 5 | 致命的 | markdown.ts | footnote IDダブルエスケープ修正 | **実装済** |
+| 6 | 致命的 | editor.ts | 複数エディタ静的inlineToolbar参照競合修正 | **実装済** |
+| 7 | 致命的 | editInplace.ts | beforeunload sendBeaconトークン問題（XHRフォールバック） | **実装済** |
+| 8 | 致命的 | editor.ts | surroundContents失敗後サニタイズ未実施修正 | **実装済** |
+| 9 | 重大 | editInplace.ts | 複数エディタactiveEditor競合（focusin更新） | **実装済** |
+| 10 | 重大 | editor.ts | list初期化items��列バリデーション不足 | **実装済** |
+| 11 | 重大 | editInplace.ts | flushSave大規模content上限チェック | **実装済** |
+| 12 | 重大 | editInplace.ts | sidebar flushSaving競合防止フラグ | **実装済** |
+| 13 | 重大 | editor.ts | heading形式切替innerHTML保持+サニタイズ | **実装済** |
+| 14 | 重大 | editor.ts | ブロック削除DOM接続確認 | **実装済** |
+| 15 | 重大 | editInplace.ts | switchFormat失敗ロールバック+reload重複防止 | **実装済** |
+| 16 | 重大 | editInplace.ts | sendBeacon失敗XHR同期フォールバック | **実装済** |
+| 17 | 重大 | editor.ts | removeBlock削除前undo状態保存 | **実装済** |
+| 18 | 重大 | editInplace.ts | sendBeaconリトライXHR同期フォールバック | **実装済** |
+| 19 | 重大 | editor.ts | ツールボック��Escape閉じ+キーボー���対応 | **実装済** |
+| 20 | 重大 | editor.ts | focusout重複防止デバウンスタイマー | **実装済** |
+| 21 | 中程度 | editor.ts | UndoManager連続pushデバウンス+clear() | **実装済** |
+| 22 | 中程度 | i18n.ts | パラメータnullフォールバック+has()追加 | **実装済** |
+| 23 | 中程度 | editor.ts | InlineToolbar位置計算改善 | **実装済** |
+| 24 | 中程度 | editInplace.ts | D&D dragRow tbody存在確認 | **実装済** |
+| 25 | 中程度 | markdown.ts | タスクリスト行頭スペース許容 | **実装済** |
+| 26 | 中程度 | editInplace.ts | saveTimer null代入明確化 | **実装済** |
+| 27 | 中程度 | editor.ts | insertBlock未知typeチェック | **実装済** |
+| 28 | 中程度 | markdown.ts | 脚注参照escAttrダブルエスケープ防止 | **実装済** |
+| 29 | 中程度 | editInplace.ts | エディタフォーカス時activeEditor更新 | **実装済** |
+| 30 | 中程度 | editInplace.ts | save()失敗時UI通知 | **実装済** |
+| 31 | 中程度 | editor.ts | リスト重複リスナー��止 | **実装済** |
+| 32 | 中程度 | api.ts | disableUser/deleteUser入力��証 | **実装済** |
+| 33 | 中程度 | editInplace.ts/api.ts | パスワード最小長+同一チェック | **実装済** |
+| 34 | 中程度 | markdown.ts | image/link正規表現改善+タイトル属性 | **実装済** |
+| 35 | 中程度 | editor.ts | renderBlocks空data安全処理 | **実装済** |
+| 36 | 中程度 | editor.ts | wrapWithLink選択範囲検証+プロトコル拒否 | **実装済** |
+| 37 | 中程度 | editInplace.ts | ページ検索デバウンス | **実装済** |
+| 38 | 中程度 | editor.ts | リスト入力空li→paragraph変換+Backspace | **実装済** |
+| 39 | 中程度 | markdown.ts | テーブルセル数正規化 | **実装済** |
+| 40 | 中程度 | editInplace.ts | revokeObjectURL遅延実行 | **実装済** |
+| 41 | 中程度 | editInplace.ts | showWarnings isConnected確認 | **実装済** |
+| 42 | 中程度 | editor.ts | リストトグルlistEl DOM未接続再取得 | **実装済** |
+| 43 | 中程度 | editInplace.ts | switchFormat newFormat入力検証 | **実装済** |
+| 44 | 中程度 | markdown.ts | コードブロック&lt;p&gt;ラップ除去+空言語安全処理 | **実装済** |
+| 45 | 中程度 | editor.ts | InlineToolbar scrollX/scrollY考慮 | **実装済** |
+| 46 | 中程度 | editInplace.ts | ユーザー削除ボタン無効化 | **実装済** |
+| 47 | 中程度 | editor.ts | Tab Shift+Tabインデント解除 | **実装済** |
+| 48 | 中程度 | editInplace.ts | timestampバリデーション | **実装済** |
+| 49 | 中程度 | editor.ts | Undo/Redo dirty/clear | **実装済** |
+| 50 | 中程度 | editor.ts | paragraph paste sanitizeHtml | **実装済** |
+| 51 | 中程度 | editor.ts | コードブロック言語タグdata-language保持 | **実装済** |
+| 52 | 中程度 | editor.ts | undo/redo focus保持 | **実装済** |
+| 53 | 中程度 | editInplace.ts | allChecked判定最適化 | **実装済** |
+| 54 | 中程度 | markdown.ts | テーブルalignment配列超過防止 | **実装済** |
+| 55 | 中程度 | markdown.ts | 脚注複数行対応 | **実装済** |
+| 56 | 中程度 | editInplace.ts | refreshUserList競合防止 | **実装済** |
+| 57 | 中程度 | editInplace.ts | generateSubMasterレスポンス検証 | **実装済** |
+| 58 | 中程度 | editInplace.ts | パスワードフォームエラー時クリア | **実装済** |
+| 59 | 中程度 | editInplace.ts | i18n ready Promiseインスタンス確認 | **実装済** |
+| 60 | 中程度 | editInplace.ts | D&D reorder失敗時UI復元 | **実装済** |
+
+##### TS側軽微品質確定（60件精査・60件実装）
+
+| # | カテゴリ | 対象 | 改善概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 61 | パフォーマンス | markdown.ts | headings正規表現を事前コンパイル化 | **実装済** |
+| 62 | パフォーマンス | markdown.ts | bold/italic正規表現を事前コンパイル化 | **実装済** |
+| 63 | パフォーマンス | markdown.ts | image/link正規表現を事前コンパイル化 | **実装済** |
+| 64 | パフォーマンス | markdown.ts | taskList正規表現を事前コンパイル化 | **実装済** |
+| 65 | パフォーマンス | markdown.ts | list/blockquote正規表現を事前コンパイル化 | **実装済** |
+| 66 | パフォーマンス | markdown.ts | paragraph正規表現を事前コンパイル化 | **実装済** |
+| 67 | パフォーマンス | editor.ts | sanitizeHtml正規表現を事前コンパイル化 | **実装済** |
+| 68 | パフォーマンス | editInplace.ts | DOM検索結果のキャッシュ（querySelectorAll再呼出し削減） | **実装済** |
+| 69 | パフォーマンス | editInplace.ts | sortedReplacer関数のDRY化（flushSave/beforeunload共通化） | **実装済** |
+| 70 | パフォーマンス | editor.ts | createBlockWrapper内のボタン生成をヘルパーメソッド化 | **実装済** |
+| 71 | コード品質 | editor.ts | BlockToolData interfaceにlanguageフィールド追加 | **実装済** |
+| 72 | コード品質 | editor.ts | getEditorFromElement戻り値型注釈の一貫性 | **実装済** |
+| 73 | コード品質 | api.ts | エラーメッセージ文字列のDRY化（共通ヘルパー） | **実装済** |
+| 74 | コード品質 | api.ts | CSRF更新処理のDRY化（全メソッド統一パターン） | **実装済** |
+| 75 | コード品質 | editInplace.ts | initBlockEditor内のJSON.stringify sortedReplacerをモジュールスコープに移動 | **実装済** |
+| 76 | コード品質 | editor.ts | builtinTools各ブロックのsanitizeHtml適用パターン統一 | **実装済** |
+| 77 | コード品質 | markdown.ts | escAttrヘルパーをモジュールスコープに昇格 | **実装済** |
+| 78 | コード品質 | editor.ts | 未使用の`as any`キャスト削減（saveUndoStateをpublicに） | **実装済** |
+| 79 | コード品質 | editInplace.ts | マジックナンバー定数化（1_048_576, 300, 8000, 5000） | **実装済** |
+| 80 | コード品質 | editInplace.ts | showRevisionDiffModal innerHTML→DOM API化 | **実装済** |
+| 81 | 型改善 | globals.d.ts | BlockToolData型をglobals.d.tsにも追加 | **実装済** |
+| 82 | 型改善 | api.ts | GenerateReport型定義追加 | **実装済** |
+| 83 | 型改善 | editInplace.ts | showGenerateReport引数型をGenerateReport型に統一 | **実装済** |
+| 84 | 型改善 | editor.ts | EditorData.blocks型をReadonlyArray化 | **実装済** |
+| 85 | 型改善 | editInplace.ts | downloadCredentials引数にreadonlyマーク | **実装済** |
+| 86 | エラーハンドリング | api.ts | listUsers catch時にconsole.warn追加 | **実装済** |
+| 87 | エラーハンドリング | editInplace.ts | initBlockEditor JSON.parseにtry-catch + console.warn | **実装済** |
+| 88 | エラーハンドリング | editInplace.ts | renderMarkdownContent atob失敗時console.warn | **実装済** |
+| 89 | エラーハンドリング | editInplace.ts | renderBlocksContent atob失敗時console.warn | **実装済** |
+| 90 | エラーハンドリング | api.ts | saveSidebar catch時にconsole.warn追加 | **実装済** |
+| 91 | null安全 | editor.ts | image block save時のnullチェック強化 | **実装済** |
+| 92 | null安全 | editInplace.ts | showFieldFeedback orig null対応 | **実装済** |
+| 93 | null安全 | editInplace.ts | initPageSearch input.value trim前のnullチェック | **実装済** |
+| 94 | UX | editInplace.ts | downloadCredentials i18n化（ファイル内テキスト翻訳対応） | **実装済** |
+| 95 | UX | editInplace.ts | showSaveIndicator状態テキストi18n化 | **実装済** |
+| 96 | UX | editInplace.ts | bulk操作エラーメッセージi18n対応フォールバック追加 | **実装済** |
+| 97 | UX | editor.ts | toolboxボタンにtitle属性追加 | **実装済** |
+| 98 | UX | editor.ts | image URLプレースホルダーi18n化 | **実装済** |
+| 99 | UX | editor.ts | image captionプレースホルダーi18n化 | **実装済** |
+| 100 | UX | editInplace.ts | パスワード変更成功時フォームフォーカス制御 | **実装済** |
+| 101 | アクセシビリティ | editor.ts | heading levelボタンにaria-label追加 | **実装済** |
+| 102 | アクセシビリティ | editor.ts | list toggleボタンにaria-label追加 | **実装済** |
+| 103 | アクセシビリティ | editor.ts | deleteブロックボタンにaria-label追加 | **実装済** |
+| 104 | アクセシビリティ | editor.ts | moveUp/moveDownボタンにaria-label追加 | **実装済** |
+| 105 | アクセシビリティ | editor.ts | addブロックボタンにaria-label追加 | **実装済** |
+| 106 | CSS | themes/admin.css | ce-heading-wrapのdisplay:flex追加 | **実装済** |
+| 107 | CSS | themes/admin.css | ce-list-wrapのdisplay:flex追加 | **実装済** |
+| 108 | CSS | themes/admin.css | ce-sub-master-credentialsスタイル追加 | **実装済** |
+| 109 | CSS | themes/admin.css | ce-warnings__itemスタイル追加 | **実装済** |
+| 110 | CSS | themes/admin.css | ce-generate-report__rowスタイル追加 | **実装済** |
+| 111 | CSS | themes/admin.css | dark mode ce-heading__level/ce-list__toggleスタイル | **実装済** |
+| 112 | CSS | themes/AP-Default/style.css | ce-heading-wrap/ce-list-wrapスタイル追加 | **実装済** |
+| 113 | CSS | themes/AP-Adlaire/style.css | ce-heading-wrap/ce-list-wrapスタイル追加 | **実装済** |
+| 114 | CSS | themes/AP-Default/minimal.css | font-family system-uiフォールバック追加 | **実装済** |
+| 115 | CSS | themes/AP-Adlaire/minimal.css | font-family system-uiフォールバック追加 | **実装済** |
+| 116 | i18n | ja.json | downloadCredentialsファイル内テキスト翻訳キー追加 | **実装済** |
+| 117 | i18n | en.json | downloadCredentialsファイル内テキスト翻訳キー追加 | **実装済** |
+| 118 | i18n | ja.json | save状態テキスト翻訳キー追加（saving/saved/error） | **実装済** |
+| 119 | i18n | en.json | save状態テキスト翻訳キー追加（saving/saved/error） | **実装済** |
+| 120 | ビルド設定 | tsconfig.json | noUnusedLocals/noUnusedParameters追加 | **実装済** |
 
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 

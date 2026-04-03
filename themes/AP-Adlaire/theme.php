@@ -2,41 +2,49 @@
 /** @var App $app */
 $c = $app->config;
 $host = $app->host;
+$pageTitle = (string) ($c['title'] ?? '');
+$pageName = (string) ($c['page'] ?? '');
+$pageDescription = (string) ($c['description'] ?? '');
+$pageKeywords = (string) ($c['keywords'] ?? '');
+$pageCopyright = (string) ($c['copyright'] ?? '');
+$pageContent = (string) ($c['content'] ?? '');
+$pageSubside = (string) ($c['subside'] ?? '');
+$pageTheme = (string) ($c['themeSelect'] ?? 'AP-Adlaire');
 ?>
 <!doctype html>
 <html lang="<?= esc($app->language) ?>">
 <head>
 	<meta charset="utf-8">
-	<title><?= esc($c['title']) ?> - <?= esc($c['page']) ?></title>
+	<title><?= esc($pageTitle) ?> - <?= esc($pageName) ?></title>
 	<base href="<?= esc($host) ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link rel="stylesheet" href="themes/<?= esc($c['themeSelect']) ?>/style.css">
-	<meta name="description" content="<?= esc($c['description']) ?>">
-	<meta name="keywords" content="<?= esc($c['keywords']) ?>">
+	<link rel="stylesheet" href="themes/<?= esc($pageTheme) ?>/style.css">
+	<meta name="description" content="<?= esc($pageDescription) ?>">
+	<meta name="keywords" content="<?= esc($pageKeywords) ?>">
 <?php $app->scriptTags(); ?>
 </head>
 <body>
 	<nav id="nav">
-		<h1><a href="./"><?= esc($c['title']) ?></a></h1>
+		<h1><a href="./"><?= esc($pageTitle) ?></a></h1>
 		<?php $app->menu(); ?>
 		<div class="clear"></div>
 	</nav>
 
 	<div id="wrapper" class="border">
 		<div class="pad">
-			<?php $app->content($c['page'], $c['content'] ?? ''); ?>
+			<?php $app->content($pageName, $pageContent); ?>
 		</div>
 	</div>
 
 	<div id="side" class="border">
 		<div class="pad">
-			<?php $app->content('subside', $c['subside']); ?>
+			<?php $app->content('subside', $pageSubside); ?>
 		</div>
 	</div>
 
 	<div class="clear"></div>
 	<footer>
-		<p><?= esc($c['copyright']) ?> | <?= $app->getLoginStatus() ?> | <?= esc($app->credit) ?></p>
+		<p><?= esc($pageCopyright) ?> | <?= $app->getLoginStatus() ?> | <?= esc($app->credit) ?></p>
 	</footer>
 </body>
 </html>

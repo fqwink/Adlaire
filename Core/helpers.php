@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 function esc(string $value): string
 {
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
 function csrf_token(): string
@@ -25,8 +25,14 @@ function csrf_token(): string
 function csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!is_string($token) || $token === '') {
+        return false;
+    }
     $session = $_SESSION['csrf'] ?? '';
-    if ($token === '' || $session === '' || !hash_equals($session, $token)) {
+    if (!is_string($session) || $session === '') {
+        return false;
+    }
+    if (!hash_equals($session, $token)) {
         return false;
     }
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -39,35 +45,42 @@ const LOGIN_MAX_ATTEMPTS = 5;
 /** Rate limit window in seconds */
 const LOGIN_WINDOW_SECONDS = 300;
 
+/** Rate file hash algorithm */
+const RATE_HASH_ALGO = 'sha256';
+
 function login_rate_check(): bool
 {
     $now = time();
 
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (!is_string($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        $ip = '127.0.0.1';
+    }
     $rateDir = __DIR__ . '/../data/system';
     if (!is_dir($rateDir)) {
         if (!@mkdir($rateDir, 0755, true) && !is_dir($rateDir)) {
             return true;
         }
     }
-    $rateFile = $rateDir . '/rate_' . hash('sha256', $ip) . '.json';
+    $rateFile = $rateDir . '/rate_' . hash(RATE_HASH_ALGO, $ip) . '.json';
 
     $attempts = [];
     if (is_file($rateFile)) {
         $fp = fopen($rateFile, 'r');
         if ($fp !== false) {
-            flock($fp, LOCK_SH);
-            $raw = stream_get_contents($fp);
-            flock($fp, LOCK_UN);
-            fclose($fp);
-            $decoded = json_decode($raw ?: '[]', true);
-            if (is_array($decoded)) {
-                $attempts = $decoded;
+            if (flock($fp, LOCK_SH | LOCK_NB) || flock($fp, LOCK_SH)) {
+                $raw = stream_get_contents($fp);
+                flock($fp, LOCK_UN);
+                $decoded = json_decode(is_string($raw) && $raw !== '' ? $raw : '[]', true);
+                if (is_array($decoded)) {
+                    $attempts = $decoded;
+                }
             }
+            fclose($fp);
         }
     }
 
-    $attempts = array_values(array_filter($attempts, fn(int $t) => ($now - $t) < LOGIN_WINDOW_SECONDS));
+    $attempts = array_values(array_filter($attempts, fn(mixed $t) => is_int($t) && ($now - $t) < LOGIN_WINDOW_SECONDS));
     $attemptCount = count($attempts);
 
     if ($attemptCount >= LOGIN_MAX_ATTEMPTS) {
@@ -76,7 +89,11 @@ function login_rate_check(): bool
 
     $attempts[] = $now;
     if (!is_file($rateFile)) {
-        file_put_contents($rateFile, '[]', LOCK_EX);
+        if (file_put_contents($rateFile, '[]', LOCK_EX) === false) {
+            error_log('Adlaire: Failed to create rate limit file: ' . $rateFile);
+            return true;
+        }
+        @chmod($rateFile, 0600);
     }
     $fp = fopen($rateFile, 'r+');
     if ($fp !== false) {

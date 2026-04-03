@@ -23,6 +23,28 @@ let activeEditor: InstanceType<typeof Editor> | null = null;
 let fieldSaveQueue: Promise<void> = Promise.resolve();
 // #12: flushSave競合防止フラグ
 let flushSaving = false;
+// Ver.2.9 TS#3/TS#7: sendBeacon用のCSRFトークンキャッシュ — 最後の有効トークンを保持
+let _lastValidCsrfToken: string = '';
+
+// Ver.2.9 TS#69/#75: sortedReplacer共通化（flushSave/beforeunload両方で使用）
+const _sortedReplacer = (_key: string, value: unknown): Record<string, unknown> | unknown => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        const obj = value as Record<string, unknown>;
+        const sorted: Record<string, unknown> = {};
+        for (const k of Object.keys(obj).sort()) {
+            sorted[k] = obj[k];
+        }
+        return sorted;
+    }
+    return value;
+};
+
+// Ver.2.9 TS#79: マジックナンバー定数化
+const SAVE_DEBOUNCE_MS = 300;
+const WARNINGS_DISPLAY_MS = 8000;
+const REVOKE_URL_DELAY_MS = 5000;
+const FEEDBACK_DISPLAY_MS = 1500;
+const SEARCH_DEBOUNCE_MS = 150;
 
 function nl2br(s: string): string {
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
@@ -53,6 +75,8 @@ function fieldSave(key: string, val: string): void {
             if (!response.ok) { throw new Error(String(response.status)); }
             // #87: updateCsrfFromResponse DRY統一
             updateCsrfFromResponse(response);
+            // Ver.2.9 TS#3/TS#7: 有効なCSRFトークンをキャッシュ
+            _lastValidCsrfToken = csrfToken;
             return response.text();
         })
         .then(data => {
@@ -87,13 +111,18 @@ function fieldSave(key: string, val: string): void {
     });
 }
 
+// #107: CSS.escapeフォールバック追加（Safari旧バージョン対策）
 function showFieldFeedback(key: string, success: boolean): void {
-    const el = document.querySelector(`[onchange*="fieldSave(\\"${CSS.escape(key)}\\""]`) as HTMLElement
+    const escapedKey = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(key)
+        : key.replace(/([^\w-])/g, '\\$1');
+    const el = document.querySelector(`[onchange*="fieldSave(\\"${escapedKey}\\""]`) as HTMLElement
         || document.getElementById(key);
     if (!el) return;
     const orig = el.style.borderColor;
     el.style.borderColor = success ? '#0a0' : '#c00';
-    setTimeout(() => { el.style.borderColor = orig; }, 1500);
+    // Ver.2.9 TS#79/#92: マジックナンバー定数化 + orig null安全
+    setTimeout(() => { el.style.borderColor = orig || ''; }, FEEDBACK_DISPLAY_MS);
 }
 
 // --- Text-based editing (Markdown and settings fields) ---
@@ -101,7 +130,8 @@ function showFieldFeedback(key: string, success: boolean): void {
 function plainTextEdit(span: HTMLElement): void {
     const id = span.id;
     const title = span.getAttribute('title');
-    const titleAttr = title ? `"${title}" ` : '';
+    // #108: title属性値のエスケープ（引用符対策）
+    const titleAttr = title ? `"${title.replace(/"/g, '&quot;')}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
 
     const content = isMarkdown
@@ -152,7 +182,8 @@ function renderMarkdownContent(): void {
         // #89: b64デコードエラーハンドリング
         let raw: string;
         if (b64) {
-            try { raw = atob(b64); } catch { raw = el.textContent || ''; }
+            // Ver.2.9 TS#88: atob失敗時console.warn
+            try { raw = atob(b64); } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
         } else {
             raw = el.textContent || '';
         }
@@ -170,11 +201,14 @@ function renderBlocksContent(): void {
         let raw = el.dataset.blocks || '';
         const b64 = el.dataset.blocksB64;
         if (b64) {
-            try { raw = atob(b64); } catch { /* empty */ }
+            // Ver.2.9 TS#89: atob失敗時console.warn
+            try { raw = atob(b64); } catch (e) { console.warn('renderBlocksContent: atob failed', e); }
         }
         if (!raw) return;
         try {
             const blocks = JSON.parse(raw);
+            // #111: パース結果のArray.isArrayチェック追加
+            if (!Array.isArray(blocks)) return;
             el.innerHTML = sanitizeHtml(renderBlocks(blocks));
         } catch (err) {
             // #38: JSON.parse失敗時のconsole.warnログ出力
@@ -206,46 +240,58 @@ function initBlockEditor(): void {
 
         const editorInstance = Editor.create(wrapper, { data: editorData });
         activeEditor = editorInstance;
+        // Ver.2.9 TS#3/TS#7: 初期CSRFトークンをキャッシュ
+        if (!_lastValidCsrfToken) { _lastValidCsrfToken = csrfToken; }
+
+        // Ver.2.9 TS#29: フォーカス管理 — エディタフォーカス時にactiveEditor更新
+        wrapper.addEventListener('focusin', () => {
+            activeEditor = editorInstance;
+        });
 
         // Auto-save on focusout from the editor
         let saveTimer: ReturnType<typeof setTimeout> | null = null;
         let lastSavedJson = '';
+        // Ver.2.9 TS#26: セーブタイマー複数エディタ — flushSavingをエディタごとにローカル化
+        let wrapperFlushSaving = false;
 
         const flushSave = (): void => {
             // #12: flushSave中の別focusout競合防止
-            if (flushSaving) return;
+            // Ver.2.9 TS#26: エディタ固有のフラグを使用
+            if (wrapperFlushSaving) return;
             // #59: activeEditor null後のsave防止
-            if (!editorInstance || !activeEditor) return;
-            flushSaving = true;
+            if (!editorInstance) return;
+            wrapperFlushSaving = true;
             const saved = editorInstance.save();
-            // #39: JSON.stringifyでキーソート統一
-            // #62: sortedReplacer return type改善 — Record | unknown の明示的ユニオン
-            const sortedReplacer = (_key: string, value: unknown): Record<string, unknown> | unknown => {
-                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                    const obj = value as Record<string, unknown>;
-                    const sorted: Record<string, unknown> = {};
-                    for (const k of Object.keys(obj).sort()) {
-                        sorted[k] = obj[k];
-                    }
-                    return sorted;
-                }
-                return value;
-            };
-            const json = JSON.stringify(saved.blocks, sortedReplacer);
+            // #39/#69/#75: JSON.stringifyでキーソート統一 — 共通sortedReplacer使用
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             const slug = wrapper.id;
-            if (!slug || json === lastSavedJson) { flushSaving = false; return; }
+            if (!slug || json === lastSavedJson) { wrapperFlushSaving = false; return; }
 
             lastSavedJson = json;
+            // Ver.2.9 TS#10: save大規模content上限チェック
+            if (json.length > FIELD_SAVE_MAX_LENGTH) {
+                console.warn('flushSave: content exceeds max length, skipping save for:', slug);
+                showSaveIndicator(wrapper, 'error');
+                wrapperFlushSaving = false;
+                return;
+            }
             showSaveIndicator(wrapper, 'saving');
             api.savePage(slug, json, 'blocks').then((result) => {
                 showSaveIndicator(wrapper, 'saved');
+                // Ver.2.9 TS#3/TS#7: 有効なCSRFトークンをキャッシュ
+                _lastValidCsrfToken = csrfToken;
                 if (result.warnings && result.warnings.length > 0) {
-                    showWarnings(result.warnings);
+                    // Ver.2.9 TS#41: showWarnings isConnected確認
+                    if (wrapper.isConnected) {
+                        showWarnings(result.warnings);
+                    }
                 }
-            }).catch(() => {
+            }).catch((err: unknown) => {
                 showSaveIndicator(wrapper, 'error');
+                // Ver.2.9 TS#30: save()失敗時のUI通知
+                console.warn('flushSave error:', slug, err instanceof Error ? err.message : String(err));
             }).finally(() => {
-                flushSaving = false;
+                wrapperFlushSaving = false;
             });
         };
 
@@ -260,7 +306,8 @@ function initBlockEditor(): void {
 
             // #36: saveTimer null代入の明確化
             if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-            saveTimer = setTimeout(flushSave, 300);
+            // Ver.2.9 TS#79: マジックナンバー定数化
+            saveTimer = setTimeout(flushSave, SAVE_DEBOUNCE_MS);
         });
 
         // #41: beforeunloadでnavigator.sendBeacon()使用に変更（同期的に送信可能）
@@ -273,32 +320,29 @@ function initBlockEditor(): void {
             // #59: activeEditor null後のsave防止
             if (!editorInstance || !activeEditor) return;
             const saved = editorInstance.save();
-            // #62: sortedReplacer return type改善
-            const sortedReplacer = (_key: string, value: unknown): Record<string, unknown> | unknown => {
-                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                    const obj = value as Record<string, unknown>;
-                    const sorted: Record<string, unknown> = {};
-                    for (const k of Object.keys(obj).sort()) {
-                        sorted[k] = obj[k];
-                    }
-                    return sorted;
-                }
-                return value;
-            };
-            const json = JSON.stringify(saved.blocks, sortedReplacer);
+            // #62/#69/#75: sortedReplacer共通化使用
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson) return;
             lastSavedJson = json;
             const body = new URLSearchParams();
             body.append('slug', slug);
             body.append('format', 'blocks');
-            body.append('csrf', csrfToken);
+            // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
+            body.append('csrf', _lastValidCsrfToken || csrfToken);
             body.append('blocks', json);
             body.append('content', '');
             // #13: sendBeacon失敗時のユーザー通知（返り値チェック）
+            // Ver.2.9 TS#18: sendBeaconリトライ — 失敗時にXHR同期フォールバック
             const sent = navigator.sendBeacon('index.php?api=pages', body);
             if (!sent) {
-                console.warn('sendBeacon failed for page:', slug);
+                console.warn('sendBeacon failed for page:', slug, '- attempting XHR fallback');
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'index.php?api=pages', false);
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send(body.toString());
+                } catch { /* best-effort */ }
             }
         });
     });
@@ -326,17 +370,23 @@ function initBlockEditor(): void {
 
         let sidebarSaveTimer: ReturnType<typeof setTimeout> | null = null;
         let sidebarLastJson = '';
+        // #112: sidebar flushSaving競合防止フラグ追加
+        let sidebarFlushSaving = false;
 
         const flushSidebarSave = (): void => {
+            if (sidebarFlushSaving) return;
+            sidebarFlushSaving = true;
             const saved = sidebarEditor.save();
             const json = JSON.stringify(saved.blocks);
-            if (json === sidebarLastJson) return;
+            if (json === sidebarLastJson) { sidebarFlushSaving = false; return; }
             sidebarLastJson = json;
             showSaveIndicator(sidebarEl, 'saving');
             api.saveSidebar(json).then(() => {
                 showSaveIndicator(sidebarEl, 'saved');
             }).catch(() => {
                 showSaveIndicator(sidebarEl, 'error');
+            }).finally(() => {
+                sidebarFlushSaving = false;
             });
         };
 
@@ -349,7 +399,8 @@ function initBlockEditor(): void {
                 (related as HTMLElement).closest?.('.ce-inline-toolbar')
             )) return;
             if (sidebarSaveTimer) clearTimeout(sidebarSaveTimer);
-            sidebarSaveTimer = setTimeout(flushSidebarSave, 300);
+            // Ver.2.9 TS#79: マジックナンバー定数化
+            sidebarSaveTimer = setTimeout(flushSidebarSave, SAVE_DEBOUNCE_MS);
         });
 
         // #41: sidebarもsendBeaconに変更
@@ -365,11 +416,19 @@ function initBlockEditor(): void {
             sidebarLastJson = json;
             const body = new URLSearchParams();
             body.append('blocks', json);
-            body.append('csrf', csrfToken);
+            // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
+            body.append('csrf', _lastValidCsrfToken || csrfToken);
             // #13: sendBeacon失敗時のユーザー通知
+            // Ver.2.9 TS#18: sendBeaconリトライ — 失敗時にXHR同期フォールバック
             const sent = navigator.sendBeacon('index.php?api=sidebar', body);
             if (!sent) {
-                console.warn('sendBeacon failed for sidebar');
+                console.warn('sendBeacon failed for sidebar - attempting XHR fallback');
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'index.php?api=sidebar', false);
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send(body.toString());
+                } catch { /* best-effort */ }
             }
         });
     }
@@ -377,19 +436,29 @@ function initBlockEditor(): void {
 
 // --- Save indicator ---
 
+// #110: showSaveIndicator — parentElement nullチェック強化
 function showSaveIndicator(container: HTMLElement, state: 'saving' | 'saved' | 'error'): void {
-    let indicator = container.parentElement?.querySelector('.ce-save-indicator') as HTMLElement | null;
+    const parent = container.parentElement;
+    if (!parent) return;
+    let indicator = parent.querySelector('.ce-save-indicator') as HTMLElement | null;
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.className = 'ce-save-indicator';
-        container.parentElement?.insertBefore(indicator, container);
+        parent.insertBefore(indicator, container);
     }
 
-    indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '✓' : '✗';
+    // Ver.2.9 TS#95: save状態テキストi18n化
+    const stateLabels: Record<string, string> = {
+        saving: i18n.t('save_state_saving') || '...',
+        saved: i18n.t('save_state_saved') || '\u2713',
+        error: i18n.t('save_state_error') || '\u2717',
+    };
+    indicator.textContent = stateLabels[state] || state;
     indicator.className = 'ce-save-indicator ce-save--' + state;
 
     if (state !== 'saving') {
-        setTimeout(() => { indicator!.className = 'ce-save-indicator'; }, 2000);
+        const indicatorRef = indicator;
+        setTimeout(() => { indicatorRef.className = 'ce-save-indicator'; }, 2000);
     }
 }
 
@@ -416,11 +485,17 @@ function initFormatSwitcher(): void {
     });
 }
 
+// Ver.2.9 TS#21: switchFormat location.reload重複防止フラグ
+let _switchFormatReloading = false;
 function switchFormat(slug: string, newFormat: string): void {
+    // Ver.2.9 TS#21: reload中の重複呼び出し防止
+    if (_switchFormatReloading) return;
     // #15: switchFormat失敗時のロールバック — 元データを保持
-    const previousEditorRef = activeEditor;
+    // #109: 未使用変数previousEditorRef削除
     let previousContent = '';
     let previousFormat = '';
+    // Ver.2.9 TS#43: switchFormatデータ整形 — newFormatの入力検証
+    if (newFormat !== 'blocks' && newFormat !== 'markdown' && newFormat !== 'html') return;
 
     // Gather current content before switching
     let currentContent = '';
@@ -490,14 +565,16 @@ function switchFormat(slug: string, newFormat: string): void {
         }));
 
         api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
-            location.reload();
+            // Ver.2.9 TS#21: reload重複防止
+            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
         }).catch(() => {
             // #15: 失敗時にロールバック
             rollback();
         });
     } else {
         api.savePage(slug, currentContent, newFormat).then(() => {
-            location.reload();
+            // Ver.2.9 TS#21: reload重複防止
+            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
         }).catch(() => {
             // #15: 失敗時にロールバック
             rollback();
@@ -552,6 +629,8 @@ function initPageReorder(): void {
             e.preventDefault();
             row.classList.remove('ce-row--dragover');
             if (!state.dragRow || state.dragRow === row) return;
+            // Ver.2.9 TS#24: D&D整数チェック — dragRowがtbody内に存在するか確認
+            if (!tbody.contains(state.dragRow)) { state.dragRow = null; return; }
             // #16: reorderPages失敗後のUI復元 — 元の順序を保存
             const originalOrder: HTMLTableRowElement[] = [];
             tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(r => originalOrder.push(r));
@@ -591,18 +670,32 @@ function initPageSearch(): void {
     if (!tbody) return;
 
     // #30: Japanese検索改善 — normalize + toLowerCase で全角/半角統一
+    // Ver.2.9 #37: 検索フィルタ — デバウンスで入力中のパフォーマンス改善
+    let searchTimer: ReturnType<typeof setTimeout> | null = null;
     input.addEventListener('input', () => {
-        const query = input.value.normalize('NFKC').toLowerCase();
-        tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
-            const text = (row.textContent || '').normalize('NFKC').toLowerCase();
-            row.style.display = text.includes(query) ? '' : 'none';
-        });
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            // Ver.2.9 TS#37: normalize古ブラウザ対応 — normalize未対応ブラウザフォールバック
+            const safeNormalize = (s: string): string =>
+                typeof s.normalize === 'function' ? s.normalize('NFKC') : s;
+            const query = safeNormalize(input.value).toLowerCase().trim();
+            tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
+                if (!query) { row.style.display = ''; return; }
+                const text = safeNormalize(row.textContent || '').toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        // Ver.2.9 TS#79: マジックナンバー定数化
+        }, SEARCH_DEBOUNCE_MS);
     });
 }
 
 // --- Bulk actions (#D) ---
 
+// Ver.2.9 TS#11: bulkActions初期化重複防止
+let _bulkActionsInitialized = false;
 function initBulkActions(): void {
+    if (_bulkActionsInitialized) return;
+    _bulkActionsInitialized = true;
     const selectAll = document.querySelector<HTMLInputElement>('#ce-bulk-select-all');
     if (!selectAll) return;
 
@@ -651,8 +744,9 @@ function initBulkActions(): void {
             const statusSelect = document.querySelector<HTMLSelectElement>('#ce-bulk-status-select');
             const status = statusSelect?.value;
             if (!status) return;
+            // Ver.2.9 TS#96: bulk操作エラーメッセージi18nフォールバック追加
             api.bulkStatus(slugs, status).then(() => { location.reload(); }).catch(() => {
-                alert(i18n.t('bulk_status_error'));
+                alert(i18n.t('bulk_status_error') || 'Bulk status change failed.');
             });
         });
     }
@@ -667,8 +761,9 @@ function initBulkActions(): void {
                 return;
             }
             if (!confirm(i18n.t('confirm_bulk_delete', { count: String(slugs.length) }))) return;
+            // Ver.2.9 TS#96: bulk操作エラーメッセージi18nフォールバック追加
             api.bulkDelete(slugs).then(() => { location.reload(); }).catch(() => {
-                alert(i18n.t('bulk_delete_error'));
+                alert(i18n.t('bulk_delete_error') || 'Bulk delete failed.');
             });
         });
     }
@@ -684,6 +779,8 @@ function showWarnings(warnings: string[]): void {
     // #83: 前回のタイマーをキャンセルしてスタック防止
     if (_warningsTimer) { clearTimeout(_warningsTimer); _warningsTimer = null; }
     let container = document.querySelector<HTMLElement>('.ce-warnings');
+    // Ver.2.9 TS#41: 既存containerがDOM接続済みか確認
+    if (container && !container.isConnected) { container = null; }
     if (!container) {
         container = document.createElement('div');
         container.className = 'ce-warnings';
@@ -703,11 +800,11 @@ function showWarnings(warnings: string[]): void {
         item.textContent = msg;
         containerRef.appendChild(item);
     });
-    // #83: タイマーIDを保持してスタック防止
+    // #83/#79: タイマーIDを保持してスタック防止 + マジックナンバー定数化
     _warningsTimer = setTimeout(() => {
         if (containerRef.isConnected) { containerRef.innerHTML = ''; }
         _warningsTimer = null;
-    }, 8000);
+    }, WARNINGS_DISPLAY_MS);
 }
 
 // --- Revision diff (#C) ---
@@ -760,15 +857,30 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
         }).join('');
     };
 
-    modal.innerHTML = `
-        <div class="ce-diff-modal__backdrop"></div>
-        <div class="ce-diff-modal__content">
-            <button class="ce-diff-modal__close">&times;</button>
-            <div class="ce-diff-added">${renderItems(diff.added, 'ce-diff-line--added')}</div>
-            <div class="ce-diff-removed">${renderItems(diff.removed, 'ce-diff-line--removed')}</div>
-            <div class="ce-diff-changed">${renderItems(diff.changed, 'ce-diff-line--changed')}</div>
-        </div>
-    `;
+    // Ver.2.9 TS#80: innerHTML→DOM API化（XSS安全性向上）
+    modal.innerHTML = '';
+    const backdrop = document.createElement('div');
+    backdrop.className = 'ce-diff-modal__backdrop';
+    const content = document.createElement('div');
+    content.className = 'ce-diff-modal__content';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ce-diff-modal__close';
+    closeBtn.textContent = '\u00D7';
+    content.appendChild(closeBtn);
+    const addSection = document.createElement('div');
+    addSection.className = 'ce-diff-added';
+    addSection.innerHTML = renderItems(diff.added, 'ce-diff-line--added');
+    content.appendChild(addSection);
+    const removeSection = document.createElement('div');
+    removeSection.className = 'ce-diff-removed';
+    removeSection.innerHTML = renderItems(diff.removed, 'ce-diff-line--removed');
+    content.appendChild(removeSection);
+    const changeSection = document.createElement('div');
+    changeSection.className = 'ce-diff-changed';
+    changeSection.innerHTML = renderItems(diff.changed, 'ce-diff-line--changed');
+    content.appendChild(changeSection);
+    modal.appendChild(backdrop);
+    modal.appendChild(content);
     modal.style.display = 'flex';
 
     const closeModal = (): void => {
@@ -776,8 +888,8 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
         // #85: Escapeキーリスナーを解除
         document.removeEventListener('keydown', escHandler);
     };
-    modal.querySelector('.ce-diff-modal__backdrop')?.addEventListener('click', closeModal);
-    modal.querySelector('.ce-diff-modal__close')?.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', closeModal);
     // #85: Escapeキーでモーダルを閉じる
     const escHandler = (e: KeyboardEvent): void => {
         if (e.key === 'Escape') closeModal();
@@ -787,7 +899,8 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
 
 // --- Generate report (#F) ---
 
-function showGenerateReport(report: { success: number; failed: number; skipped: number; time: number }): void {
+// Ver.2.9 TS#83: GenerateReport型を使用
+function showGenerateReport(report: GenerateReport): void {
     let container = document.querySelector<HTMLElement>('.ce-generate-report');
     if (!container) {
         container = document.createElement('div');
@@ -801,11 +914,13 @@ function showGenerateReport(report: { success: number; failed: number; skipped: 
     }
     container.innerHTML = '';
 
+    // #113: container非null参照をローカル変数で保持
+    const containerRef = container;
     const line = (label: string, value: string): void => {
         const row = document.createElement('div');
         row.className = 'ce-generate-report__row';
         row.textContent = `${label}: ${value}`;
-        container!.appendChild(row);
+        containerRef.appendChild(row);
     };
 
     line(i18n.t('report_success'), String(report.success));
@@ -846,6 +961,197 @@ function initGenerateReport(): void {
     });
 }
 
+// --- Sub-master credential download (Ver.2.9) ---
+
+// Ver.2.9 TS#1: downloadCredentials XSS防止 — escHtml()適用で表示時XSS防止
+// Ver.2.9 TS#40: URL.revokeObjectURL早期破棄防止 — setTimeout内で破棄
+function downloadCredentials(username: string, password: string, token: string): void {
+    const safeUser = escHtml(username);
+    const safePw = escHtml(password);
+    const safeToken = escHtml(token);
+    // Ver.2.9 TS#94: downloadCredentials i18n化
+    const content = `${i18n.t('cred_file_title') || 'Adlaire Sub-Master Credentials'}\n` +
+        `================================\n` +
+        `${i18n.t('cred_file_login_id') || 'Login ID'}: ${safeUser}\n` +
+        `${i18n.t('cred_file_password') || 'Password'}: ${safePw}\n` +
+        `${i18n.t('cred_file_token') || 'Token'}: ${safeToken}\n` +
+        `================================\n` +
+        `${i18n.t('cred_file_warning') || 'WARNING: This file is shown only once. Keep it safe.'}\n`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Ver.2.9 TS#1: ファイル名もエスケープ（特殊文字除去）
+    const safeFilename = username.replace(/[^a-zA-Z0-9_-]/g, '_');
+    a.download = `adlaire-sub-master-${safeFilename}.txt`;
+    a.click();
+    // Ver.2.9 TS#40/#79: revokeObjectURLを遅延実行 + マジックナンバー定数化
+    setTimeout(() => { URL.revokeObjectURL(url); }, REVOKE_URL_DELAY_MS);
+}
+
+// --- User Management UI (Ver.2.9: マスター管理者対応) ---
+
+function initUserManagement(): void {
+    // Sub-master generation
+    const generateBtn = document.querySelector<HTMLButtonElement>('#ce-generate-sub-master');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', () => {
+            if (generateBtn.disabled) return;
+            generateBtn.disabled = true;
+            api.generateSubMaster().then(result => {
+                // Ver.2.9 TS#22: generateSubMasterレスポンス解析 — 必須フィールド検証
+                if (!result || !result.username || !result.password || !result.token) {
+                    alert(i18n.t('sub_master_generate_error') || 'Failed to generate sub-master credentials.');
+                    return;
+                }
+                // Display credentials (shown only once, disappears on reload)
+                const credDisplay = document.createElement('div');
+                credDisplay.className = 'ce-sub-master-credentials';
+                credDisplay.innerHTML = `
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_id') || 'Login ID')}:</strong> ${escHtml(result.username)}</div>
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_password') || 'Password')}:</strong> ${escHtml(result.password)}</div>
+                    <div class="ce-sub-master-credentials__item"><strong>${escHtml(i18n.t('sub_master_token') || 'Token')}:</strong> ${escHtml(result.token)}</div>
+                    <div class="ce-sub-master-credentials__warn">${escHtml(i18n.t('sub_master_warn') || 'This information is shown only once. Please save it.')}</div>
+                `;
+                generateBtn.parentElement?.insertBefore(credDisplay, generateBtn.nextSibling);
+
+                // Auto-download credentials as text file
+                downloadCredentials(result.username, result.password, result.token);
+
+                // Refresh user list
+                refreshUserList();
+            }).catch((err: unknown) => {
+                alert(err instanceof Error ? err.message : String(err));
+            }).finally(() => {
+                generateBtn.disabled = false;
+            });
+        });
+    }
+
+    // Disable user buttons (event delegation)
+    const userListContainer = document.querySelector<HTMLElement>('#ce-user-list');
+    if (userListContainer) {
+        userListContainer.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+
+            // Disable (deactivate) sub-master
+            if (target.classList.contains('ce-user-disable-btn')) {
+                const username = target.dataset.username;
+                if (!username) return;
+                if (!confirm(i18n.t('confirm_disable_user', { username: escHtml(username) }) || `Disable user "${username}"?`)) return;
+                api.disableUser(username).then(() => {
+                    location.reload();
+                }).catch((err: unknown) => {
+                    alert(err instanceof Error ? err.message : String(err));
+                });
+            }
+
+            // Delete sub-master
+            // Ver.2.9 #46: ユーザー削除 — ダブル確認とボタン無効化
+            if (target.classList.contains('ce-user-delete-btn')) {
+                const username = target.dataset.username;
+                if (!username) return;
+                if (!confirm(i18n.t('confirm_delete_user', { username: escHtml(username) }) || `Delete user "${username}"? This cannot be undone.`)) return;
+                // Ver.2.9 #46: 削除中のボタン無効化
+                const btn = target as HTMLButtonElement;
+                btn.disabled = true;
+                api.deleteUser(username).then(() => {
+                    location.reload();
+                }).catch((err: unknown) => {
+                    btn.disabled = false;
+                    alert(err instanceof Error ? err.message : String(err));
+                });
+            }
+        });
+    }
+
+    // Main master password change form
+    const pwForm = document.querySelector<HTMLFormElement>('#ce-main-password-form');
+    if (pwForm) {
+        pwForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const currentPw = pwForm.querySelector<HTMLInputElement>('#ce-current-password')?.value || '';
+            const newPw = pwForm.querySelector<HTMLInputElement>('#ce-new-password')?.value || '';
+            const confirmPw = pwForm.querySelector<HTMLInputElement>('#ce-confirm-password')?.value || '';
+
+            if (!currentPw || !newPw || !confirmPw) {
+                alert(i18n.t('password_fields_required') || 'All password fields are required.');
+                return;
+            }
+            if (newPw !== confirmPw) {
+                alert(i18n.t('password_mismatch') || 'New password and confirmation do not match.');
+                return;
+            }
+            // Ver.2.9 #33: パスワード検証 — 最小長チェック（8文字以上）
+            if (newPw.length < 8) {
+                alert(i18n.t('password_too_short') || 'Password must be at least 8 characters long.');
+                return;
+            }
+            // Ver.2.9 #33: パスワード検証 — 現在のパスワードと同一でないか
+            if (currentPw === newPw) {
+                alert(i18n.t('password_same_as_current') || 'New password must be different from current password.');
+                return;
+            }
+
+            api.updateMainPassword(currentPw, newPw).then(() => {
+                alert(i18n.t('password_updated') || 'Password updated successfully.');
+                pwForm.reset();
+                // Ver.2.9 TS#100: 成功時にcurrentPasswordフィールドにフォーカス
+                const currentPwInput = pwForm.querySelector<HTMLInputElement>('#ce-current-password');
+                if (currentPwInput) currentPwInput.focus();
+            }).catch((err: unknown) => {
+                alert(err instanceof Error ? err.message : String(err));
+                // Ver.2.9 TS#33: パスワードフォームエラー時リセット — パスワードフィールドのみクリア
+                const newPwInput = pwForm.querySelector<HTMLInputElement>('#ce-new-password');
+                const confirmPwInput = pwForm.querySelector<HTMLInputElement>('#ce-confirm-password');
+                if (newPwInput) newPwInput.value = '';
+                if (confirmPwInput) confirmPwInput.value = '';
+            });
+        });
+    }
+
+    // Enforce 3-user limit: disable generate button when at capacity
+    refreshUserList();
+}
+
+// Ver.2.9 TS#32: refreshUserList競合防止 — 実行中フラグ
+let _refreshUserListPending = false;
+function refreshUserList(): void {
+    const generateBtn = document.querySelector<HTMLButtonElement>('#ce-generate-sub-master');
+    if (!generateBtn) return;
+    // Ver.2.9 TS#32: 既に実行中の場合はスキップ
+    if (_refreshUserListPending) return;
+    _refreshUserListPending = true;
+
+    api.listUsers().then(users => {
+        // 3-user limit: main master + 2 sub-masters = 3 total
+        const MAX_USERS = 3;
+        generateBtn.disabled = users.length >= MAX_USERS;
+        if (users.length >= MAX_USERS) {
+            generateBtn.title = i18n.t('sub_master_limit_reached') || 'Maximum number of users reached (3).';
+        } else {
+            generateBtn.title = '';
+        }
+    }).catch(() => {
+        // Silently ignore list errors on refresh
+    }).finally(() => {
+        _refreshUserListPending = false;
+    });
+}
+
+// --- Login page: sub-master token field toggle (Ver.2.9) ---
+
+function initLoginSubMasterToggle(): void {
+    const checkbox = document.querySelector<HTMLInputElement>('#ce-login-sub-master');
+    const tokenField = document.querySelector<HTMLElement>('#ce-login-token-field');
+    if (!checkbox || !tokenField) return;
+
+    tokenField.style.display = 'none';
+    checkbox.addEventListener('change', () => {
+        tokenField.style.display = checkbox.checked ? '' : 'none';
+    });
+}
+
 // --- Main initialization ---
 
 // #98: initEditInplace重複実行防止
@@ -866,17 +1172,22 @@ function initEditInplace(): void {
         initBulkActions();
         initRevisionDiff();
         initGenerateReport();
+        initUserManagement();
+        initLoginSubMasterToggle();
     };
     // #36: typeof i18nチェックをより堅牢に
-    if (typeof i18n !== 'undefined' && i18n && typeof i18n.ready?.then === 'function') {
-        i18n.ready.then(initEditorUI);
+    // Ver.2.9 TS#22(i18n): ready?.then型チェック — Promiseインスタンス確認を追加
+    if (typeof i18n !== 'undefined' && i18n && i18n.ready instanceof Promise && typeof i18n.ready.then === 'function') {
+        i18n.ready.then(initEditorUI).catch(() => { initEditorUI(); });
     } else {
         initEditorUI();
     }
 
     // Editable text spans (HTML and Markdown formats)
+    // Ver.2.9 TS#31: イベントリスナー伝播制御 — click伝播を停止して親要素の誤動作を防止
     document.querySelectorAll<HTMLElement>('span.editText').forEach(span => {
-        span.addEventListener('click', () => {
+        span.addEventListener('click', (e) => {
+            e.stopPropagation();
             if (changing) return;
             changing = true;
 
