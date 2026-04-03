@@ -18,7 +18,11 @@ function markdownToHtml(md) {
         const escaped = code.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         // #50: langをescHtml()でエスケープ
         const escapeLang = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        const cls = lang ? ` class="language-${escapeLang(lang)}"` : '';
+        // #46: code block language validation強化 — 英数字・ハイフン・プラスのみ許可
+        let cls = '';
+        if (lang && /^[a-zA-Z0-9+#._-]+$/.test(lang)) {
+            cls = ` class="language-${escapeLang(lang)}"`;
+        }
         codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
         return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
     });
@@ -30,17 +34,21 @@ function markdownToHtml(md) {
             return m;
         return `<code>${code}</code>`;
     });
+    // #8: 属性値エスケープヘルパー
+    const escAttr = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes = {};
     html = html.replace(/^\[\^(\w+)\]:\s*(.+)$/gm, (_m, id, text) => {
-        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        // #8: safeIdをさらに属性値エスケープ
+        const safeId = escAttr(id.replace(/[^a-zA-Z0-9_-]/g, ''));
         footnotes[safeId] = text;
         return '';
     });
     // Footnote references: [^id] → superscript link (unique IDs per occurrence)
     let fnRefCount = 0;
     html = html.replace(/\[\^(\w+)\]/g, (_m, id) => {
-        const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+        // #8: safeIdを属性値エスケープ
+        const safeId = escAttr(id.replace(/[^a-zA-Z0-9_-]/g, ''));
         fnRefCount++;
         return `<sup><a href="#fn-${safeId}" id="fnref-${safeId}-${fnRefCount}">${safeId}</a></sup>`;
     });
@@ -81,14 +89,16 @@ function markdownToHtml(md) {
         if (sepCols.length !== headerCells.length)
             return tableBlock;
         let tableHtml = '<table><thead><tr>';
-        headerCells.forEach(cell => { tableHtml += `<th>${cell}</th>`; });
+        // #10: Table内セル内容のHTMLエスケープ（二重エスケープ防止のため&amp;は除外）
+        const escCell = (s) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        headerCells.forEach(cell => { tableHtml += `<th>${escCell(cell)}</th>`; });
         tableHtml += '</tr></thead><tbody>';
         for (let i = 2; i < rows.length; i++) {
             if (rows[i].trim() === '')
                 continue;
             const cells = parseRow(rows[i]);
             tableHtml += '<tr>';
-            cells.forEach(cell => { tableHtml += `<td>${cell}</td>`; });
+            cells.forEach(cell => { tableHtml += `<td>${escCell(cell)}</td>`; });
             tableHtml += '</tr>';
         }
         tableHtml += '</tbody></table>';
@@ -124,7 +134,8 @@ function markdownToHtml(md) {
     if (fnIds.length > 0) {
         html += '\n<section class="footnotes"><hr><ol>';
         fnIds.forEach(id => {
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">↩</a></li>`;
+            // #8: footnote IDは既にescAttr済み、テキストもエスケープ
+            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-1">\u21A9</a></li>`;
         });
         html += '</ol></section>';
     }

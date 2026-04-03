@@ -102,17 +102,20 @@ function plainTextEdit(span: HTMLElement): void {
     textarea.setAttribute('title', titleAttr);
     textarea.value = content;
 
+    // #90: saved二重防止改善 — blurイベントのonce指定
     let saved = false;
     textarea.addEventListener('blur', () => {
         if (saved) return;
         saved = true;
+        // #90: textarea参照が無効でないか確認
+        if (!textarea.isConnected) { changing = false; return; }
         if (isMarkdown) {
             fieldSave(id, textarea.value);
         } else {
             // Settings fields (title, description, etc.)
             fieldSave(id, nl2br(textarea.value));
         }
-    });
+    }, { once: true });
 
     span.textContent = '';
     span.appendChild(textarea);
@@ -130,7 +133,13 @@ function richTextHook(span: HTMLElement): void {
 function renderMarkdownContent(): void {
     document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
         const b64 = el.dataset.rawB64;
-        const raw = b64 ? atob(b64) : (el.textContent || '');
+        // #89: b64デコードエラーハンドリング
+        let raw: string;
+        if (b64) {
+            try { raw = atob(b64); } catch { raw = el.textContent || ''; }
+        } else {
+            raw = el.textContent || '';
+        }
         if (typeof markdownToHtml === 'function') {
             el.innerHTML = sanitizeHtml(markdownToHtml(raw));
         }
@@ -309,7 +318,12 @@ function initBlockEditor(): void {
 
         sidebarEl.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
-            if (related && sidebarEl.contains(related)) return;
+            // #84: sidebar focusoutのrelatedTarget拡大（toolbox, inline-toolbar含む）
+            if (related && (
+                sidebarEl.contains(related) ||
+                (related as HTMLElement).closest?.('.ce-toolbox') ||
+                (related as HTMLElement).closest?.('.ce-inline-toolbar')
+            )) return;
             if (sidebarSaveTimer) clearTimeout(sidebarSaveTimer);
             sidebarSaveTimer = setTimeout(flushSidebarSave, 300);
         });
@@ -601,7 +615,11 @@ function initBulkActions(): void {
     if (statusBtn) {
         statusBtn.addEventListener('click', () => {
             const slugs = getSelectedSlugs();
-            if (slugs.length === 0) return;
+            // #92: slugs空チェック改善（ユーザー通知追加）
+            if (slugs.length === 0) {
+                alert(i18n.t('bulk_no_selection') || 'No pages selected.');
+                return;
+            }
             const statusSelect = document.querySelector<HTMLSelectElement>('#ce-bulk-status-select');
             const status = statusSelect?.value;
             if (!status) return;
@@ -615,7 +633,11 @@ function initBulkActions(): void {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
             const slugs = getSelectedSlugs();
-            if (slugs.length === 0) return;
+            // #92: slugs空チェック改善（ユーザー通知追加）
+            if (slugs.length === 0) {
+                alert(i18n.t('bulk_no_selection') || 'No pages selected.');
+                return;
+            }
             if (!confirm(i18n.t('confirm_bulk_delete', { count: String(slugs.length) }))) return;
             api.bulkDelete(slugs).then(() => { location.reload(); }).catch(() => {
                 alert(i18n.t('bulk_delete_error'));
@@ -627,6 +649,8 @@ function initBulkActions(): void {
 // --- Publish warnings (#B) ---
 
 function showWarnings(warnings: string[]): void {
+    // #93: container参照安全化 — 配列チェック追加
+    if (!Array.isArray(warnings) || warnings.length === 0) return;
     let container = document.querySelector<HTMLElement>('.ce-warnings');
     if (!container) {
         container = document.createElement('div');
@@ -639,13 +663,17 @@ function showWarnings(warnings: string[]): void {
         }
     }
     container.innerHTML = '';
+    // #93: container参照をローカル変数で保持
+    const containerRef = container;
     warnings.forEach(msg => {
         const item = document.createElement('div');
         item.className = 'ce-warnings__item';
         item.textContent = msg;
-        container!.appendChild(item);
+        containerRef.appendChild(item);
     });
-    setTimeout(() => { container!.innerHTML = ''; }, 8000);
+    setTimeout(() => {
+        if (containerRef.isConnected) { containerRef.innerHTML = ''; }
+    }, 8000);
 }
 
 // --- Revision diff (#C) ---
@@ -667,6 +695,8 @@ function initRevisionDiff(): void {
             const t2 = item.dataset.timestamp || '';
             const t1 = items[idx + 1]?.dataset.timestamp || '';
             if (!t1 || !t2) return;
+            // #99: timestampバリデーション（数字のみ許可）
+            if (!/^\d+$/.test(t1) || !/^\d+$/.test(t2)) return;
 
             api.getRevisionDiff(slug, t1, t2).then(diff => {
                 showRevisionDiffModal(diff);

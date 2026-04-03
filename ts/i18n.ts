@@ -33,7 +33,7 @@ const i18n = {
             })
             .then(data => {
                 if (data && typeof data === 'object') {
-                    this.translations = data;
+                    this.translations = data as Translations;
                 }
             })
             .catch(() => {
