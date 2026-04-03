@@ -6,7 +6,7 @@
  * Editor - Block-based content editor for Adlaire Static CMS.
  * Editor.js-like architecture implemented in pure TypeScript.
  *
- * Spec: RULEBOOK.md Section 6.3
+ * Spec: EDITOR_RULEBOOK.md §13 (Ver.2.5 エディタ高度化仕様)
  */
 // --- Helper: attach Backspace handler to any contentEditable block ---
 function attachBackspaceHandler(el) {
@@ -38,19 +38,46 @@ function attachListItemHandlers(li) {
         }
     });
 }
-// --- Sanitize: strip script tags from block content ---
+// --- Sanitize: strip dangerous tags from block content ---
 function sanitizeHtml(html) {
-    // Remove dangerous tags
     let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
     s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
     s = s.replace(/<embed\b[^>]*\/?>/gi, '');
     s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
-    // Remove event handler attributes (on*)
     s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-    // Remove javascript: URLs in href/src attributes
     s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
     return s;
+}
+// --- Undo Manager (#25) ---
+class UndoManager {
+    constructor() {
+        this.stack = [];
+        this.pointer = -1;
+        this.maxSize = 50;
+    }
+    push(state) {
+        const json = JSON.stringify(state);
+        if (this.pointer >= 0 && this.stack[this.pointer] === json)
+            return;
+        this.stack = this.stack.slice(0, this.pointer + 1);
+        this.stack.push(json);
+        if (this.stack.length > this.maxSize)
+            this.stack.shift();
+        this.pointer = this.stack.length - 1;
+    }
+    undo() {
+        if (this.pointer <= 0)
+            return null;
+        this.pointer--;
+        return JSON.parse(this.stack[this.pointer]);
+    }
+    redo() {
+        if (this.pointer >= this.stack.length - 1)
+            return null;
+        this.pointer++;
+        return JSON.parse(this.stack[this.pointer]);
+    }
 }
 // --- Built-in Block Tools ---
 const builtinTools = {
@@ -79,42 +106,96 @@ const builtinTools = {
             },
         };
     },
+    // #28: heading level click cycle (prompt → cycle button)
     heading(data) {
-        const rawLevel = data.level || 2;
-        const level = Math.max(1, Math.min(3, rawLevel));
+        let level = Math.max(1, Math.min(3, data.level || 2));
+        let headingEl;
         return {
             render() {
-                const el = document.createElement(`h${level}`);
-                el.contentEditable = 'true';
-                el.className = 'ce-heading';
-                el.innerHTML = sanitizeHtml(data.text || '');
-                attachBackspaceHandler(el);
-                return el;
+                const wrap = document.createElement('div');
+                wrap.className = 'ce-heading-wrap';
+                headingEl = document.createElement(`h${level}`);
+                headingEl.contentEditable = 'true';
+                headingEl.className = 'ce-heading';
+                headingEl.innerHTML = sanitizeHtml(data.text || '');
+                attachBackspaceHandler(headingEl);
+                const levelBtn = document.createElement('button');
+                levelBtn.className = 'ce-heading__level';
+                levelBtn.textContent = `H${level}`;
+                levelBtn.title = 'Change heading level';
+                levelBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const text = headingEl.innerHTML;
+                    level = level >= 3 ? 1 : level + 1;
+                    const newEl = document.createElement(`h${level}`);
+                    newEl.contentEditable = 'true';
+                    newEl.className = 'ce-heading';
+                    newEl.innerHTML = text;
+                    attachBackspaceHandler(newEl);
+                    headingEl.replaceWith(newEl);
+                    headingEl = newEl;
+                    levelBtn.textContent = `H${level}`;
+                    newEl.focus();
+                });
+                wrap.appendChild(levelBtn);
+                wrap.appendChild(headingEl);
+                return wrap;
             },
-            save(el) {
-                return { text: el.innerHTML, level };
+            save() {
+                return { text: headingEl.innerHTML, level };
             },
         };
     },
+    // #29: list ordered/unordered toggle (confirm → toggle button)
     list(data) {
-        const style = data.style || 'unordered';
+        let style = data.style || 'unordered';
         const items = data.items || [''];
+        let listEl;
         return {
             render() {
+                const wrap = document.createElement('div');
+                wrap.className = 'ce-list-wrap';
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'ce-list__toggle';
+                toggleBtn.textContent = style === 'ordered' ? 'OL' : 'UL';
+                toggleBtn.title = 'Toggle list type';
+                toggleBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const currentItems = [];
+                    listEl.querySelectorAll('li').forEach(li => currentItems.push(li.innerHTML));
+                    style = style === 'ordered' ? 'unordered' : 'ordered';
+                    const newTag = style === 'ordered' ? 'ol' : 'ul';
+                    const newEl = document.createElement(newTag);
+                    newEl.className = 'ce-list';
+                    currentItems.forEach(item => {
+                        const li = document.createElement('li');
+                        li.contentEditable = 'true';
+                        li.innerHTML = item;
+                        attachListItemHandlers(li);
+                        newEl.appendChild(li);
+                    });
+                    listEl.replaceWith(newEl);
+                    listEl = newEl;
+                    toggleBtn.textContent = style === 'ordered' ? 'OL' : 'UL';
+                });
                 const tag = style === 'ordered' ? 'ol' : 'ul';
-                const el = document.createElement(tag);
-                el.className = 'ce-list';
+                listEl = document.createElement(tag);
+                listEl.className = 'ce-list';
                 items.forEach(item => {
                     const li = document.createElement('li');
                     li.contentEditable = 'true';
                     li.innerHTML = sanitizeHtml(item);
                     attachListItemHandlers(li);
-                    el.appendChild(li);
+                    listEl.appendChild(li);
                 });
-                return el;
+                wrap.appendChild(toggleBtn);
+                wrap.appendChild(listEl);
+                return wrap;
             },
-            save(el) {
-                const lis = el.querySelectorAll('li');
+            save() {
+                const lis = listEl.querySelectorAll('li');
                 const savedItems = [];
                 lis.forEach(li => savedItems.push(li.innerHTML));
                 return { style, items: savedItems };
@@ -177,7 +258,6 @@ const builtinTools = {
                 const initialUrl = data.url || '';
                 img.src = /^\s*javascript\s*:/i.test(initialUrl) ? '' : initialUrl;
                 img.alt = '';
-                // URL input for editing
                 const urlInput = document.createElement('input');
                 urlInput.type = 'text';
                 urlInput.className = 'ce-image__url';
@@ -207,29 +287,32 @@ const builtinTools = {
         };
     },
 };
-// --- Inline Toolbar ---
+// --- Inline Toolbar (#46: Selection API replaces document.execCommand) ---
 class InlineToolbar {
     constructor() {
         this.el = document.createElement('div');
         this.el.className = 'ce-inline-toolbar';
         this.el.innerHTML = `
-            <button data-cmd="bold" title="Bold"><b>B</b></button>
-            <button data-cmd="italic" title="Italic"><i>I</i></button>
-            <button data-cmd="createLink" title="Link">🔗</button>
+            <button data-action="bold" title="Bold"><b>B</b></button>
+            <button data-action="italic" title="Italic"><i>I</i></button>
+            <button data-action="link" title="Link">\uD83D\uDD17</button>
         `;
         this.el.style.display = 'none';
         document.body.appendChild(this.el);
         this.el.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                const cmd = btn.dataset.cmd;
-                if (cmd === 'createLink') {
+                const action = btn.dataset.action;
+                if (action === 'bold') {
+                    this.toggleInlineTag('strong');
+                }
+                else if (action === 'italic') {
+                    this.toggleInlineTag('em');
+                }
+                else if (action === 'link') {
                     const url = prompt('URL:');
                     if (url)
-                        document.execCommand(cmd, false, url);
-                }
-                else {
-                    document.execCommand(cmd);
+                        this.wrapWithLink(url);
                 }
             });
         });
@@ -239,6 +322,50 @@ class InlineToolbar {
     destroy() {
         document.removeEventListener('selectionchange', this.selectionHandler);
         this.el.remove();
+    }
+    toggleInlineTag(tagName) {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount)
+            return;
+        const range = sel.getRangeAt(0);
+        let node = range.commonAncestorContainer;
+        if (node.nodeType === Node.TEXT_NODE)
+            node = node.parentNode;
+        const existing = node.closest?.(tagName);
+        if (existing && existing.closest('.ce-editor')) {
+            const parent = existing.parentNode;
+            while (existing.firstChild) {
+                parent.insertBefore(existing.firstChild, existing);
+            }
+            parent.removeChild(existing);
+        }
+        else {
+            const wrapper = document.createElement(tagName);
+            try {
+                range.surroundContents(wrapper);
+            }
+            catch {
+                const contents = range.extractContents();
+                wrapper.appendChild(contents);
+                range.insertNode(wrapper);
+            }
+        }
+    }
+    wrapWithLink(url) {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount)
+            return;
+        const range = sel.getRangeAt(0);
+        const a = document.createElement('a');
+        a.href = /^\s*javascript\s*:/i.test(url) ? '' : url;
+        try {
+            range.surroundContents(a);
+        }
+        catch {
+            const contents = range.extractContents();
+            a.appendChild(contents);
+            range.insertNode(a);
+        }
     }
     update() {
         const sel = window.getSelection();
@@ -264,6 +391,13 @@ class Editor {
         this.blockElements = [];
         this.blockTools = [];
         this.blockTypes = [];
+        // #25: Undo/Redo
+        this.undoManager = new UndoManager();
+        this.isUndoRedoing = false;
+        // #26: Drag & Drop
+        this.dragSourceIndex = -1;
+        // #27: Block clipboard
+        this.clipboardBlock = null;
         this.container = container;
         this.tools = { ...builtinTools, ...tools };
         this.container.classList.add('ce-editor');
@@ -271,6 +405,31 @@ class Editor {
         if (!Editor.inlineToolbar) {
             Editor.inlineToolbar = new InlineToolbar();
         }
+        // #25: Keyboard shortcuts for Undo/Redo + #27: Copy/Paste
+        this.container.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.undo();
+                }
+                else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+                    e.preventDefault();
+                    this.redo();
+                }
+                else if (e.key === 'c' && !e.shiftKey) {
+                    this.copyFocusedBlock(e);
+                }
+                else if (e.key === 'v' && !e.shiftKey) {
+                    this.pasteCopiedBlock(e);
+                }
+            }
+        });
+        // #25: Save state on content changes (focusout)
+        this.container.addEventListener('focusout', () => {
+            if (!this.isUndoRedoing) {
+                this.saveUndoState();
+            }
+        });
     }
     static create(el, config) {
         const editor = new Editor(el, config?.tools);
@@ -280,6 +439,7 @@ class Editor {
         else {
             editor.insertBlock('paragraph', {}, 0);
         }
+        editor.saveUndoState();
         return editor;
     }
     render(data) {
@@ -329,10 +489,11 @@ class Editor {
             this.blockTools.splice(index, 0, tool);
             this.blockTypes.splice(index, 0, type);
         }
-        // Focus new block
         const editable = blockEl.querySelector('[contenteditable]');
         if (editable)
             editable.focus();
+        if (!this.isUndoRedoing)
+            this.saveUndoState();
     }
     removeBlock(index) {
         if (index < 0 || index >= this.blockElements.length)
@@ -344,6 +505,8 @@ class Editor {
         if (this.blockElements.length === 0) {
             this.insertBlock('paragraph', {}, 0);
         }
+        if (!this.isUndoRedoing)
+            this.saveUndoState();
     }
     moveBlock(from, to) {
         if (from < 0 || from >= this.blockElements.length)
@@ -361,7 +524,6 @@ class Editor {
         this.blockElements.splice(to, 0, el);
         this.blockTools.splice(to, 0, tool);
         this.blockTypes.splice(to, 0, type);
-        // Re-render DOM order
         if (to >= this.blockElements.length - 1) {
             this.container.appendChild(el);
         }
@@ -369,6 +531,8 @@ class Editor {
             const ref = this.blockElements[to + 1];
             this.container.insertBefore(el, ref);
         }
+        if (!this.isUndoRedoing)
+            this.saveUndoState();
     }
     focusBlock(index) {
         if (index < 0 || index >= this.blockElements.length)
@@ -380,6 +544,70 @@ class Editor {
     getBlockIndex(blockEl) {
         return this.blockElements.indexOf(blockEl);
     }
+    // --- #25: Undo/Redo ---
+    saveUndoState() {
+        this.undoManager.push(this.save());
+    }
+    undo() {
+        const state = this.undoManager.undo();
+        if (!state)
+            return;
+        this.isUndoRedoing = true;
+        this.render(state);
+        this.isUndoRedoing = false;
+    }
+    redo() {
+        const state = this.undoManager.redo();
+        if (!state)
+            return;
+        this.isUndoRedoing = true;
+        this.render(state);
+        this.isUndoRedoing = false;
+    }
+    // --- #27: Block Copy & Paste ---
+    copyFocusedBlock(e) {
+        const focused = this.container.querySelector('[contenteditable]:focus');
+        if (!focused)
+            return;
+        const blockEl = focused.closest('.ce-block');
+        if (!blockEl)
+            return;
+        const idx = this.getBlockIndex(blockEl);
+        if (idx < 0)
+            return;
+        // Only intercept if no text is selected (block-level copy)
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed)
+            return;
+        e.preventDefault();
+        const contentEl = blockEl.querySelector('.ce-block__content')?.firstElementChild;
+        if (contentEl && this.blockTools[idx]) {
+            this.clipboardBlock = {
+                type: this.blockTypes[idx],
+                data: this.blockTools[idx].save(contentEl),
+            };
+        }
+    }
+    pasteCopiedBlock(e) {
+        if (!this.clipboardBlock)
+            return;
+        // Only intercept if no text is selected (block-level paste)
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed)
+            return;
+        const focused = this.container.querySelector('[contenteditable]:focus');
+        if (!focused)
+            return;
+        const blockEl = focused.closest('.ce-block');
+        if (!blockEl)
+            return;
+        const idx = this.getBlockIndex(blockEl);
+        if (idx < 0)
+            return;
+        e.preventDefault();
+        this.insertBlock(this.clipboardBlock.type, { ...this.clipboardBlock.data }, idx + 1);
+    }
+    // --- Block wrapper creation ---
     createBlockWrapper(type, tool) {
         const wrapper = document.createElement('div');
         wrapper.className = 'ce-block';
@@ -387,6 +615,22 @@ class Editor {
         // Block toolbar
         const toolbar = document.createElement('div');
         toolbar.className = 'ce-block__toolbar';
+        // #26: Drag handle
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'ce-btn ce-btn--drag';
+        dragHandle.textContent = '\u2630';
+        dragHandle.title = 'Drag to reorder';
+        dragHandle.draggable = true;
+        dragHandle.addEventListener('dragstart', (e) => {
+            this.dragSourceIndex = this.getBlockIndex(wrapper);
+            wrapper.classList.add('ce-block--dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        dragHandle.addEventListener('dragend', () => {
+            wrapper.classList.remove('ce-block--dragging');
+            this.container.querySelectorAll('.ce-block--dragover').forEach(el => el.classList.remove('ce-block--dragover'));
+            this.dragSourceIndex = -1;
+        });
         const addBtn = document.createElement('button');
         addBtn.className = 'ce-btn ce-btn--add';
         addBtn.textContent = '+';
@@ -397,7 +641,7 @@ class Editor {
         });
         const moveUpBtn = document.createElement('button');
         moveUpBtn.className = 'ce-btn ce-btn--up';
-        moveUpBtn.textContent = '▲';
+        moveUpBtn.textContent = '\u25B2';
         moveUpBtn.title = 'Move up';
         moveUpBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
@@ -405,7 +649,7 @@ class Editor {
         });
         const moveDownBtn = document.createElement('button');
         moveDownBtn.className = 'ce-btn ce-btn--down';
-        moveDownBtn.textContent = '▼';
+        moveDownBtn.textContent = '\u25BC';
         moveDownBtn.title = 'Move down';
         moveDownBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
@@ -413,16 +657,34 @@ class Editor {
         });
         const delBtn = document.createElement('button');
         delBtn.className = 'ce-btn ce-btn--del';
-        delBtn.textContent = '×';
+        delBtn.textContent = '\u00D7';
         delBtn.title = 'Delete block';
         delBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.removeBlock(idx);
         });
+        toolbar.appendChild(dragHandle);
         toolbar.appendChild(addBtn);
         toolbar.appendChild(moveUpBtn);
         toolbar.appendChild(moveDownBtn);
         toolbar.appendChild(delBtn);
+        // #26: Drop zone
+        wrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            wrapper.classList.add('ce-block--dragover');
+        });
+        wrapper.addEventListener('dragleave', () => {
+            wrapper.classList.remove('ce-block--dragover');
+        });
+        wrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            wrapper.classList.remove('ce-block--dragover');
+            const toIndex = this.getBlockIndex(wrapper);
+            if (this.dragSourceIndex >= 0 && this.dragSourceIndex !== toIndex) {
+                this.moveBlock(this.dragSourceIndex, toIndex);
+            }
+        });
         // Content
         const content = document.createElement('div');
         content.className = 'ce-block__content';
@@ -431,6 +693,7 @@ class Editor {
         wrapper.appendChild(content);
         return wrapper;
     }
+    // #28/#29: Toolbox without prompt/confirm
     showToolbox(refBlock) {
         this.container.querySelector('.ce-toolbox')?.remove();
         const toolbox = document.createElement('div');
@@ -452,13 +715,10 @@ class Editor {
                 const idx = this.getBlockIndex(refBlock);
                 let defaultData = {};
                 if (type === 'heading') {
-                    const level = prompt('Heading level (1-3):', '2');
-                    const parsed = parseInt(level || '2', 10);
-                    defaultData = { level: Math.max(1, Math.min(3, isNaN(parsed) ? 2 : parsed)) };
+                    defaultData = { level: 2 };
                 }
                 else if (type === 'list') {
-                    const style = confirm('Ordered list? (OK=ordered, Cancel=unordered)') ? 'ordered' : 'unordered';
-                    defaultData = { style, items: [''] };
+                    defaultData = { style: 'unordered', items: [''] };
                 }
                 this.insertBlock(type, defaultData, idx + 1);
                 toolbox.remove();

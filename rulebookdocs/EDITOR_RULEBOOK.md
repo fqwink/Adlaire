@@ -1,7 +1,7 @@
 # Adlaire Editor RULEBOOK
 
 - 文書名: Adlaire Editor RULEBOOK
-- 文書バージョン: Ver.1.3
+- 文書バージョン: Ver.1.4
 - 作成日: 2026-04-01
 - 対象製品: Adlaire Static CMS
 - 対象領域: Editor / Block Editor / Markdown 連携 / Revision / Draft-Publish / Publish Quality Check / Editor UI
@@ -261,7 +261,58 @@ UI 改良の優先順位は、次の順とする。
 
 ---
 
-# 13. 最終規則
+# 13. Ver.2.5 エディタ高度化仕様
+
+> 本セクションは `RELEASE_PLAN_RULEBOOK.md` §4.5 の実装仕様を定義する。
+
+## 13.1 Undo/Redo (#25)
+
+- Editor クラスにスナップショット方式の履歴スタックを追加する。
+- Ctrl+Z で Undo、Ctrl+Y で Redo を実行する。
+- 最大履歴数は 50 とする。
+- ブロック挿入・削除・移動時、及びコンテンツ編集後（focusout 時）にスナップショットを記録する。
+- Undo/Redo 実行時はエディタ全体を履歴状態で再描画する。
+
+## 13.2 ブロック ドラッグ&ドロップ並び替え (#26)
+
+- HTML5 Drag and Drop API を使用する。
+- ブロックツールバーにドラッグハンドル（☰）を追加する。
+- ドラッグ中はドロップ位置のインジケーターを表示する。
+- 既存の `moveBlock()` メソッドを内部利用する。
+
+## 13.3 ブロック コピー&ペースト (#27)
+
+- Ctrl+C: フォーカス中のブロックデータをエディタ内部クリップボードにコピーする。
+- Ctrl+V: 内部クリップボードからブロックデータを現在位置の次に挿入する。
+- エディタインスタンス間の共有は行わない（インスタンス内完結）。
+
+## 13.4 Heading レベルクリック切替 (#28)
+
+- ツールボックスの `prompt()` によるレベル指定を廃止する。
+- デフォルト level 2 で挿入する。
+- heading ブロックにレベル切替ボタン（H1/H2/H3 表示）を追加する。
+- クリックで h2 → h3 → h1 → h2 の順にサイクルする。
+- レベル変更時は DOM 要素を置換し、テキスト内容を保持する。
+
+## 13.5 List 順序/非順序トグル (#29)
+
+- ツールボックスの `confirm()` による種別指定を廃止する。
+- デフォルト unordered で挿入する。
+- list ブロックにトグルボタン（UL/OL 表示）を追加する。
+- クリックで ordered ⇔ unordered を即時切替する。
+- 切替時はリスト要素を置換し、リストアイテムの内容を保持する。
+
+## 13.6 document.execCommand 置換 (#46)
+
+- InlineToolbar の bold/italic/link を Selection API + Range API で再実装する。
+- `document.execCommand()` の全呼び出しを除去する。
+- bold は `<strong>` 要素でラップ/アンラップする。
+- italic は `<em>` 要素でラップ/アンラップする。
+- link は `<a>` 要素でラップする（javascript: スキームはフィルタする）。
+
+---
+
+# 14. 最終規則
 
 ## 13.1 上位規範性
 本 RULEBOOK は、Adlaire のエディタに関する上位規範文書である。
@@ -281,5 +332,5 @@ Adlaire のエディタは、大規模分離を行わず、最小限の基盤改
 | `API_RULEBOOK.md` §5.3 | エディタ TypeScript モジュール仕様（ブロック型・API・UI） |
 | `API_RULEBOOK.md` §6.3 | 管理 UI ページ編集画面仕様 |
 | `ARCHITECTURE_RULEBOOK.md` | Core ファイル構成（editor.ts / editInplace.ts 配置） |
-| `RELEASE_PLAN_RULEBOOK.md` §4.2 | Ver.2.8 エディタ高度化計画 |
+| `RELEASE_PLAN_RULEBOOK.md` §4.5 | Ver.2.5 エディタ高度化計画 |
 | `REVISION_HISTORY.md` | 全ルールブック改訂履歴 |
