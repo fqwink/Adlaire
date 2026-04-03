@@ -32,12 +32,14 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 // --- Detect functions ---
 
+/** @return array{ok: bool, version: string, message: string} */
 function detect_php_version(): array
 {
     $ok = version_compare(PHP_VERSION, '8.3.0', '>=');
     return ['ok' => $ok, 'version' => PHP_VERSION, 'message' => $ok ? 'PHP ' . PHP_VERSION : 'PHP 8.3+ required (current: ' . PHP_VERSION . ')'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_files_writable(): array
 {
     $dir = __DIR__ . '/data';
@@ -51,18 +53,21 @@ function detect_files_writable(): array
     return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_session(): array
 {
     $ok = session_status() === PHP_SESSION_ACTIVE;
     return ['ok' => $ok, 'message' => $ok ? 'Sessions available' : 'Sessions not available'];
 }
 
+/** @return array{ok: bool, message: string} */
 function detect_password_hash(): array
 {
     $ok = function_exists('password_hash');
     return ['ok' => $ok, 'message' => $ok ? 'password_hash() available' : 'password_hash() not available'];
 }
 
+/** @return array{ok: bool, message: string, warning?: bool} */
 function detect_https(): array
 {
     $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
@@ -71,6 +76,7 @@ function detect_https(): array
 
 // --- Load functions ---
 
+/** @return array<string, mixed>|false */
 function load_manifest(): array|false
 {
     $path = __DIR__ . '/release-manifest.json';
@@ -105,6 +111,7 @@ define('INSTALLER_WEAK_PASSWORDS', ['admin', 'password', '12345678', 'adlaire'])
 /** Supported locales */
 define('INSTALLER_SUPPORTED_LOCALES', ['ja', 'en']);
 
+/** @return list<string> */
 function validate_input(array $post): array
 {
     $errors = [];
@@ -134,6 +141,7 @@ function validate_input(array $post): array
 
 // --- Install functions ---
 
+/** @return array{ok: bool, message: string} */
 function install_execute(string $siteName, string $locale, string $password): array
 {
     $storage = new FileStorage('data');

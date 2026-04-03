@@ -66,6 +66,10 @@
     .ce-inline-toolbar{background:#2a2a3e;}
     .ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
     .ce-quote{border-left-color:#1ab;color:#aaa;}
+    .admin-table .status-draft{color:#ffb347;}
+    .admin-table .status-published{color:#6fdc6f;}
+    .admin-header{border-bottom-color:var(--dm-border);}
+    .admin-meta select,.admin-meta button{background:var(--dm-bg-alt);border-color:var(--dm-border);color:var(--dm-text);}
 }
 
 /* Responsive */

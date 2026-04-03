@@ -25,6 +25,7 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
     <title><?= esc($c['title']) ?> - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <link rel="stylesheet" href="themes/<?= esc($c['themeSelect']) ?>/style.css">
     <link rel="stylesheet" href="themes/admin.css">
 <?php $app->scriptTags(true); ?>
@@ -100,7 +101,8 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
     echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
     echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
-    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_reorder')) . '</button>';
+    $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE);
+    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
     echo '<thead><tr><th style="width:30px;"><input type="checkbox" id="select-all"></th><th>' . esc($app->t('admin_slug')) . '</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
@@ -314,7 +316,7 @@ function renderAdminDashboard(App $app, string $n): void
 
 function renderAdminEditor(App $app, string $n): void
 {
-    $slug = $_REQUEST['page'] ?? '';
+    $slug = is_string($_REQUEST['page'] ?? '') ? ($_REQUEST['page'] ?? '') : '';
     if ($slug === '' || !FileStorage::validateSlug($slug)) {
         echo '<p>Invalid page slug.</p>';
         return;

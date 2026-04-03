@@ -19,7 +19,7 @@ function handleEdit(): void
     $fieldname = $_POST['fieldname'] ?? null;
     $content = $_POST['content'] ?? null;
 
-    if ($fieldname === null || $content === null) {
+    if (!is_string($fieldname) || !is_string($content)) {
         return;
     }
 
@@ -86,7 +86,7 @@ function handleEdit(): void
 function handleApi(): void
 {
     $endpoint = $_REQUEST['api'] ?? null;
-    if ($endpoint === null) {
+    if ($endpoint === null || !is_string($endpoint)) {
         return;
     }
 
@@ -154,7 +154,7 @@ function handleApiPages(FileStorage $storage, string $method): void
         $slug = trim($slug);
     }
 
-    $action = $_REQUEST['action'] ?? '';
+    $action = is_string($_REQUEST['action'] ?? '') ? ($_REQUEST['action'] ?? '') : '';
 
     if ($method === 'POST' && $action === 'reorder') {
         apiPageReorder($storage);
@@ -203,6 +203,10 @@ function apiPageList(FileStorage $storage): void
 
 function apiPageGet(FileStorage $storage, string $slug): void
 {
+    if (!FileStorage::validateSlug($slug)) {
+        apiError(400, 'Invalid slug');
+        return;
+    }
     $data = $storage->readPageData($slug);
     if ($data === false) {
         apiError(404, 'Page not found');
@@ -222,7 +226,7 @@ function apiPageSave(FileStorage $storage): void
     $content = $_POST['content'] ?? null;
     $format = $_POST['format'] ?? 'blocks';
 
-    if ($slug === null || $content === null) {
+    if (!is_string($slug) || !is_string($content)) {
         apiError(400, 'Missing slug or content');
         return;
     }
@@ -300,11 +304,11 @@ function apiPageStatusUpdate(FileStorage $storage): void
     $slug = $_POST['slug'] ?? null;
     $status = $_POST['status'] ?? null;
 
-    if ($slug === null || !FileStorage::validateSlug($slug)) {
+    if (!is_string($slug) || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
-    if ($status === null || !in_array($status, ['draft', 'published'], true)) {
+    if (!is_string($status) || !in_array($status, ['draft', 'published'], true)) {
         apiError(400, 'Invalid status');
         return;
     }
@@ -318,9 +322,9 @@ function apiPageStatusUpdate(FileStorage $storage): void
     apiResponse(['status' => 'ok', 'slug' => $slug, 'page_status' => $status]);
 }
 
-function apiPageDelete(FileStorage $storage, ?string $slug): void
+function apiPageDelete(FileStorage $storage, mixed $slug): void
 {
-    if ($slug === null || !FileStorage::validateSlug($slug)) {
+    if (!is_string($slug) || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
@@ -342,12 +346,12 @@ function apiPageDelete(FileStorage $storage, ?string $slug): void
 function handleApiRevisions(FileStorage $storage, string $method): void
 {
     $slug = $_REQUEST['slug'] ?? null;
-    if ($slug === null || !FileStorage::validateSlug($slug)) {
+    if (!is_string($slug) || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
 
-    $action = $_REQUEST['action'] ?? '';
+    $action = is_string($_REQUEST['action'] ?? '') ? ($_REQUEST['action'] ?? '') : '';
     if ($method === 'GET' && $action === 'diff') {
         apiRevisionDiff($storage, $slug);
         return;
@@ -374,7 +378,7 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
     }
 
     $timestamp = $_POST['timestamp'] ?? null;
-    if ($timestamp === null) {
+    if (!is_string($timestamp) || $timestamp === '') {
         apiError(400, 'Missing timestamp');
         return;
     }
@@ -392,7 +396,7 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 function handleApiSearch(FileStorage $storage): void
 {
-    $rawQuery = $_REQUEST['q'] ?? '';
+    $rawQuery = is_string($_REQUEST['q'] ?? '') ? ($_REQUEST['q'] ?? '') : '';
     if ($rawQuery === '') {
         echo json_encode(['results' => []]);
         return;
@@ -603,8 +607,14 @@ function handleApiImport(FileStorage $storage): void
                 continue;
             }
             $revDir = 'data/revisions/' . $slug;
+            if (is_link($revDir)) {
+                continue;
+            }
             if (!is_dir($revDir)) {
-                mkdir($revDir, 0755, true);
+                if (!@mkdir($revDir, 0755, true) && !is_dir($revDir)) {
+                    error_log('Adlaire: Failed to create revision directory for import: ' . $slug);
+                    continue;
+                }
             }
             foreach ($revisions as $ts => $revData) {
                 if (!is_string($ts) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $ts)) {
@@ -731,7 +741,7 @@ function apiBulkStatus(FileStorage $storage): void
     }
 
     $slugs = $_POST['slugs'] ?? [];
-    $status = $_POST['status'] ?? '';
+    $status = is_string($_POST['status'] ?? '') ? ($_POST['status'] ?? '') : '';
     if (!is_array($slugs) || !in_array($status, ['draft', 'published'], true)) {
         apiError(400, 'Invalid parameters');
         return;
@@ -776,8 +786,8 @@ function apiBulkDelete(FileStorage $storage): void
 
 function apiRevisionDiff(FileStorage $storage, string $slug): void
 {
-    $t1 = $_GET['t1'] ?? '';
-    $t2 = $_GET['t2'] ?? '';
+    $t1 = is_string($_GET['t1'] ?? '') ? ($_GET['t1'] ?? '') : '';
+    $t2 = is_string($_GET['t2'] ?? '') ? ($_GET['t2'] ?? '') : '';
     if ($t1 === '' || $t2 === '') {
         apiError(400, 'Missing t1 or t2');
         return;

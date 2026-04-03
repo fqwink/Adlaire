@@ -368,7 +368,8 @@ final class App
 
     public static function getSlug(string $page): string
     {
-        return mb_convert_case(str_replace(' ', '-', $page), MB_CASE_LOWER, 'UTF-8');
+        $slug = str_replace(' ', '-', $page);
+        return mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
     }
 
     public function login(): string

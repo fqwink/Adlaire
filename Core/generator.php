@@ -150,14 +150,18 @@ function handleApiGenerate(FileStorage $storage): void
             }
         }
         $pageDir = $distDir . '/' . $slug;
-        if (!is_dir($pageDir)) {
-            mkdir($pageDir, 0755, true);
+        if (!is_dir($pageDir) && !mkdir($pageDir, 0755, true) && !is_dir($pageDir)) {
+            error_log('Adlaire: Failed to create page directory: ' . $pageDir);
+            $failed++;
+            $details[] = ['slug' => $slug, 'result' => 'failed'];
+            continue;
         }
         if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
             $writeFailed = true;
         }
 
         if ($writeFailed) {
+            error_log('Adlaire: Failed to write page HTML: ' . $slug);
             $failed++;
             $details[] = ['slug' => $slug, 'result' => 'failed'];
         } else {
@@ -250,6 +254,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
+        <meta name="generator" content="Adlaire Static CMS">
     </head>
     <body>
         <nav id="nav">

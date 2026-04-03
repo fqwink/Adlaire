@@ -15,12 +15,21 @@ function updateCsrfFromResponse(res) {
         csrfToken = newToken;
     }
 }
+// #96: URL構築のbuilder helper — URLSearchParams統一
+function buildApiUrl(endpoint, params) {
+    let url = `index.php?api=${endpoint}`;
+    if (params) {
+        const search = new URLSearchParams(params);
+        url += `&${search.toString()}`;
+    }
+    return url;
+}
 const api = {
     /**
      * List all pages (metadata only, no content).
      */
     async listPages() {
-        const res = await fetch('index.php?api=pages');
+        const res = await fetch(buildApiUrl('pages'));
         if (!res.ok) {
             throw new Error(`API error: ${res.status}`);
         }
@@ -31,7 +40,7 @@ const api = {
      * Get a single page with full content and metadata.
      */
     async getPage(slug) {
-        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`);
+        const res = await fetch(buildApiUrl('pages', { slug }));
         if (!res.ok) {
             throw new Error(`API error: ${res.status}`);
         }
@@ -53,7 +62,7 @@ const api = {
         else {
             body.append('content', content);
         }
-        const res = await fetch('index.php?api=pages', {
+        const res = await fetch(buildApiUrl('pages'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
@@ -79,7 +88,7 @@ const api = {
      * Delete a page.
      */
     async deletePage(slug) {
-        const res = await fetch(`index.php?api=pages&slug=${encodeURIComponent(slug)}`, {
+        const res = await fetch(buildApiUrl('pages', { slug }), {
             method: 'DELETE',
             headers: { 'X-CSRF-Token': csrfToken },
         });
@@ -97,13 +106,15 @@ const api = {
     /**
      * List revisions for a page.
      */
+    // #44: listRevisions エラーログ追加
     async listRevisions(slug) {
-        const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`);
+        const res = await fetch(buildApiUrl('revisions', { slug }));
         if (!res.ok) {
+            console.warn('listRevisions failed:', res.status, slug);
             return [];
         }
         const json = await res.json();
-        return json.revisions;
+        return json.revisions ?? [];
     },
     /**
      * Restore a page from a specific revision.
@@ -112,7 +123,7 @@ const api = {
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
         body.append('csrf', csrfToken);
-        const res = await fetch(`index.php?api=revisions&slug=${encodeURIComponent(slug)}`, {
+        const res = await fetch(buildApiUrl('revisions', { slug }), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
@@ -126,19 +137,21 @@ const api = {
     /**
      * Search pages by query string.
      */
+    // #44: search エラーログ追加
     async search(query) {
-        const res = await fetch(`index.php?api=search&q=${encodeURIComponent(query)}`);
+        const res = await fetch(buildApiUrl('search', { q: query }));
         if (!res.ok) {
+            console.warn('search failed:', res.status, query);
             return [];
         }
         const json = await res.json();
-        return json.results;
+        return json.results ?? [];
     },
     /**
      * Export all site data as JSON.
      */
     async exportSite() {
-        const res = await fetch('index.php?api=export');
+        const res = await fetch(buildApiUrl('export'));
         if (!res.ok) {
             throw new Error('Export failed');
         }
@@ -148,7 +161,7 @@ const api = {
      * Import site data from JSON.
      */
     async importSite(data) {
-        const res = await fetch('index.php?api=import', {
+        const res = await fetch(buildApiUrl('import'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: data,
@@ -161,7 +174,7 @@ const api = {
         return json.imported;
     },
     async reorderPages(slugs) {
-        const res = await fetch('index.php?api=reorder', {
+        const res = await fetch(buildApiUrl('reorder'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ slugs }),
@@ -178,7 +191,7 @@ const api = {
         }
     },
     async bulkStatus(slugs, status) {
-        const res = await fetch('index.php?api=bulk', {
+        const res = await fetch(buildApiUrl('bulk'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ action: 'status', slugs, status }),
@@ -195,7 +208,7 @@ const api = {
         }
     },
     async bulkDelete(slugs) {
-        const res = await fetch('index.php?api=bulk', {
+        const res = await fetch(buildApiUrl('bulk'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ action: 'delete', slugs }),
@@ -212,8 +225,7 @@ const api = {
         }
     },
     async getRevisionDiff(slug, t1, t2) {
-        const params = new URLSearchParams({ slug, t1, t2 });
-        const res = await fetch(`index.php?api=revisiondiff&${params.toString()}`);
+        const res = await fetch(buildApiUrl('revisiondiff', { slug, t1, t2 }));
         if (!res.ok) {
             let msg = `API error: ${res.status}`;
             try {
@@ -229,7 +241,7 @@ const api = {
         const body = new URLSearchParams();
         body.append('blocks', blocks);
         body.append('csrf', csrfToken);
-        const res = await fetch('index.php?api=sidebar', {
+        const res = await fetch(buildApiUrl('sidebar'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
