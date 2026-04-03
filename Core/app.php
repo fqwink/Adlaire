@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 2;
-    public const VERSION_MINOR = 8;
-    public const VERSION_BUILD = 41;
-    public const VERSION = 'Ver.2.8-41';
+    public const VERSION_MINOR = 9;
+    public const VERSION_BUILD = 42;
+    public const VERSION = 'Ver.2.9-42';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -69,6 +69,7 @@ final class App
         $this->initDefaults();
         $this->storage->ensureDirectories();
         $this->storage->migrate();
+        $this->migrateUsersFromConfig();
         $this->loadConfig();
         $this->loadLanguage();
         $this->initTranslatableDefaults();
@@ -111,7 +112,6 @@ final class App
     private function initDefaults(): void
     {
         $this->config = [
-            'password'    => 'admin',
             'loggedin'    => false,
             'page'        => 'home',
             'themeSelect' => 'AP-Default',
@@ -175,17 +175,7 @@ final class App
                 $this->config[$key] = $this->defaults[$key] ?? $val;
             }
 
-            match ($key) {
-                'password' => $this->handlePassword($stored[$key] ?? false, $val),
-                default    => null,
-            };
-        }
-    }
 
-    private function handlePassword(mixed $fval, string $val): void
-    {
-        if (!is_string($fval) || $fval === '') {
-            $this->config['password'] = $this->savePassword($val);
         }
     }
 
@@ -201,8 +191,15 @@ final class App
             $_SESSION['last_activity'] = time();
         }
 
-        if (isset($_SESSION['l']) && hash_equals($this->config['password'], $_SESSION['l'])) {
-            $this->config['loggedin'] = true;
+        $sessionUser = $_SESSION['user'] ?? '';
+        $sessionHash = $_SESSION['l'] ?? '';
+        if ($sessionUser !== '' && $sessionHash !== '') {
+            $userData = $this->storage->getUser($sessionUser);
+            if ($userData !== false && isset($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
+                $this->config['loggedin'] = true;
+                $this->config['current_user'] = $sessionUser;
+                $this->config['current_role'] = $_SESSION['role'] ?? 'master';
+            }
         }
 
         if (isset($_GET['logout'])) {
@@ -224,6 +221,7 @@ final class App
 
             $csrf = csrf_token();
             $loginLabel = esc($this->t('login_submit'));
+            $usernameLabel = esc($this->t('admin_username'));
             $changePwLabel = esc($this->t('change_password_label'));
             $changePwHint = esc($this->t('change_password_hint'));
             $changePwSubmit = esc($this->t('change_password_submit'));
@@ -231,7 +229,9 @@ final class App
             $this->config['content'] = <<<HTML
                 <form action='' method='POST'{$nonceAttr}>
                 <input type='hidden' name='csrf' value='{$csrf}'>
-                <input type='password' name='password'>
+                <label>{$usernameLabel}</label>
+                <input type='text' name='username' autocomplete='username'>
+                <input type='password' name='password' autocomplete='current-password'>
                 <input type='submit' name='login' value='{$loginLabel}'> {$msg}
                 <p class='toggle'>{$changePwLabel}</p>
                 <div class='hide'>{$changePwHint}<br />
@@ -285,6 +285,29 @@ final class App
             ? $this->defaults['new_page']['admin']
             : $this->defaults['new_page']['visitor'];
         return;
+    }
+
+    private function migrateUsersFromConfig(): void
+    {
+        if ($this->storage->usersFileExists()) {
+            return;
+        }
+        $config = $this->storage->readConfig();
+        $passwordHash = $config['password'] ?? '';
+        if ($passwordHash === '') {
+            return;
+        }
+        $userData = [
+            'password' => $passwordHash,
+            'role' => 'master',
+            'created_at' => date('c'),
+            'last_login' => '',
+        ];
+        if (!$this->storage->writeUser('admin', $userData)) {
+            error_log('Adlaire: Failed to migrate user from config.json to users.json');
+            return;
+        }
+        $this->storage->removeConfigKey('password');
     }
 
     private function loadPlugins(): void
@@ -357,11 +380,17 @@ final class App
         return $this->config['loggedin'] === true;
     }
 
+    public function getCurrentUser(): string
+    {
+        return (string) ($this->config['current_user'] ?? '');
+    }
+
     public function getLoginStatus(): string
     {
         $host = esc($this->host);
         if ($this->isLoggedIn()) {
-            return "<a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
+            $username = esc($this->getCurrentUser());
+            return "<span class='login-user'>{$username}</span> | <a href='{$host}?admin'>Admin</a> | <a href='{$host}?logout'>" . esc($this->t('logout')) . "</a>";
         }
         return "<a href='{$host}?login'>" . esc($this->t('login')) . "</a>";
     }
@@ -382,9 +411,19 @@ final class App
             return $this->t('login_rate_limited');
         }
 
-        $stored = $this->config['password'];
+        $username = trim($_POST['username'] ?? '');
         $input = $_POST['password'] ?? '';
 
+        if ($username === '') {
+            return $this->t('wrong_password');
+        }
+
+        $userData = $this->storage->getUser($username);
+        if ($userData === false || !isset($userData['password'])) {
+            return $this->t('wrong_password');
+        }
+
+        $stored = $userData['password'];
         if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
         }
@@ -397,29 +436,23 @@ final class App
             if (in_array(strtolower($newPass), self::WEAK_PASSWORDS, true)) {
                 return $this->t('password_too_weak');
             }
-            $newHash = $this->savePassword($newPass);
-            $this->config['password'] = $newHash;
+            $newHash = password_hash($newPass, PASSWORD_DEFAULT);
+            $this->storage->writeUser($username, ['password' => $newHash]);
             session_regenerate_id(true);
             $_SESSION['l'] = $newHash;
+            $_SESSION['user'] = $username;
+            $_SESSION['role'] = $userData['role'] ?? 'master';
             return $this->t('password_changed');
         }
 
+        $this->storage->writeUser($username, ['last_login' => date('c')]);
         session_regenerate_id(true);
-        $_SESSION['l'] = $this->config['password'];
+        $_SESSION['l'] = $stored;
+        $_SESSION['user'] = $username;
+        $_SESSION['role'] = $userData['role'] ?? 'master';
         $_SESSION['last_activity'] = time();
         header('Location: ' . $this->host);
         exit;
-    }
-
-    public function savePassword(string $password): string
-    {
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $result = $this->storage->writeConfigValue('password', $hash);
-        if (!$result) {
-            echo $this->t('permission_error');
-            exit;
-        }
-        return $hash;
     }
 
     public function editTags(): void

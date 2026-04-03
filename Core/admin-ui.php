@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 $c = $app->config;
 $adminAction = $_REQUEST['admin'] ?? 'dashboard';
-$allowedActions = ['dashboard', '', 'edit', 'new'];
+$allowedActions = ['dashboard', '', 'edit', 'new', 'users'];
 if (!is_string($adminAction) || !in_array($adminAction, $allowedActions, true)) {
     $adminAction = 'dashboard';
 }
@@ -39,6 +39,9 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
     <header class="admin-header">
         <h1><?= esc($c['title']) ?> — Admin <small style="font-size:12px;color:#888;font-weight:normal;"><?= esc(App::VERSION) ?></small></h1>
         <div>
+            <?php if ($app->getCurrentUser() !== ''): ?>
+            <span style="font-size:13px;color:#666;margin-right:8px;"><?= esc($app->getCurrentUser()) ?></span>
+            <?php endif; ?>
             <a href="./">← <?= esc($app->t('admin_view_site')) ?></a>
             <a href="<?= esc($app->host) ?>?logout"><?= esc($app->t('logout')) ?></a>
         </div>
@@ -47,12 +50,14 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
     <nav class="admin-nav">
         <a href="?admin" class="<?= $adminAction === 'dashboard' || $adminAction === '' ? 'active' : '' ?>"><?= esc($app->t('admin_dashboard')) ?></a>
         <a href="?admin=new"><?= esc($app->t('admin_new_page')) ?></a>
+        <a href="?admin=users" class="<?= $adminAction === 'users' ? 'active' : '' ?>"><?= esc($app->t('admin_users')) ?></a>
     </nav>
 
 <?php
 match ($adminAction) {
     'edit'      => renderAdminEditor($app, $n),
     'new'       => renderAdminNewPage($app, $n),
+    'users'     => renderAdminUsers($app, $n),
     default     => renderAdminDashboard($app, $n),
 };
 ?>
@@ -422,6 +427,86 @@ function renderAdminEditor(App $app, string $n): void
     echo '</script>';
 
     echo "</section>";
+}
+
+function renderAdminUsers(App $app, string $n): void
+{
+    $users = $app->storage->listUsers();
+    $userCount = $app->storage->getUserCount();
+    $currentUser = $app->getCurrentUser();
+
+    echo '<section class="admin-section">';
+    echo '<h2>' . esc($app->t('admin_users')) . '</h2>';
+
+    echo '<table class="admin-table">';
+    echo '<thead><tr><th>' . esc($app->t('admin_username')) . '</th><th>Role</th><th>' . esc($app->t('admin_last_login')) . '</th><th>Actions</th></tr></thead>';
+    echo '<tbody>';
+    foreach ($users as $username => $data) {
+        $safeUser = esc($username);
+        $lastLogin = $data['last_login'] !== '' ? esc(substr($data['last_login'], 0, 19)) : '—';
+        $isSelf = ($username === $currentUser);
+        echo "<tr>";
+        echo "<td>{$safeUser}" . ($isSelf ? ' <small>(you)</small>' : '') . "</td>";
+        echo "<td>" . esc($data['role']) . "</td>";
+        echo "<td>{$lastLogin}</td>";
+        echo "<td class='actions'>";
+        $jsonUser = json_encode($username, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        echo "<a href='#' class='admin-btn admin-btn--outline' style='font-size:12px;padding:2px 8px;' data-action='change-pw' data-user={$jsonUser}>" . esc($app->t('admin_change_password')) . "</a> ";
+        if (!$isSelf) {
+            echo "<a href='#' class='admin-btn admin-btn--danger' style='font-size:12px;padding:2px 8px;' data-action='delete-user' data-user={$jsonUser} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete_user')) . "</a>";
+        }
+        echo "</td></tr>";
+    }
+    echo '</tbody></table>';
+
+    if ($userCount < 3) {
+        echo '<h3 style="margin-top:16px;">' . esc($app->t('admin_add_user')) . '</h3>';
+        echo '<div class="admin-form" style="max-width:400px;">';
+        echo '<label>' . esc($app->t('admin_username')) . '</label>';
+        echo '<input type="text" id="new-username" pattern="[a-zA-Z0-9_\-]+" maxlength="64">';
+        echo '<label>Password (min 8)</label>';
+        echo '<input type="password" id="new-user-password" minlength="8">';
+        echo '<button class="admin-btn" data-action="create-user" style="margin-top:8px;">' . esc($app->t('admin_add_user')) . '</button>';
+        echo '</div>';
+    } else {
+        echo '<p style="margin-top:12px;color:#999;">' . esc($app->t('admin_max_users')) . '</p>';
+    }
+
+    echo '<div id="user-result" style="margin-top:8px;font-size:13px;"></div>';
+
+    echo "<script{$n}>";
+    echo 'document.addEventListener("click",function(e){';
+    echo 'var btn=e.target.closest("[data-action=\"create-user\"]");';
+    echo 'if(btn){';
+    echo 'var u=document.getElementById("new-username").value.trim();';
+    echo 'var p=document.getElementById("new-user-password").value;';
+    echo 'if(!u||p.length<8){document.getElementById("user-result").textContent="Username and password (8+) required";return;}';
+    echo 'var body=new URLSearchParams();body.append("action","create");body.append("username",u);body.append("password",p);body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=users",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){location.reload();}else{document.getElementById("user-result").textContent="Error: "+d.error;document.getElementById("user-result").style.color="#c00";}});';
+    echo 'return;}';
+
+    echo 'var del=e.target.closest("[data-action=\"delete-user\"]");';
+    echo 'if(del){';
+    echo 'var user=JSON.parse(del.getAttribute("data-user"));';
+    echo 'if(!confirm("Delete user: "+user+"?"))return;';
+    echo 'fetch("index.php?api=users&username="+encodeURIComponent(user),{method:"DELETE",headers:{"X-CSRF-Token":csrfToken}})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){location.reload();}else{alert("Error: "+d.error);}});';
+    echo 'return;}';
+
+    echo 'var pw=e.target.closest("[data-action=\"change-pw\"]");';
+    echo 'if(pw){';
+    echo 'var user=JSON.parse(pw.getAttribute("data-user"));';
+    echo 'var np=prompt("New password for "+user+" (min 8 chars):");';
+    echo 'if(!np||np.length<8){if(np!==null)alert("Password must be at least 8 characters");return;}';
+    echo 'var body=new URLSearchParams();body.append("action","update");body.append("username",user);body.append("password",np);body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=users",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){return r.json();}).then(function(d){if(d.status==="ok"){alert("Password changed for "+user);}else{alert("Error: "+d.error);}});';
+    echo 'return;}';
+    echo '});';
+    echo '</script>';
+
+    echo '</section>';
 }
 
 function renderAdminNewPage(App $app, string $n): void

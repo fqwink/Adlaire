@@ -73,5 +73,15 @@
     "csrf_error": "Security token verification failed. Please try again.",
     "admin_system": "System Info",
     "admin_no_pages": "No pages yet",
-    "block_delimiter": "Delimiter"
+    "block_delimiter": "Delimiter",
+    "admin_users": "Users",
+    "admin_add_user": "Add User",
+    "admin_delete_user": "Delete",
+    "admin_change_password": "Change Password",
+    "admin_username": "Username",
+    "admin_max_users": "Maximum number of users (3) reached.",
+    "admin_cannot_delete_self": "You cannot delete yourself.",
+    "admin_user_created": "User created.",
+    "admin_user_deleted": "User deleted.",
+    "admin_last_login": "Last Login"
 }

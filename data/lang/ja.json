@@ -73,5 +73,15 @@
     "csrf_error": "セキュリティトークンの検証に失敗しました。もう一度お試しください。",
     "admin_system": "システム情報",
     "admin_no_pages": "ページがありません",
-    "block_delimiter": "区切り線"
+    "block_delimiter": "区切り線",
+    "admin_users": "ユーザー管理",
+    "admin_add_user": "ユーザー追加",
+    "admin_delete_user": "削除",
+    "admin_change_password": "パスワード変更",
+    "admin_username": "ユーザー名",
+    "admin_max_users": "最大ユーザー数（3名）に達しています。",
+    "admin_cannot_delete_self": "自分自身を削除することはできません。",
+    "admin_user_created": "ユーザーを作成しました。",
+    "admin_user_deleted": "ユーザーを削除しました。",
+    "admin_last_login": "最終ログイン"
 }

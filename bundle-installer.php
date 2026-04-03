@@ -123,6 +123,10 @@ function validate_input(array $post): array
     if ($siteName === '') {
         $errors[] = 'Site name is required';
     }
+    $adminUsername = trim($post['admin_username'] ?? 'admin');
+    if ($adminUsername !== '' && !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $adminUsername)) {
+        $errors[] = 'Invalid admin username (alphanumeric, dash, underscore only)';
+    }
     if (!in_array($locale, INSTALLER_SUPPORTED_LOCALES, true)) {
         $errors[] = 'Invalid language selection';
     }
@@ -159,7 +163,6 @@ function install_execute(string $siteName, string $locale, string $password): ar
     $config = [
         'title' => $siteName,
         'language' => $locale,
-        'password' => password_hash($password, PASSWORD_DEFAULT),
         'themeSelect' => 'AP-Default',
         'menu' => "Home<br />\nExample",
         'subside' => '',
@@ -182,6 +185,38 @@ function install_execute(string $siteName, string $locale, string $password): ar
     if (!rename($tmpConfig, $configPath)) {
         @unlink($tmpConfig);
         return ['ok' => false, 'message' => 'Failed to write config. Check data/ permissions.'];
+    }
+
+    // Create users.json
+    $adminUsername = $GLOBALS['_installer_username'] ?? 'admin';
+    $usersData = [
+        'users' => [
+            $adminUsername => [
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'role' => 'master',
+                'created_at' => date('c'),
+                'last_login' => '',
+            ],
+        ],
+        'max_users' => 3,
+    ];
+    $usersJson = json_encode($usersData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($usersJson === false) {
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to encode users.json'];
+    }
+    $usersPath = $systemDir . '/users.json';
+    $tmpUsers = tempnam(dirname($usersPath), '.tmp_');
+    if ($tmpUsers === false || file_put_contents($tmpUsers, $usersJson, LOCK_EX) === false) {
+        if ($tmpUsers !== false) { @unlink($tmpUsers); }
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to write users.json'];
+    }
+    chmod($tmpUsers, 0600);
+    if (!rename($tmpUsers, $usersPath)) {
+        @unlink($tmpUsers);
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to write users.json'];
     }
 
     // Create install.lock
@@ -242,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validate and install
         $errors = validate_input($_POST);
         if (empty($errors)) {
+            $GLOBALS['_installer_username'] = trim($_POST['admin_username'] ?? 'admin');
             $result = install_execute(
                 trim($_POST['site_name']),
                 $_POST['default_locale'],
@@ -413,6 +449,9 @@ $csrf = security_csrf_token();
             <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc] ?? $loc) ?></option>
 <?php endforeach; ?>
         </select>
+
+        <label>Admin Username</label>
+        <input type="text" name="admin_username" value="<?= esc($_POST['admin_username'] ?? 'admin') ?>" pattern="[a-zA-Z0-9_\-]+" maxlength="64">
 
         <label>Admin Password * (min 8 characters)</label>
         <input type="password" name="admin_password" minlength="8" required>

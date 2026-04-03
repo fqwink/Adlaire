@@ -12,6 +12,22 @@ declare(strict_types=1);
  * @license Adlaire License Ver.2.0 (Open Source - Platform Code)
  */
 
+// --- Auth verification helper ---
+
+function verifyApiAuth(FileStorage $storage): bool
+{
+    $sessionUser = $_SESSION['user'] ?? '';
+    $sessionHash = $_SESSION['l'] ?? '';
+    if ($sessionUser === '' || $sessionHash === '') {
+        return false;
+    }
+    $userData = $storage->getUser($sessionUser);
+    if ($userData === false || !isset($userData['password'])) {
+        return false;
+    }
+    return hash_equals($userData['password'], $sessionHash);
+}
+
 // --- Admin edit handler ---
 
 function handleEdit(): void
@@ -36,10 +52,7 @@ function handleEdit(): void
     }
 
     $storage = new FileStorage('data');
-    $config = $storage->readConfig();
-    $storedPassword = $config['password'] ?? '';
-    $sessionToken = $_SESSION['l'] ?? '';
-    if ($storedPassword === '' || $sessionToken === '' || !hash_equals($storedPassword, $sessionToken)) {
+    if (!verifyApiAuth($storage)) {
         header('HTTP/1.1 401 Unauthorized');
         exit;
     }
@@ -122,10 +135,7 @@ function handleApi(): void
         exit;
     }
 
-    $config = $storage->readConfig();
-    $apiPassword = $config['password'] ?? '';
-    $apiSession = $_SESSION['l'] ?? '';
-    if ($apiPassword === '' || $apiSession === '' || !hash_equals($apiPassword, $apiSession)) {
+    if (!verifyApiAuth($storage)) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         exit;
@@ -142,6 +152,7 @@ function handleApi(): void
         'export'    => handleApiExport($storage),
         'import'    => handleApiImport($storage),
         'generate'  => handleApiGenerate($storage),
+        'users'     => handleApiUsers($storage, $method),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -671,6 +682,122 @@ function handleApiVersion(): void
         'installed' => $installed,
         'installed_at' => $installedAt,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+
+// --- Users API ---
+
+function handleApiUsers(FileStorage $storage, string $method): void
+{
+    if ($method === 'GET') {
+        $users = $storage->listUsers();
+        apiResponse(['users' => $users], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $action = $_POST['action'] ?? '';
+
+        if ($action === 'create') {
+            $username = trim($_POST['username'] ?? '');
+            $password = $_POST['password'] ?? '';
+            if ($username === '' || !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $username)) {
+                apiError(400, 'Invalid username');
+                return;
+            }
+            if (strlen($password) < 8) {
+                apiError(400, 'Password must be at least 8 characters');
+                return;
+            }
+            $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
+            if (in_array(strtolower($password), $weakPasswords, true)) {
+                apiError(400, 'Password is too weak');
+                return;
+            }
+            $existing = $storage->getUser($username);
+            if ($existing !== false) {
+                apiError(409, 'User already exists');
+                return;
+            }
+            $userData = [
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'role' => 'master',
+                'created_at' => date('c'),
+                'last_login' => '',
+            ];
+            if (!$storage->writeUser($username, $userData)) {
+                apiError(400, 'Maximum user limit reached');
+                return;
+            }
+            apiResponse(['status' => 'ok', 'username' => $username]);
+            return;
+        }
+
+        if ($action === 'update') {
+            $username = trim($_POST['username'] ?? '');
+            $password = $_POST['password'] ?? '';
+            if ($username === '') {
+                apiError(400, 'Invalid username');
+                return;
+            }
+            $existing = $storage->getUser($username);
+            if ($existing === false) {
+                apiError(404, 'User not found');
+                return;
+            }
+            if (strlen($password) < 8) {
+                apiError(400, 'Password must be at least 8 characters');
+                return;
+            }
+            $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
+            if (in_array(strtolower($password), $weakPasswords, true)) {
+                apiError(400, 'Password is too weak');
+                return;
+            }
+            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            if (!$storage->writeUser($username, ['password' => $newHash])) {
+                apiError(500, 'Failed to update password');
+                return;
+            }
+            $sessionUser = $_SESSION['user'] ?? '';
+            if ($sessionUser === $username) {
+                $_SESSION['l'] = $newHash;
+            }
+            apiResponse(['status' => 'ok', 'username' => $username]);
+            return;
+        }
+        apiError(400, 'Invalid action');
+        return;
+    }
+
+    if ($method === 'DELETE') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $username = trim($_REQUEST['username'] ?? '');
+        if ($username === '') {
+            apiError(400, 'Invalid username');
+            return;
+        }
+        $sessionUser = $_SESSION['user'] ?? '';
+        if ($username === $sessionUser) {
+            apiError(400, 'Cannot delete yourself');
+            return;
+        }
+        if (!$storage->deleteUser($username)) {
+            apiError(400, 'Cannot delete user (not found or last remaining)');
+            return;
+        }
+        apiResponse(['status' => 'ok', 'deleted' => $username]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
 }
 
 function apiPageReorder(FileStorage $storage): void
