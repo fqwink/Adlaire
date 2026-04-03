@@ -180,21 +180,6 @@ footer p{
 	.ce-inline-toolbar{position:fixed;bottom:0;left:0;right:0;top:auto;justify-content:center;border-radius:0;}
 }
 
-@media (prefers-color-scheme: dark){
-	body{background:#1a1a2e;color:#ddd;}
-	#wrapper{background:#2a2a3e;color:#ddd;}
-	#wrapper a{color:#aaa;border-bottom-color:#555;}
-	#side{background:#1b4332;}
-	footer{background:#0f0f1e;}
-	.ce-code{background:#0d1117;color:#e6e6e6;}
-	.ce-toolbox{background:#2a2a3e;border-color:#444;}
-	.ce-toolbox__btn{border-color:#555;color:#ccc;}
-	.ce-toolbox__btn:hover{background:#3a3a4e;}
-	.ce-quote{color:#aaa;}
-	.ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
-	span.editText textarea{color:#ddd;}
-}
-
 /* Format Switcher */
 .ce-format-bar{display:flex;gap:4px;margin-bottom:8px;padding:4px 0;}
 .ce-format-bar button{background:#1f2b33;color:#888;border:1px solid #333;padding:4px 12px;border-radius:3px;cursor:pointer;font-size:12px;text-transform:uppercase;}
@@ -209,6 +194,13 @@ footer p{
 .ce-btn{background:none;border:1px solid #ccc;cursor:pointer;width:24px;height:24px;border-radius:4px;color:#666;font-size:14px;line-height:1;padding:0;}
 .ce-btn:hover{background:#eee;}
 .ce-btn--up,.ce-btn--down{font-size:10px;}
+/* Ver.2.9 TS#113: heading/list wrapスタイル */
+.ce-heading-wrap{display:flex;align-items:center;gap:6px;}
+.ce-heading__level{background:#00a968;color:#fff;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:12px;}
+.ce-heading__level:hover{background:#00c978;}
+.ce-list-wrap{display:flex;align-items:flex-start;gap:6px;}
+.ce-list__toggle{background:#00a968;color:#fff;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:12px;margin-top:2px;}
+.ce-list__toggle:hover{background:#00c978;}
 .ce-block__content{flex:1;min-height:1.5em;}
 .ce-block__content [contenteditable]{outline:none;min-height:1em;padding:2px 0;}
 .ce-block__content [contenteditable]:focus{border-left:2px solid #1ab;padding-left:6px;}
@@ -217,7 +209,7 @@ footer p{
 .ce-list{margin:0;padding-left:20px;}
 .ce-list li{min-height:1em;}
 .ce-code{background:#1f2b33;color:#eee;padding:12px;border-radius:4px;overflow-x:auto;}
-.ce-code code{outline:none;}
+.ce-code code{outline:none;white-space:pre-wrap;tab-size:4;-moz-tab-size:4;}
 .ce-quote{border-left:3px solid #1ab;padding:8px 12px;margin:0;color:#666;font-style:italic;}
 .ce-delimiter{text-align:center;padding:8px 0;}
 .ce-delimiter hr{border:none;border-top:2px solid #ddd;}
@@ -235,4 +227,21 @@ footer p{
 .ce-save--saving{color:#f90;}
 .ce-save--saved{color:#0c0;}
 .ce-save--error{color:#c00;}
-.ce-btn--up,.ce-btn--down{font-size:10px;}
+
+@media (prefers-color-scheme: dark){
+	body{background:#1a1a2e;color:#ddd;}
+	#wrapper{background:#2a2a3e;color:#ddd;}
+	#wrapper a{color:#aaa;border-bottom-color:#555;}
+	#side{background:#1b4332;}
+	footer{background:#0f0f1e;}
+	.ce-code{background:#0d1117;color:#e6e6e6;}
+	.ce-toolbox{background:#2a2a3e;border-color:#444;}
+	.ce-toolbox__btn{border-color:#555;color:#ccc;}
+	.ce-toolbox__btn:hover{background:#3a3a4e;}
+	.ce-quote{color:#aaa;}
+	.ce-image__url{background:#2a2a3e;border-color:#444;color:#ddd;}
+	span.editText textarea{color:#ddd;}
+	/* Ver.2.9 TS#113: dark mode heading/list toggle */
+	.ce-heading__level,.ce-list__toggle{background:#2a2a3e;color:#ccc;}
+	.ce-heading__level:hover,.ce-list__toggle:hover{background:#00c978;}
+}

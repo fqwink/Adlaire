@@ -27,6 +27,8 @@ register_shutdown_function(function (): void {
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Strict');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.use_trans_sid', '0');
 $isHttpsDetected = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
 if ($isHttpsDetected) {
     ini_set('session.cookie_secure', '1');
@@ -63,6 +65,7 @@ $cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'no
 header($cspHeader);
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -70,12 +73,16 @@ if (isset($_GET['admin'])) {
         header('Location: ?login');
         exit;
     }
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('Pragma: no-cache');
     require __DIR__ . '/Core/admin-ui.php';
     ob_end_flush();
     exit;
 }
 
 if ($app->is404() && !$app->isLoggedIn()) {
+    http_response_code(404);
+    header('Cache-Control: no-store, no-cache, must-revalidate');
     echo '<!doctype html><html><head><meta charset="utf-8"><title>404</title></head><body>';
     echo '<h1>404 Not Found</h1><p>' . esc($app->config['content'] ?? '') . '</p>';
     echo '</body></html>';

@@ -15,6 +15,12 @@ declare(strict_types=1);
 /**
  * Handle the static site generation API endpoint.
  */
+/** Directory permission for generated output */
+const GENERATOR_DIR_PERMISSION = 0755;
+
+/** File permission for generated output */
+const GENERATOR_FILE_PERMISSION = 0644;
+
 function handleApiGenerate(FileStorage $storage): void
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -68,7 +74,7 @@ function handleApiGenerate(FileStorage $storage): void
         }
     }
     if (!is_dir($distDir)) {
-        if (!mkdir($distDir, 0755, true)) {
+        if (!mkdir($distDir, GENERATOR_DIR_PERMISSION, true)) {
             apiError(500, 'Failed to create dist directory');
             return;
         }
@@ -86,7 +92,7 @@ function handleApiGenerate(FileStorage $storage): void
     // Copy theme CSS (prefer minimal.css for static output)
     $cssDir = $distDir . '/themes/' . $theme;
     if (!is_dir($cssDir)) {
-        if (!@mkdir($cssDir, 0755, true) && !is_dir($cssDir)) {
+        if (!@mkdir($cssDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($cssDir)) {
             error_log('Adlaire: Failed to create theme CSS directory: ' . $cssDir);
         }
     }
@@ -94,9 +100,9 @@ function handleApiGenerate(FileStorage $storage): void
     if (is_file($themePath . $cssSource)) {
         $cssDest = $cssDir . '/style.css';
         if (!copy($themePath . $cssSource, $cssDest)) {
-            error_log('Adlaire: Failed to copy theme CSS');
+            error_log('Adlaire: Failed to copy theme CSS: ' . $cssSource);
         } else {
-            @chmod($cssDest, 0644);
+            @chmod($cssDest, GENERATOR_FILE_PERMISSION);
         }
     }
 
@@ -106,15 +112,18 @@ function handleApiGenerate(FileStorage $storage): void
     $publicJs = ['markdown.js', 'editInplace.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
-            if (!@mkdir($jsDst, 0755, true) && !is_dir($jsDst)) {
+            if (!@mkdir($jsDst, GENERATOR_DIR_PERMISSION, true) && !is_dir($jsDst)) {
                 error_log('Adlaire: Failed to create JS directory: ' . $jsDst);
             }
         }
         foreach ($publicJs as $jsName) {
             $jsPath = $jsSrc . '/' . $jsName;
             if (is_file($jsPath)) {
-                if (!copy($jsPath, $jsDst . '/' . $jsName)) {
+                $jsDstPath = $jsDst . '/' . $jsName;
+                if (!copy($jsPath, $jsDstPath)) {
                     error_log('Adlaire: Failed to copy JS file: ' . $jsName);
+                } else {
+                    @chmod($jsDstPath, GENERATOR_FILE_PERMISSION);
                 }
             }
         }
@@ -125,15 +134,20 @@ function handleApiGenerate(FileStorage $storage): void
     $langDst = $distDir . '/data/lang';
     if (is_dir($langSrc)) {
         if (!is_dir($langDst)) {
-            if (!@mkdir($langDst, 0755, true) && !is_dir($langDst)) {
+            if (!@mkdir($langDst, GENERATOR_DIR_PERMISSION, true) && !is_dir($langDst)) {
                 error_log('Adlaire: Failed to create lang directory: ' . $langDst);
             }
         }
         $langFiles = glob($langSrc . '/*.json');
-        if (is_array($langFiles)) {
+        if ($langFiles === false) {
+            error_log('Adlaire: glob() failed for lang directory: ' . $langSrc);
+        } else {
             foreach ($langFiles as $langFile) {
-                if (!copy($langFile, $langDst . '/' . basename($langFile))) {
+                $langDstFile = $langDst . '/' . basename($langFile);
+                if (!copy($langFile, $langDstFile)) {
                     error_log('Adlaire: Failed to copy lang file: ' . basename($langFile));
+                } else {
+                    @chmod($langDstFile, GENERATOR_FILE_PERMISSION);
                 }
             }
         }
@@ -169,7 +183,7 @@ function handleApiGenerate(FileStorage $storage): void
             }
         }
         $pageDir = $distDir . '/' . $slug;
-        if (!is_dir($pageDir) && !mkdir($pageDir, 0755, true) && !is_dir($pageDir)) {
+        if (!is_dir($pageDir) && !mkdir($pageDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($pageDir)) {
             error_log('Adlaire: Failed to create page directory: ' . $pageDir);
             $failed++;
             $details[] = ['slug' => $slug, 'result' => 'failed'];
@@ -190,7 +204,8 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     // Generate sitemap.xml
-    $isHttps = ($_SERVER['HTTPS'] ?? '') === 'on';
+    $httpsVal = $_SERVER['HTTPS'] ?? '';
+    $isHttps = is_string($httpsVal) && $httpsVal !== '' && $httpsVal !== 'off';
     $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
     $basePath = '';
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
@@ -243,23 +258,24 @@ function handleApiGenerate(FileStorage $storage): void
 function generatePageHtml(App $app, string $slug, string $contentHtml, string $theme): string
 {
     $c = $app->config;
-    $title = esc($c['title']);
+    $title = esc((string) ($c['title'] ?? ''));
     $pageTitle = esc($slug);
-    $desc = esc($c['description']);
-    $keywords = esc($c['keywords']);
+    $desc = esc((string) ($c['description'] ?? ''));
+    $keywords = esc((string) ($c['keywords'] ?? ''));
     $lang = esc($app->language);
     $copyright = esc((string) ($c['copyright'] ?? ''));
     $credit = esc($app->credit);
     $safeTheme = esc($theme);
 
-    // Build menu
     $menuHtml = '<ul>';
     $menuRaw = $c['menu'] ?? '';
     $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
     $items = explode("<br />\n", $menu);
     foreach ($items as $item) {
         $item = trim(strip_tags($item));
-        if ($item === '') continue;
+        if ($item === '') {
+            continue;
+        }
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';
         $safeItemSlug = esc($itemSlug);

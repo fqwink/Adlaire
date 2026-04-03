@@ -45,6 +45,9 @@ const LOGIN_MAX_ATTEMPTS = 5;
 /** Rate limit window in seconds */
 const LOGIN_WINDOW_SECONDS = 300;
 
+/** Rate file hash algorithm */
+const RATE_HASH_ALGO = 'sha256';
+
 function login_rate_check(): bool
 {
     $now = time();
@@ -59,7 +62,7 @@ function login_rate_check(): bool
             return true;
         }
     }
-    $rateFile = $rateDir . '/rate_' . hash('sha256', $ip) . '.json';
+    $rateFile = $rateDir . '/rate_' . hash(RATE_HASH_ALGO, $ip) . '.json';
 
     $attempts = [];
     if (is_file($rateFile)) {
@@ -86,7 +89,11 @@ function login_rate_check(): bool
 
     $attempts[] = $now;
     if (!is_file($rateFile)) {
-        file_put_contents($rateFile, '[]', LOCK_EX);
+        if (file_put_contents($rateFile, '[]', LOCK_EX) === false) {
+            error_log('Adlaire: Failed to create rate limit file: ' . $rateFile);
+            return true;
+        }
+        @chmod($rateFile, 0600);
     }
     $fp = fopen($rateFile, 'r+');
     if ($fp !== false) {

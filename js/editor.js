@@ -102,41 +102,84 @@ function attachListItemHandlers(li) {
     });
 }
 // --- Sanitize: strip dangerous tags from block content ---
+// Ver.2.9 TS#67: sanitizeHtml正規表現を事前コンパイル化（パフォーマンス改善）
+const _sanScript = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
+const _sanIframe = /<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi;
+const _sanObject = /<object\b[^>]*>[\s\S]*?<\/object>/gi;
+const _sanEmbed = /<embed\b[^>]*\/?>/gi;
+const _sanSvg = /<svg\b[^>]*>[\s\S]*?<\/svg>/gi;
+const _sanForm = /<form\b[^>]*>[\s\S]*?<\/form>/gi;
+const _sanInput = /<input\b[^>]*\/?>/gi;
+const _sanButton = /<button\b[^>]*>[\s\S]*?<\/button>/gi;
+const _sanMeta = /<meta\b[^>]*\/?>/gi;
+const _sanBase = /<base\b[^>]*\/?>/gi;
+const _sanLink = /<link\b[^>]*\/?>/gi;
+const _sanStyle = /<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi;
+const _sanTextarea = /<textarea\b[^<]*(?:(?!<\/textarea>)<[^<]*)*<\/textarea>/gi;
+const _sanUnicodeEscape = /\\u(00[0-9a-fA-F]{2})/g;
+const _sanHexEscape = /\\x([0-9a-fA-F]{2})/g;
+const _sanNewlineInTag = /(<[^>]*?)[\r\n\t]+/gi;
+const _sanOnEvent = /\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi;
+const _sanJsProto = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
+const _sanJsSimple = /(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
+const _sanDangerousProto = /(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi;
+const _sanDataJs = /\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
 // #47: replace chain順序保証 — 1) 危険タグ除去 → 2) Unicode decode → 3) on*属性除去 → 4) プロトコル除去
 function sanitizeHtml(html) {
-    // Phase 1: 危険タグの除去（最初に実行）
-    let s = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-    s = s.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
-    s = s.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
-    s = s.replace(/<embed\b[^>]*\/?>/gi, '');
+    // Phase 1: 危険タグの除去（最初に実行）— Ver.2.9 TS#67: 事前コンパイル済み正規表現使用
+    _sanScript.lastIndex = 0;
+    let s = html.replace(_sanScript, '');
+    _sanIframe.lastIndex = 0;
+    s = s.replace(_sanIframe, '');
+    _sanObject.lastIndex = 0;
+    s = s.replace(_sanObject, '');
+    _sanEmbed.lastIndex = 0;
+    s = s.replace(_sanEmbed, '');
     // #6: SVG内onclick等のネスト対応 - SVGタグ全体を除去
-    s = s.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
-    s = s.replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, '');
-    s = s.replace(/<input\b[^>]*\/?>/gi, '');
-    s = s.replace(/<button\b[^>]*>[\s\S]*?<\/button>/gi, '');
-    s = s.replace(/<meta\b[^>]*\/?>/gi, '');
-    s = s.replace(/<base\b[^>]*\/?>/gi, '');
-    s = s.replace(/<link\b[^>]*\/?>/gi, '');
+    _sanSvg.lastIndex = 0;
+    s = s.replace(_sanSvg, '');
+    _sanForm.lastIndex = 0;
+    s = s.replace(_sanForm, '');
+    _sanInput.lastIndex = 0;
+    s = s.replace(_sanInput, '');
+    _sanButton.lastIndex = 0;
+    s = s.replace(_sanButton, '');
+    _sanMeta.lastIndex = 0;
+    s = s.replace(_sanMeta, '');
+    _sanBase.lastIndex = 0;
+    s = s.replace(_sanBase, '');
+    _sanLink.lastIndex = 0;
+    s = s.replace(_sanLink, '');
     // #114: <style>タグ除去（CSSインジェクション対策）
-    s = s.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    _sanStyle.lastIndex = 0;
+    s = s.replace(_sanStyle, '');
     // #115: <textarea>タグ除去（コンテンツインジェクション対策）
-    s = s.replace(/<textarea\b[^<]*(?:(?!<\/textarea>)<[^<]*)*<\/textarea>/gi, '');
+    _sanTextarea.lastIndex = 0;
+    s = s.replace(_sanTextarea, '');
     // Phase 2: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
-    s = s.replace(/\\u(00[0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
-    s = s.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    _sanUnicodeEscape.lastIndex = 0;
+    s = s.replace(_sanUnicodeEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    _sanHexEscape.lastIndex = 0;
+    s = s.replace(_sanHexEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     // Phase 3: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
-    s = s.replace(/(<[^>]*?)[\r\n\t]+/gi, '$1 ');
+    _sanNewlineInTag.lastIndex = 0;
+    s = s.replace(_sanNewlineInTag, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
-    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    _sanOnEvent.lastIndex = 0;
+    s = s.replace(_sanOnEvent, '');
     // #2: 属性値内改行/タブ除去後のon*再チェック（二重パス）
-    s = s.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+    _sanOnEvent.lastIndex = 0;
+    s = s.replace(_sanOnEvent, '');
     // Phase 4: javascript:プロトコルフィルタにユニコードエスケープ対応
-    const jsProtoPattern = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|\\u006[aA]|\\x6[aA])\s*(?:&#0*97;?|a)?\s*(?:v|&#0*118;?|&#x0*76;?)\s*(?:a|&#0*97;?)\s*(?:s|&#0*115;?)\s*(?:c|&#0*99;?)\s*(?:r|&#0*114;?)\s*(?:i|&#0*105;?)\s*(?:p|&#0*112;?)\s*(?:t|&#0*116;?)\s*:[^"'>]*/gi;
-    s = s.replace(jsProtoPattern, '$1=""');
-    s = s.replace(/(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '$1=""');
+    _sanJsProto.lastIndex = 0;
+    s = s.replace(_sanJsProto, '$1=""');
+    _sanJsSimple.lastIndex = 0;
+    s = s.replace(_sanJsSimple, '$1=""');
     // #4: about: / data: プロトコルフィルタ追加
-    s = s.replace(/(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi, '$1=""');
-    s = s.replace(/\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi, '');
+    _sanDangerousProto.lastIndex = 0;
+    s = s.replace(_sanDangerousProto, '$1=""');
+    _sanDataJs.lastIndex = 0;
+    s = s.replace(_sanDataJs, '');
     return s;
 }
 // --- Undo Manager (#25) ---
@@ -299,6 +342,8 @@ const builtinTools = {
                 levelBtn.className = 'ce-heading__level';
                 levelBtn.textContent = `H${level}`;
                 levelBtn.title = 'Change heading level';
+                // Ver.2.9 TS#101: aria-label追加
+                levelBtn.setAttribute('aria-label', `Heading level ${level}`);
                 levelBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -314,6 +359,8 @@ const builtinTools = {
                     headingEl.replaceWith(newEl);
                     headingEl = newEl;
                     levelBtn.textContent = `H${level}`;
+                    // Ver.2.9 TS#101: aria-label更新
+                    levelBtn.setAttribute('aria-label', `Heading level ${level}`);
                     newEl.focus();
                     // Ver.2.9 #13: レベル変更後にdirtyフラグをセット
                     const editor = getEditorFromElement(newEl);
@@ -345,6 +392,8 @@ const builtinTools = {
                 toggleBtn.className = 'ce-list__toggle';
                 toggleBtn.textContent = style === 'ordered' ? 'OL' : 'UL';
                 toggleBtn.title = 'Toggle list type';
+                // Ver.2.9 TS#102: aria-label追加
+                toggleBtn.setAttribute('aria-label', `List type: ${style}`);
                 toggleBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -614,7 +663,8 @@ const builtinTools = {
                 const urlInput = document.createElement('input');
                 urlInput.type = 'text';
                 urlInput.className = 'ce-image__url';
-                urlInput.placeholder = 'Image URL...';
+                // Ver.2.9 TS#98: image URLプレースホルダーi18n化
+                urlInput.placeholder = i18n.t('image_url_placeholder') || 'Image URL...';
                 urlInput.value = initialUrl;
                 urlInput.addEventListener('input', () => {
                     const val = urlInput.value;
@@ -626,19 +676,22 @@ const builtinTools = {
                 cap.contentEditable = 'true';
                 // #20: captionはtextContentで安全にXSS防止
                 cap.textContent = data.caption || '';
-                const placeholderText = 'Caption...';
+                // Ver.2.9 TS#99: image captionプレースホルダーi18n化
+                const placeholderText = i18n.t('image_caption_placeholder') || 'Caption...';
                 cap.setAttribute('placeholder', placeholderText.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
                 wrap.appendChild(urlInput);
                 wrap.appendChild(img);
                 wrap.appendChild(cap);
                 return wrap;
             },
+            // Ver.2.9 TS#91: null安全チェック強化
             save(el) {
                 const urlInput = el.querySelector('.ce-image__url');
                 const cap = el.querySelector('figcaption');
+                const img = el.querySelector('img');
                 return {
-                    url: urlInput?.value || '',
-                    caption: cap?.textContent || '',
+                    url: urlInput?.value ?? img?.src ?? '',
+                    caption: cap?.textContent ?? '',
                 };
             },
         };
@@ -865,7 +918,7 @@ class Editor {
         this.dragSourceIndex = -1;
         // #27: Block clipboard (#79: インスタンス変数として明示宣言)
         this.clipboardBlock = null;
-        // #11: ブロック内容変更追跡フラグ
+        // #11/#78: ブロック内容変更追跡フラグ — publicに変更してas anyキャスト削減
         this.dirty = false;
         // Ver.2.9 #4: isConnected監視用インターバルID
         this.connectedCheckInterval = null;
@@ -1121,6 +1174,7 @@ class Editor {
         return this.blockElements.indexOf(blockEl);
     }
     // --- #25: Undo/Redo ---
+    // Ver.2.9 TS#78: publicに変更してas anyキャスト削減
     saveUndoState() {
         this.undoManager.push(this.save());
     }
@@ -1259,6 +1313,8 @@ class Editor {
         addBtn.className = 'ce-btn ce-btn--add';
         addBtn.textContent = '+';
         addBtn.title = 'Add block';
+        // Ver.2.9 TS#105: aria-label追加
+        addBtn.setAttribute('aria-label', 'Add block');
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.showToolbox(wrapper);
@@ -1267,6 +1323,8 @@ class Editor {
         moveUpBtn.className = 'ce-btn ce-btn--up';
         moveUpBtn.textContent = '\u25B2';
         moveUpBtn.title = 'Move up';
+        // Ver.2.9 TS#104: aria-label追加
+        moveUpBtn.setAttribute('aria-label', 'Move block up');
         moveUpBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.moveBlock(idx, idx - 1);
@@ -1275,6 +1333,8 @@ class Editor {
         moveDownBtn.className = 'ce-btn ce-btn--down';
         moveDownBtn.textContent = '\u25BC';
         moveDownBtn.title = 'Move down';
+        // Ver.2.9 TS#104: aria-label追加
+        moveDownBtn.setAttribute('aria-label', 'Move block down');
         moveDownBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.moveBlock(idx, idx + 1);
@@ -1283,6 +1343,8 @@ class Editor {
         delBtn.className = 'ce-btn ce-btn--del';
         delBtn.textContent = '\u00D7';
         delBtn.title = 'Delete block';
+        // Ver.2.9 TS#103: aria-label追加
+        delBtn.setAttribute('aria-label', 'Delete block');
         delBtn.addEventListener('click', () => {
             const idx = this.getBlockIndex(wrapper);
             this.removeBlock(idx);
@@ -1345,6 +1407,8 @@ class Editor {
             const btn = document.createElement('button');
             btn.className = 'ce-toolbox__btn';
             btn.textContent = label;
+            // Ver.2.9 TS#97: toolboxボタンにtitle属性追加
+            btn.title = label;
             btn.addEventListener('click', () => {
                 const idx = this.getBlockIndex(refBlock);
                 let defaultData = {};

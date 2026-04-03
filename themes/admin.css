@@ -41,6 +41,32 @@
 .admin-sidebar li a{color:#1ab;text-decoration:none;border:none;}
 .admin-meta{display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap;}
 .admin-meta select,.admin-meta button{font-size:13px;}
+/* Ver.2.9 TS#106: ce-heading-wrapのflex配置 */
+.ce-heading-wrap{display:flex;align-items:center;gap:6px;}
+.ce-heading__level{background:#1f2b33;color:#fff;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:12px;}
+.ce-heading__level:hover{background:#1ab;}
+/* Ver.2.9 TS#107: ce-list-wrapのflex配置 */
+.ce-list-wrap{display:flex;align-items:flex-start;gap:6px;}
+.ce-list__toggle{background:#1f2b33;color:#fff;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:12px;margin-top:2px;}
+.ce-list__toggle:hover{background:#1ab;}
+/* Ver.2.9 TS#108: サブマスター認証情報スタイル */
+.ce-sub-master-credentials{margin:12px 0;padding:12px;background:#f0f9ff;border:1px solid #b3d7ff;border-radius:4px;}
+.ce-sub-master-credentials__item{padding:4px 0;font-size:13px;}
+.ce-sub-master-credentials__warn{margin-top:8px;color:#c33;font-size:12px;font-weight:bold;}
+/* Ver.2.9 TS#109: 公開前チェック警告スタイル */
+.ce-warnings{margin:8px 0;}
+.ce-warnings__item{padding:6px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:3px;margin:4px 0;font-size:13px;color:#856404;}
+/* Ver.2.9 TS#110: 生成レポートスタイル */
+.ce-generate-report{margin:12px 0;padding:12px;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;}
+.ce-generate-report__row{padding:4px 0;font-size:13px;}
+/* Ver.2.9 TS: diffモーダルスタイル */
+.ce-diff-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;align-items:center;justify-content:center;}
+.ce-diff-modal__backdrop{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);}
+.ce-diff-modal__content{position:relative;background:#fff;border-radius:6px;padding:20px;max-width:700px;width:90%;max-height:80vh;overflow:auto;z-index:1;}
+.ce-diff-modal__close{position:absolute;top:8px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;}
+.ce-diff-line--added{background:#e6ffe6;padding:2px 4px;margin:2px 0;}
+.ce-diff-line--removed{background:#ffe6e6;padding:2px 4px;margin:2px 0;}
+.ce-diff-line--changed{background:#fff3cd;padding:2px 4px;margin:2px 0;}
 
 /* Dark mode */
 /* #70: dark mode base color定義 — CSS custom properties */
@@ -70,6 +96,16 @@
     .admin-table .status-published{color:#6fdc6f;}
     .admin-header{border-bottom-color:var(--dm-border);}
     .admin-meta select,.admin-meta button{background:var(--dm-bg-alt);border-color:var(--dm-border);color:var(--dm-text);}
+    /* Ver.2.9 TS#111: dark mode heading/list toggle */
+    .ce-heading__level,.ce-list__toggle{background:var(--dm-bg-alt);color:var(--dm-text);}
+    .ce-heading__level:hover,.ce-list__toggle:hover{background:var(--dm-accent);}
+    .ce-sub-master-credentials{background:#1e2a3a;border-color:#335;color:var(--dm-text);}
+    .ce-warnings__item{background:#3a2e00;border-color:#6a5000;color:#ffc107;}
+    .ce-generate-report{background:var(--dm-bg-alt);border-color:var(--dm-border);}
+    .ce-diff-modal__content{background:var(--dm-bg-alt);color:var(--dm-text);}
+    .ce-diff-line--added{background:#1a3a1a;}
+    .ce-diff-line--removed{background:#3a1a1a;}
+    .ce-diff-line--changed{background:#3a3a1a;}
 }
 
 /* Responsive */

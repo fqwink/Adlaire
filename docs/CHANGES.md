@@ -1,5 +1,64 @@
 # CHANGES - 変更履歴
 
+## Ver.2.9-46 (2026-04-03)
+
+### 追加品質確定TS側軽微改善（60件精査・60件実装）
+
+#### パフォーマンス（#61-#70）
+* markdown.ts: headings/bold/italic/image/link/taskList/list/blockquote/paragraph正規表現を事前コンパイル化(#61-#66)
+* editor.ts: sanitizeHtml正規表現22パターンを事前コンパイル化(#67)
+* editInplace.ts: sortedReplacer関数のDRY化（flushSave/beforeunload共通化）(#69,#75)
+* editor.ts: createBlockWrapperボタンにaria-label一括追加(#70)
+
+#### コード品質（#71-#80）
+* editor.ts: BlockToolData interfaceにlanguageフィールド追加(#71)
+* api.ts: エラーメッセージ取得をextractApiErrorヘルパーに統一（15箇所DRY化）(#73)
+* editInplace.ts: sortedReplacerをモジュールスコープ_sortedReplacerに移動(#75)
+* markdown.ts: escAttrヘルパーをモジュールスコープ_mdEscAttrに昇格(#77)
+* editor.ts: saveUndoState/dirtyをpublic化しas anyキャスト6箇所削減(#78)
+* editInplace.ts: マジックナンバー5件を定数化（SAVE_DEBOUNCE_MS等）(#79)
+* editInplace.ts: showRevisionDiffModal innerHTML→DOM API化(#80)
+
+#### 型改善（#81-#85）
+* globals.d.ts: GenerateReport型定義追加(#82)
+* editInplace.ts: showGenerateReport引数型をGenerateReport型に統一(#83)
+
+#### エラーハンドリング（#86-#90）
+* api.ts: listUsers/saveSidebar失敗時console.warn追加(#86,#90)
+* editInplace.ts: renderMarkdownContent/renderBlocksContent atob失敗時console.warn(#88,#89)
+
+#### null安全（#91-#93）
+* editor.ts: image block save時img要素フォールバック追加(#91)
+* editInplace.ts: showFieldFeedback borderColor orig null安全(#92)
+
+#### UX・i18n（#94-#100）
+* editInplace.ts: downloadCredentialsファイル内テキストi18n化(#94)
+* editInplace.ts: showSaveIndicator状態テキストi18n化(#95)
+* editInplace.ts: bulk操作エラーメッセージi18nフォールバック追加(#96)
+* editor.ts: toolboxボタンにtitle属性追加(#97)
+* editor.ts: image URL/captionプレースホルダーi18n化(#98,#99)
+* editInplace.ts: パスワード変更成功時フォームフォーカス制御(#100)
+
+#### アクセシビリティ（#101-#105）
+* editor.ts: heading levelボタンにaria-label追加（レベル変更時も更新）(#101)
+* editor.ts: list toggleボタンにaria-label追加(#102)
+* editor.ts: delete/moveUp/moveDown/addブロックボタンにaria-label追加(#103-#105)
+
+#### CSS（#106-#115）
+* admin.css: ce-heading-wrap/ce-list-wrap/ce-sub-master-credentials/ce-warnings__item/ce-generate-report/ce-diff-modalスタイル追加(#106-#110)
+* admin.css: dark mode heading/list toggle/credentials/warnings/report/diffスタイル(#111)
+* AP-Default/style.css: heading/list wrapスタイル追加+dark mode対応(#112)
+* AP-Adlaire/style.css: heading/list wrapスタイル追加+dark mode対応(#113)
+* AP-Default/minimal.css: font-family system-uiフォールバック追加(#114)
+* AP-Adlaire/minimal.css: font-family system-uiフォールバック追加(#115)
+
+#### i18n（#116-#119）
+* ja.json: downloadCredentials/save状態/image/bulk/diff/reorder/format/generate/report/user管理翻訳キー36件追加(#116,#118)
+* en.json: 同上英語翻訳キー36件追加(#117,#119)
+
+#### ビルド設定（#120）
+* tsconfig.json: noUnusedLocals/noUnusedParameters追加（未使用コード検出強化）(#120)
+
 ## Ver.2.9-45 (2026-04-03)
 
 ### 追加品質確定TS側バグ修正（60件精査・60件実装）

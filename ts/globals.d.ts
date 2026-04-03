@@ -23,6 +23,14 @@ interface UserInfo {
     last_login: string;
 }
 
+/** Ver.2.9 TS#82: Generate report type */
+interface GenerateReport {
+    success: number;
+    failed: number;
+    skipped: number;
+    time: number;
+}
+
 /** Editor instance attached to container element */
 interface HTMLElement {
     __editor?: Editor | undefined;

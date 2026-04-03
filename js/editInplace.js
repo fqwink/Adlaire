@@ -22,6 +22,24 @@ let fieldSaveQueue = Promise.resolve();
 let flushSaving = false;
 // Ver.2.9 TS#3/TS#7: sendBeacon用のCSRFトークンキャッシュ — 最後の有効トークンを保持
 let _lastValidCsrfToken = '';
+// Ver.2.9 TS#69/#75: sortedReplacer共通化（flushSave/beforeunload両方で使用）
+const _sortedReplacer = (_key, value) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        const obj = value;
+        const sorted = {};
+        for (const k of Object.keys(obj).sort()) {
+            sorted[k] = obj[k];
+        }
+        return sorted;
+    }
+    return value;
+};
+// Ver.2.9 TS#79: マジックナンバー定数化
+const SAVE_DEBOUNCE_MS = 300;
+const WARNINGS_DISPLAY_MS = 8000;
+const REVOKE_URL_DELAY_MS = 5000;
+const FEEDBACK_DISPLAY_MS = 1500;
+const SEARCH_DEBOUNCE_MS = 150;
 function nl2br(s) {
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
 }
@@ -99,7 +117,8 @@ function showFieldFeedback(key, success) {
         return;
     const orig = el.style.borderColor;
     el.style.borderColor = success ? '#0a0' : '#c00';
-    setTimeout(() => { el.style.borderColor = orig; }, 1500);
+    // Ver.2.9 TS#79/#92: マジックナンバー定数化 + orig null安全
+    setTimeout(() => { el.style.borderColor = orig || ''; }, FEEDBACK_DISPLAY_MS);
 }
 // --- Text-based editing (Markdown and settings fields) ---
 function plainTextEdit(span) {
@@ -158,10 +177,12 @@ function renderMarkdownContent() {
         // #89: b64デコードエラーハンドリング
         let raw;
         if (b64) {
+            // Ver.2.9 TS#88: atob失敗時console.warn
             try {
                 raw = atob(b64);
             }
-            catch {
+            catch (e) {
+                console.warn('renderMarkdownContent: atob failed', e);
                 raw = el.textContent || '';
             }
         }
@@ -182,10 +203,13 @@ function renderBlocksContent() {
         let raw = el.dataset.blocks || '';
         const b64 = el.dataset.blocksB64;
         if (b64) {
+            // Ver.2.9 TS#89: atob失敗時console.warn
             try {
                 raw = atob(b64);
             }
-            catch { /* empty */ }
+            catch (e) {
+                console.warn('renderBlocksContent: atob failed', e);
+            }
         }
         if (!raw)
             return;
@@ -253,20 +277,8 @@ function initBlockEditor() {
                 return;
             wrapperFlushSaving = true;
             const saved = editorInstance.save();
-            // #39: JSON.stringifyでキーソート統一
-            // #62: sortedReplacer return type改善 — Record | unknown の明示的ユニオン
-            const sortedReplacer = (_key, value) => {
-                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                    const obj = value;
-                    const sorted = {};
-                    for (const k of Object.keys(obj).sort()) {
-                        sorted[k] = obj[k];
-                    }
-                    return sorted;
-                }
-                return value;
-            };
-            const json = JSON.stringify(saved.blocks, sortedReplacer);
+            // #39/#69/#75: JSON.stringifyでキーソート統一 — 共通sortedReplacer使用
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson) {
                 wrapperFlushSaving = false;
@@ -311,7 +323,8 @@ function initBlockEditor() {
                 clearTimeout(saveTimer);
                 saveTimer = null;
             }
-            saveTimer = setTimeout(flushSave, 300);
+            // Ver.2.9 TS#79: マジックナンバー定数化
+            saveTimer = setTimeout(flushSave, SAVE_DEBOUNCE_MS);
         });
         // #41: beforeunloadでnavigator.sendBeacon()使用に変更（同期的に送信可能）
         // #14: sidebar/main順序保証 — mainを先に送信
@@ -324,19 +337,8 @@ function initBlockEditor() {
             if (!editorInstance || !activeEditor)
                 return;
             const saved = editorInstance.save();
-            // #62: sortedReplacer return type改善
-            const sortedReplacer = (_key, value) => {
-                if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                    const obj = value;
-                    const sorted = {};
-                    for (const k of Object.keys(obj).sort()) {
-                        sorted[k] = obj[k];
-                    }
-                    return sorted;
-                }
-                return value;
-            };
-            const json = JSON.stringify(saved.blocks, sortedReplacer);
+            // #62/#69/#75: sortedReplacer共通化使用
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson)
                 return;
@@ -422,7 +424,8 @@ function initBlockEditor() {
                 return;
             if (sidebarSaveTimer)
                 clearTimeout(sidebarSaveTimer);
-            sidebarSaveTimer = setTimeout(flushSidebarSave, 300);
+            // Ver.2.9 TS#79: マジックナンバー定数化
+            sidebarSaveTimer = setTimeout(flushSidebarSave, SAVE_DEBOUNCE_MS);
         });
         // #41: sidebarもsendBeaconに変更
         // #14: sidebar/main順序保証 — sidebarはmainの後に送信（後発イベント）
@@ -468,7 +471,13 @@ function showSaveIndicator(container, state) {
         indicator.className = 'ce-save-indicator';
         parent.insertBefore(indicator, container);
     }
-    indicator.textContent = state === 'saving' ? '...' : state === 'saved' ? '\u2713' : '\u2717';
+    // Ver.2.9 TS#95: save状態テキストi18n化
+    const stateLabels = {
+        saving: i18n.t('save_state_saving') || '...',
+        saved: i18n.t('save_state_saved') || '\u2713',
+        error: i18n.t('save_state_error') || '\u2717',
+    };
+    indicator.textContent = stateLabels[state] || state;
     indicator.className = 'ce-save-indicator ce-save--' + state;
     if (state !== 'saving') {
         const indicatorRef = indicator;
@@ -695,7 +704,8 @@ function initPageSearch() {
                 const text = safeNormalize(row.textContent || '').toLowerCase();
                 row.style.display = text.includes(query) ? '' : 'none';
             });
-        }, 150);
+            // Ver.2.9 TS#79: マジックナンバー定数化
+        }, SEARCH_DEBOUNCE_MS);
     });
 }
 // --- Bulk actions (#D) ---
@@ -755,8 +765,9 @@ function initBulkActions() {
             const status = statusSelect?.value;
             if (!status)
                 return;
+            // Ver.2.9 TS#96: bulk操作エラーメッセージi18nフォールバック追加
             api.bulkStatus(slugs, status).then(() => { location.reload(); }).catch(() => {
-                alert(i18n.t('bulk_status_error'));
+                alert(i18n.t('bulk_status_error') || 'Bulk status change failed.');
             });
         });
     }
@@ -771,8 +782,9 @@ function initBulkActions() {
             }
             if (!confirm(i18n.t('confirm_bulk_delete', { count: String(slugs.length) })))
                 return;
+            // Ver.2.9 TS#96: bulk操作エラーメッセージi18nフォールバック追加
             api.bulkDelete(slugs).then(() => { location.reload(); }).catch(() => {
-                alert(i18n.t('bulk_delete_error'));
+                alert(i18n.t('bulk_delete_error') || 'Bulk delete failed.');
             });
         });
     }
@@ -814,13 +826,13 @@ function showWarnings(warnings) {
         item.textContent = msg;
         containerRef.appendChild(item);
     });
-    // #83: タイマーIDを保持してスタック防止
+    // #83/#79: タイマーIDを保持してスタック防止 + マジックナンバー定数化
     _warningsTimer = setTimeout(() => {
         if (containerRef.isConnected) {
             containerRef.innerHTML = '';
         }
         _warningsTimer = null;
-    }, 8000);
+    }, WARNINGS_DISPLAY_MS);
 }
 // --- Revision diff (#C) ---
 function initRevisionDiff() {
@@ -872,23 +884,38 @@ function showRevisionDiffModal(diff) {
             return `<div class="${cls}">${escHtml(text)}</div>`;
         }).join('');
     };
-    modal.innerHTML = `
-        <div class="ce-diff-modal__backdrop"></div>
-        <div class="ce-diff-modal__content">
-            <button class="ce-diff-modal__close">&times;</button>
-            <div class="ce-diff-added">${renderItems(diff.added, 'ce-diff-line--added')}</div>
-            <div class="ce-diff-removed">${renderItems(diff.removed, 'ce-diff-line--removed')}</div>
-            <div class="ce-diff-changed">${renderItems(diff.changed, 'ce-diff-line--changed')}</div>
-        </div>
-    `;
+    // Ver.2.9 TS#80: innerHTML→DOM API化（XSS安全性向上）
+    modal.innerHTML = '';
+    const backdrop = document.createElement('div');
+    backdrop.className = 'ce-diff-modal__backdrop';
+    const content = document.createElement('div');
+    content.className = 'ce-diff-modal__content';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ce-diff-modal__close';
+    closeBtn.textContent = '\u00D7';
+    content.appendChild(closeBtn);
+    const addSection = document.createElement('div');
+    addSection.className = 'ce-diff-added';
+    addSection.innerHTML = renderItems(diff.added, 'ce-diff-line--added');
+    content.appendChild(addSection);
+    const removeSection = document.createElement('div');
+    removeSection.className = 'ce-diff-removed';
+    removeSection.innerHTML = renderItems(diff.removed, 'ce-diff-line--removed');
+    content.appendChild(removeSection);
+    const changeSection = document.createElement('div');
+    changeSection.className = 'ce-diff-changed';
+    changeSection.innerHTML = renderItems(diff.changed, 'ce-diff-line--changed');
+    content.appendChild(changeSection);
+    modal.appendChild(backdrop);
+    modal.appendChild(content);
     modal.style.display = 'flex';
     const closeModal = () => {
         modal.style.display = 'none';
         // #85: Escapeキーリスナーを解除
         document.removeEventListener('keydown', escHandler);
     };
-    modal.querySelector('.ce-diff-modal__backdrop')?.addEventListener('click', closeModal);
-    modal.querySelector('.ce-diff-modal__close')?.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', closeModal);
     // #85: Escapeキーでモーダルを閉じる
     const escHandler = (e) => {
         if (e.key === 'Escape')
@@ -897,6 +924,7 @@ function showRevisionDiffModal(diff) {
     document.addEventListener('keydown', escHandler);
 }
 // --- Generate report (#F) ---
+// Ver.2.9 TS#83: GenerateReport型を使用
 function showGenerateReport(report) {
     let container = document.querySelector('.ce-generate-report');
     if (!container) {
@@ -963,13 +991,14 @@ function downloadCredentials(username, password, token) {
     const safeUser = escHtml(username);
     const safePw = escHtml(password);
     const safeToken = escHtml(token);
-    const content = `Adlaire Sub-Master Credentials\n` +
+    // Ver.2.9 TS#94: downloadCredentials i18n化
+    const content = `${i18n.t('cred_file_title') || 'Adlaire Sub-Master Credentials'}\n` +
         `================================\n` +
-        `Login ID: ${safeUser}\n` +
-        `Password: ${safePw}\n` +
-        `Token: ${safeToken}\n` +
+        `${i18n.t('cred_file_login_id') || 'Login ID'}: ${safeUser}\n` +
+        `${i18n.t('cred_file_password') || 'Password'}: ${safePw}\n` +
+        `${i18n.t('cred_file_token') || 'Token'}: ${safeToken}\n` +
         `================================\n` +
-        `WARNING: This file is shown only once. Keep it safe.\n`;
+        `${i18n.t('cred_file_warning') || 'WARNING: This file is shown only once. Keep it safe.'}\n`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -978,8 +1007,8 @@ function downloadCredentials(username, password, token) {
     const safeFilename = username.replace(/[^a-zA-Z0-9_-]/g, '_');
     a.download = `adlaire-sub-master-${safeFilename}.txt`;
     a.click();
-    // Ver.2.9 TS#40: revokeObjectURLを遅延実行（ダウンロード完了を待つ）
-    setTimeout(() => { URL.revokeObjectURL(url); }, 5000);
+    // Ver.2.9 TS#40/#79: revokeObjectURLを遅延実行 + マジックナンバー定数化
+    setTimeout(() => { URL.revokeObjectURL(url); }, REVOKE_URL_DELAY_MS);
 }
 // --- User Management UI (Ver.2.9: マスター管理者対応) ---
 function initUserManagement() {
@@ -1084,6 +1113,10 @@ function initUserManagement() {
             api.updateMainPassword(currentPw, newPw).then(() => {
                 alert(i18n.t('password_updated') || 'Password updated successfully.');
                 pwForm.reset();
+                // Ver.2.9 TS#100: 成功時にcurrentPasswordフィールドにフォーカス
+                const currentPwInput = pwForm.querySelector('#ce-current-password');
+                if (currentPwInput)
+                    currentPwInput.focus();
             }).catch((err) => {
                 alert(err instanceof Error ? err.message : String(err));
                 // Ver.2.9 TS#33: パスワードフォームエラー時リセット — パスワードフィールドのみクリア

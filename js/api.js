@@ -15,6 +15,17 @@ function updateCsrfFromResponse(res) {
         csrfToken = newToken;
     }
 }
+// Ver.2.9 TS#73: エラーメッセージ取得ヘルパー（DRY化）
+async function extractApiError(res, fallbackStatus) {
+    let msg = `API error: ${fallbackStatus}`;
+    try {
+        const json = await res.json();
+        msg = json.error || msg;
+    }
+    catch { /* non-JSON response */ }
+    return msg;
+}
+// Ver.2.9 TS#82: GenerateReport型定義 → globals.d.ts に配置
 // #96: URL構築のbuilder helper — URLSearchParams統一
 function buildApiUrl(endpoint, params) {
     let url = `index.php?api=${endpoint}`;
@@ -73,13 +84,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
         try {
             return await res.json();
@@ -98,13 +103,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     /**
@@ -135,13 +134,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     /**
@@ -181,13 +174,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
         const json = await res.json();
         return json.imported;
@@ -200,13 +187,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     async bulkStatus(slugs, status) {
@@ -217,13 +198,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     async bulkDelete(slugs) {
@@ -234,26 +209,14 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     // #103: getRevisionDiff — 戻り値の型安全性チェック追加
     async getRevisionDiff(slug, t1, t2) {
         const res = await fetch(buildApiUrl('revisiondiff', { slug, t1, t2 }));
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
         const json = await res.json();
         return {
@@ -263,16 +226,12 @@ const api = {
         };
     },
     // --- User Management APIs (Ver.2.9: Master管理者対応) ---
+    // Ver.2.9 TS#86: listUsers catch時にconsole.warn追加
     async listUsers() {
         const res = await fetch(buildApiUrl('users'));
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            console.warn('listUsers failed:', res.status);
+            throw new Error(await extractApiError(res, res.status));
         }
         const json = await res.json();
         return json.users ?? [];
@@ -285,13 +244,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
         return res.json();
     },
@@ -306,13 +259,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     // Ver.2.9 #46: ユーザー削除 — username入力検証追加
@@ -326,13 +273,7 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
     // Ver.2.9 #33: パスワード検証 — クライアント側バリデーション追加
@@ -348,15 +289,10 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
+    // Ver.2.9 TS#90: saveSidebar catch時にconsole.warn追加
     async saveSidebar(blocks) {
         const body = new URLSearchParams();
         body.append('blocks', blocks);
@@ -368,13 +304,8 @@ const api = {
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
-            let msg = `API error: ${res.status}`;
-            try {
-                const json = await res.json();
-                msg = json.error || msg;
-            }
-            catch { /* non-JSON response */ }
-            throw new Error(msg);
+            console.warn('saveSidebar failed:', res.status);
+            throw new Error(await extractApiError(res, res.status));
         }
     },
 };

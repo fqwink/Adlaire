@@ -11,7 +11,8 @@ declare(strict_types=1);
  */
 
 $c = $app->config;
-$adminAction = is_string($_GET['admin'] ?? null) ? ($_GET['admin'] ?? 'dashboard') : 'dashboard';
+$adminActionRaw = $_GET['admin'] ?? null;
+$adminAction = is_string($adminActionRaw) ? $adminActionRaw : 'dashboard';
 $allowedActions = ['dashboard', '', 'edit', 'new', 'users'];
 if (!in_array($adminAction, $allowedActions, true)) {
     $adminAction = 'dashboard';
@@ -36,7 +37,7 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
 </head>
 <body>
 <div class="admin-wrap">
-    <?php if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') { $isAdminHttps = false; } else { $isAdminHttps = true; } if (!$isAdminHttps): ?>
+    <?php $isAdminHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'; if (!$isAdminHttps): ?>
         <div style="background:#fff3cd;color:#856404;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:8px;">⚠ HTTPS is not enabled. Admin operations over HTTP are not secure.</div>
     <?php endif; ?>
     <header class="admin-header">
@@ -72,9 +73,10 @@ match ($adminAction) {
 </html>
 <?php
 
+/** @param array<string, array<string, mixed>> $pages */
 function sortPagesByUpdated(array &$pages): void
 {
-    uasort($pages, function (array $a, array $b): int {
+    uasort($pages, static function (array $a, array $b): int {
         $rawA = $a['updated_at'] ?? '1970-01-01';
         $rawB = $b['updated_at'] ?? '1970-01-01';
         $ta = is_string($rawA) ? (strtotime($rawA) ?: 0) : 0;
@@ -169,7 +171,7 @@ function renderAdminDashboard(App $app, string $n): void
     $themesDir = dirname(__DIR__) . '/themes';
     if (is_dir($themesDir)) {
         $dirs = glob($themesDir . '/*', GLOB_ONLYDIR);
-        if (is_array($dirs)) {
+        if ($dirs !== false && $dirs !== []) {
             foreach ($dirs as $dir) {
                 $val = basename($dir);
                 $selected = ($val === $app->config['themeSelect']) ? ' selected' : '';
@@ -194,7 +196,7 @@ function renderAdminDashboard(App $app, string $n): void
     $langOptions = [];
     if (is_dir($langDir)) {
         $langFiles = glob($langDir . '/*.json');
-        if (is_array($langFiles)) {
+        if ($langFiles !== false && $langFiles !== []) {
             foreach ($langFiles as $langFile) {
                 $code = basename($langFile, '.json');
                 $langData = json_decode((string) file_get_contents($langFile), true);
@@ -346,8 +348,8 @@ function renderAdminEditor(App $app, string $n): void
     $status = $pageData['status'] ?? 'published';
     $content = $pageData['content'] ?? '';
     $blocksB64 = '';
-    if (isset($pageData['blocks'])) {
-        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE);
+    if (isset($pageData['blocks']) && is_array($pageData['blocks'])) {
+        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
         if ($blocksJson !== false) {
             $blocksB64 = base64_encode($blocksJson);
         }
@@ -575,7 +577,7 @@ function renderAdminNewPage(App $app, string $n): void
     echo "<h2>" . esc($app->t('admin_new_page_title')) . "</h2>";
     echo "<div class='admin-form'>";
     echo "<label>" . esc($app->t('admin_slug')) . "</label>";
-    echo "<input type='text' id='new-slug' placeholder='page-name' pattern='[a-zA-Z0-9_\\-]+'>";
+    echo "<input type='text' id='new-slug' placeholder='page-name' pattern='[a-zA-Z0-9_\\-]+' maxlength='128'>";
     echo "<label>Format</label>";
     echo "<select id='new-format'><option value='blocks'>Blocks</option><option value='markdown'>Markdown</option></select>";
     echo "<br><br>";

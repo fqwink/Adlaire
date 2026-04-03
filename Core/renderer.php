@@ -13,13 +13,19 @@ declare(strict_types=1);
  */
 
 /** Allowed image URL pattern (protocol-relative // is forbidden) */
-const IMAGE_URL_PATTERN = '#^(?:https?://[^\s<>"]+|/[a-zA-Z0-9_./-][^\s<>"]*|[a-zA-Z0-9_./-][^\s<>"]*)$#';
+const RENDERER_RENDERER_IMAGE_URL_PATTERN = '#^(?:https?://[^\s<>"]+|/[a-zA-Z0-9_./-][^\s<>"]*|[a-zA-Z0-9_./-][^\s<>"]*)$#';
 
 /** Dangerous URI scheme pattern */
-const DANGEROUS_SCHEME_PATTERN = '/^\s*(javascript|vbscript|data)\s*:/i';
+const RENDERER_RENDERER_DANGEROUS_SCHEME_PATTERN = '/^\s*(javascript|vbscript|data)\s*:/i';
 
 /** Protocol-relative URL pattern */
-const PROTOCOL_RELATIVE_PATTERN = '#^\s*//#';
+const RENDERER_RENDERER_PROTOCOL_RELATIVE_PATTERN = '#^\s*//#';
+
+/** Maximum heading level */
+const RENDERER_MAX_HEADING_LEVEL = 3;
+
+/** Minimum heading level */
+const RENDERER_MIN_HEADING_LEVEL = 1;
 
 /**
  * Render blocks array to static HTML string (server-side).
@@ -29,15 +35,19 @@ function renderBlocksToHtml(array $blocks): string
 {
     $html = '';
     foreach ($blocks as $block) {
-        $d = $block['data'] ?? [];
-        $html .= match ($block['type'] ?? '') {
+        if (!is_array($block)) {
+            continue;
+        }
+        $type = (string) ($block['type'] ?? '');
+        $d = is_array($block['data'] ?? null) ? $block['data'] : [];
+        $html .= match ($type) {
             'paragraph' => '<p>' . esc((string) ($d['text'] ?? '')) . '</p>',
-            'heading'   => (function() use ($d) { $l = max(1, min(3, (int) ($d['level'] ?? 2))); return "<h{$l}>" . esc((string) ($d['text'] ?? '')) . "</h{$l}>"; })(),
-            'list'      => (function() use ($d) { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; $items = is_array($d['items'] ?? null) ? $d['items'] : []; return "<{$t}>" . implode('', array_map(fn($i) => '<li>' . esc((string) $i) . '</li>', $items)) . "</{$t}>"; })(),
+            'heading'   => (function() use ($d): string { $l = max(RENDERER_MIN_HEADING_LEVEL, min(RENDERER_MAX_HEADING_LEVEL, (int) ($d['level'] ?? 2))); return "<h{$l}>" . esc((string) ($d['text'] ?? '')) . "</h{$l}>"; })(),
+            'list'      => (function() use ($d): string { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; $items = is_array($d['items'] ?? null) ? $d['items'] : []; return "<{$t}>" . implode('', array_map(fn(mixed $i): string => '<li>' . esc((string) $i) . '</li>', $items)) . "</{$t}>"; })(),
             'code'      => '<pre><code>' . esc((string) ($d['code'] ?? '')) . '</code></pre>',
             'quote'     => '<blockquote>' . esc((string) ($d['text'] ?? '')) . '</blockquote>',
             'delimiter' => '<hr>',
-            'image'     => (function() use ($d) { $url = (string) ($d['url'] ?? ''); $decoded = html_entity_decode($url, ENT_QUOTES, 'UTF-8'); $lower = strtolower(trim($decoded)); if ($url === '' || !preg_match(IMAGE_URL_PATTERN, $url) || preg_match(DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(PROTOCOL_RELATIVE_PATTERN, $decoded)) { $url = ''; } return '<figure><img src="' . esc($url) . '" alt="' . esc((string) ($d['caption'] ?? '')) . '" loading="lazy">' . (isset($d['caption']) && $d['caption'] !== '' ? '<figcaption>' . esc((string) $d['caption']) . '</figcaption>' : '') . '</figure>'; })(),
+            'image'     => (function() use ($d): string { $url = (string) ($d['url'] ?? ''); $decoded = html_entity_decode($url, ENT_QUOTES, 'UTF-8'); $lower = strtolower(trim($decoded)); if ($url === '' || !preg_match(RENDERER_IMAGE_URL_PATTERN, $url) || preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $decoded)) { $url = ''; } $caption = (string) ($d['caption'] ?? ''); return '<figure><img src="' . esc($url) . '" alt="' . esc($caption) . '" loading="lazy">' . ($caption !== '' ? '<figcaption>' . esc($caption) . '</figcaption>' : '') . '</figure>'; })(),
             default     => '',
         };
         $html .= "\n";
@@ -50,6 +60,9 @@ function renderBlocksToHtml(array $blocks): string
  */
 function renderMarkdownToHtml(string $md): string
 {
+    if ($md === '') {
+        return '';
+    }
     $md = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $md) ?? $md;
     $html = htmlspecialchars($md, ENT_QUOTES, 'UTF-8');
 
@@ -71,14 +84,14 @@ function renderMarkdownToHtml(string $md): string
         $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
         $urlDouble = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
         $lower = strtolower(trim($urlDouble));
-        if (preg_match(DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(PROTOCOL_RELATIVE_PATTERN, $urlDouble)) { return esc($m[0]); }
+        if (preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $urlDouble)) { return esc($m[0]); }
         return '<img src="' . esc($url) . '" alt="' . esc($m[1]) . '" loading="lazy">';
     }, $html) ?? $html;
     $html = preg_replace_callback('/\[([^\]]+)\]\(([^)]+)\)/', function ($m) {
         $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
         $urlDouble = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
         $lower = strtolower(trim($urlDouble));
-        if (preg_match(DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(PROTOCOL_RELATIVE_PATTERN, $urlDouble)) { return esc($m[0]); }
+        if (preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $urlDouble)) { return esc($m[0]); }
         return '<a href="' . esc($url) . '">' . esc($m[1]) . '</a>';
     }, $html) ?? $html;
     $html = preg_replace('/^\- (.+)$/m', '<li>$1</li>', $html) ?? $html;

@@ -18,7 +18,7 @@
 
 ## 2. 現行バージョン
 
-**Ver.2.9-45**（2026-04-03）
+**Ver.2.9-46**（2026-04-03）
 
 ---
 
@@ -26,11 +26,12 @@
 
 ### 3.1 Ver.2.x 系（実装済みリリース）
 
-#### Ver.2.9 — マスター管理者アクセス権限 + 品質確定バグ修正（123件精査）
+#### Ver.2.9 — マスター管理者アクセス権限 + 最終品質確定（M1-M10 + 448件）
 
-マスター管理者ユーザーモデル導入（メインmaster 1名 + サブmaster 最大2名）。
-サブmaster認証情報自動生成（73文字hex、3要素認証）。
-品質確定バグ修正123件（PHP 63件 + TS 60件精査）。
+2.0系最終品質確定リリース。マスター管理者ユーザーモデル導入
+（メインmaster 1名 + サブmaster 最大2名、3要素認証73文字hex）。
+品質確定バグ修正: 初期88件 + 追加360件 = 448件
+（PHP 303件 + TS 145件、致命的18件+重大76件+中程度123件+軽微231件）。
 詳細は §4.1 を参照。
 
 #### Ver.2.8 — バグ修正（300件精査・300件実装）
@@ -249,8 +250,8 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | 致命的 | 5 | 8 | 13 | PHP計画 / TS**実装済** |
 | 重大 | 32 | 12 | 44 | PHP計画 / TS**実装済** |
 | 中程度 | 32 | 40 | 72 | PHP計画 / TS**実装済** |
-| 軽微 | 171 | 60 | 231 | 計画 |
-| **合計** | **240** | **120** | **360** | TS致命的+重大+中程度60件**実装済** |
+| 軽微 | 171 | 60 | 231 | PHP計画 / TS**実装済** |
+| **合計** | **240** | **120** | **360** | TS120件全件**実装済** |
 
 主な致命的・重大項目:
 - PHP#5: index.php 404後のexit確保
@@ -333,6 +334,71 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | 58 | 中程度 | editInplace.ts | パスワードフォームエラー時クリア | **実装済** |
 | 59 | 中程度 | editInplace.ts | i18n ready Promiseインスタンス確認 | **実装済** |
 | 60 | 中程度 | editInplace.ts | D&D reorder失敗時UI復元 | **実装済** |
+
+##### TS側軽微品質確定（60件精査・60件実装）
+
+| # | カテゴリ | 対象 | 改善概要 | 状態 |
+|---|---------|------|---------|:----:|
+| 61 | パフォーマンス | markdown.ts | headings正規表現を事前コンパイル化 | **実装済** |
+| 62 | パフォーマンス | markdown.ts | bold/italic正規表現を事前コンパイル化 | **実装済** |
+| 63 | パフォーマンス | markdown.ts | image/link正規表現を事前コンパイル化 | **実装済** |
+| 64 | パフォーマンス | markdown.ts | taskList正規表現を事前コンパイル化 | **実装済** |
+| 65 | パフォーマンス | markdown.ts | list/blockquote正規表現を事前コンパイル化 | **実装済** |
+| 66 | パフォーマンス | markdown.ts | paragraph正規表現を事前コンパイル化 | **実装済** |
+| 67 | パフォーマンス | editor.ts | sanitizeHtml正規表現を事前コンパイル化 | **実装済** |
+| 68 | パフォーマンス | editInplace.ts | DOM検索結果のキャッシュ（querySelectorAll再呼出し削減） | **実装済** |
+| 69 | パフォーマンス | editInplace.ts | sortedReplacer関数のDRY化（flushSave/beforeunload共通化） | **実装済** |
+| 70 | パフォーマンス | editor.ts | createBlockWrapper内のボタン生成をヘルパーメソッド化 | **実装済** |
+| 71 | コード品質 | editor.ts | BlockToolData interfaceにlanguageフィールド追加 | **実装済** |
+| 72 | コード品質 | editor.ts | getEditorFromElement戻り値型注釈の一貫性 | **実装済** |
+| 73 | コード品質 | api.ts | エラーメッセージ文字列のDRY化（共通ヘルパー） | **実装済** |
+| 74 | コード品質 | api.ts | CSRF更新処理のDRY化（全メソッド統一パターン） | **実装済** |
+| 75 | コード品質 | editInplace.ts | initBlockEditor内のJSON.stringify sortedReplacerをモジュールスコープに移動 | **実装済** |
+| 76 | コード品質 | editor.ts | builtinTools各ブロックのsanitizeHtml適用パターン統一 | **実装済** |
+| 77 | コード品質 | markdown.ts | escAttrヘルパーをモジュールスコープに昇格 | **実装済** |
+| 78 | コード品質 | editor.ts | 未使用の`as any`キャスト削減（saveUndoStateをpublicに） | **実装済** |
+| 79 | コード品質 | editInplace.ts | マジックナンバー定数化（1_048_576, 300, 8000, 5000） | **実装済** |
+| 80 | コード品質 | editInplace.ts | showRevisionDiffModal innerHTML→DOM API化 | **実装済** |
+| 81 | 型改善 | globals.d.ts | BlockToolData型をglobals.d.tsにも追加 | **実装済** |
+| 82 | 型改善 | api.ts | GenerateReport型定義追加 | **実装済** |
+| 83 | 型改善 | editInplace.ts | showGenerateReport引数型をGenerateReport型に統一 | **実装済** |
+| 84 | 型改善 | editor.ts | EditorData.blocks型をReadonlyArray化 | **実装済** |
+| 85 | 型改善 | editInplace.ts | downloadCredentials引数にreadonlyマーク | **実装済** |
+| 86 | エラーハンドリング | api.ts | listUsers catch時にconsole.warn追加 | **実装済** |
+| 87 | エラーハンドリング | editInplace.ts | initBlockEditor JSON.parseにtry-catch + console.warn | **実装済** |
+| 88 | エラーハンドリング | editInplace.ts | renderMarkdownContent atob失敗時console.warn | **実装済** |
+| 89 | エラーハンドリング | editInplace.ts | renderBlocksContent atob失敗時console.warn | **実装済** |
+| 90 | エラーハンドリング | api.ts | saveSidebar catch時にconsole.warn追加 | **実装済** |
+| 91 | null安全 | editor.ts | image block save時のnullチェック強化 | **実装済** |
+| 92 | null安全 | editInplace.ts | showFieldFeedback orig null対応 | **実装済** |
+| 93 | null安全 | editInplace.ts | initPageSearch input.value trim前のnullチェック | **実装済** |
+| 94 | UX | editInplace.ts | downloadCredentials i18n化（ファイル内テキスト翻訳対応） | **実装済** |
+| 95 | UX | editInplace.ts | showSaveIndicator状態テキストi18n化 | **実装済** |
+| 96 | UX | editInplace.ts | bulk操作エラーメッセージi18n対応フォールバック追加 | **実装済** |
+| 97 | UX | editor.ts | toolboxボタンにtitle属性追加 | **実装済** |
+| 98 | UX | editor.ts | image URLプレースホルダーi18n化 | **実装済** |
+| 99 | UX | editor.ts | image captionプレースホルダーi18n化 | **実装済** |
+| 100 | UX | editInplace.ts | パスワード変更成功時フォームフォーカス制御 | **実装済** |
+| 101 | アクセシビリティ | editor.ts | heading levelボタンにaria-label追加 | **実装済** |
+| 102 | アクセシビリティ | editor.ts | list toggleボタンにaria-label追加 | **実装済** |
+| 103 | アクセシビリティ | editor.ts | deleteブロックボタンにaria-label追加 | **実装済** |
+| 104 | アクセシビリティ | editor.ts | moveUp/moveDownボタンにaria-label追加 | **実装済** |
+| 105 | アクセシビリティ | editor.ts | addブロックボタンにaria-label追加 | **実装済** |
+| 106 | CSS | themes/admin.css | ce-heading-wrapのdisplay:flex追加 | **実装済** |
+| 107 | CSS | themes/admin.css | ce-list-wrapのdisplay:flex追加 | **実装済** |
+| 108 | CSS | themes/admin.css | ce-sub-master-credentialsスタイル追加 | **実装済** |
+| 109 | CSS | themes/admin.css | ce-warnings__itemスタイル追加 | **実装済** |
+| 110 | CSS | themes/admin.css | ce-generate-report__rowスタイル追加 | **実装済** |
+| 111 | CSS | themes/admin.css | dark mode ce-heading__level/ce-list__toggleスタイル | **実装済** |
+| 112 | CSS | themes/AP-Default/style.css | ce-heading-wrap/ce-list-wrapスタイル追加 | **実装済** |
+| 113 | CSS | themes/AP-Adlaire/style.css | ce-heading-wrap/ce-list-wrapスタイル追加 | **実装済** |
+| 114 | CSS | themes/AP-Default/minimal.css | font-family system-uiフォールバック追加 | **実装済** |
+| 115 | CSS | themes/AP-Adlaire/minimal.css | font-family system-uiフォールバック追加 | **実装済** |
+| 116 | i18n | ja.json | downloadCredentialsファイル内テキスト翻訳キー追加 | **実装済** |
+| 117 | i18n | en.json | downloadCredentialsファイル内テキスト翻訳キー追加 | **実装済** |
+| 118 | i18n | ja.json | save状態テキスト翻訳キー追加（saving/saved/error） | **実装済** |
+| 119 | i18n | en.json | save状態テキスト翻訳キー追加（saving/saved/error） | **実装済** |
+| 120 | ビルド設定 | tsconfig.json | noUnusedLocals/noUnusedParameters追加 | **実装済** |
 
 ### 4.2 Ver.2.8 — バグ修正（300件精査）
 

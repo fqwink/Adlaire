@@ -14,6 +14,26 @@
 const _mdSepTest = /^\|[\s\-:|]+\|$/;
 const _mdDangerousProto = /^\s*(javascript|data|vbscript)\s*:/i;
 const _mdSafeIdStrip = /[^a-zA-Z0-9_-]/g;
+// Ver.2.9 TS#61-#66: 正規表現事前コンパイル（毎回のコンパイルコスト削減）
+const _mdHeading3 = /^### (.+?)[\s#]*$/gm;
+const _mdHeading2 = /^## (.+?)[\s#]*$/gm;
+const _mdHeading1 = /^# (.+?)[\s#]*$/gm;
+const _mdHr = /^---$/gm;
+const _mdBoldItalic = /\*\*\*(.+?)\*\*\*/g;
+const _mdBold = /\*\*(.+?)\*\*/g;
+const _mdItalic = /\*(.+?)\*/g;
+const _mdImage = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
+const _mdLink = /\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
+const _mdTaskDone = /^[\s]*\- \[x\] (.+)$/gim;
+const _mdTaskTodo = /^[\s]*\- \[ \] (.+)$/gm;
+const _mdUl = /^\- (.+)$/gm;
+const _mdOl = /^\d+\. (.+)$/gm;
+const _mdBqMark = /^&gt; (.+)$/gm;
+const _mdParagraph = /^(?!<[a-z\/])(?!%%CODEBLOCK_)(.*\S.*)$/gm;
+
+// Ver.2.9 TS#77: escAttrヘルパーをモジュールスコープに昇格（DRY化）
+const _mdEscAttr = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 function markdownToHtml(md: string): string {
     let html = md;
@@ -44,9 +64,8 @@ function markdownToHtml(md: string): string {
         return `<code>${code}</code>`;
     });
 
-    // #8: 属性値エスケープヘルパー
-    const escAttr = (s: string): string =>
-        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    // #8/#77: 属性値エスケープヘルパー — モジュールスコープ _mdEscAttr を使用
+    const escAttr = _mdEscAttr;
 
     // --- Footnote definitions: [^id]: text → collect and remove ---
     const footnotes: Record<string, string> = {};
@@ -88,29 +107,33 @@ function markdownToHtml(md: string): string {
     });
 
     // Headings (### > ## > #) — #22: 末尾の強調記号ネスト処理（#, =を除去）
-    html = html.replace(/^### (.+?)[\s#]*$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+?)[\s#]*$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+?)[\s#]*$/gm, '<h1>$1</h1>');
+    // Ver.2.9 TS#61: 事前コンパイル済み正規表現使用
+    _mdHeading3.lastIndex = 0; html = html.replace(_mdHeading3, '<h3>$1</h3>');
+    _mdHeading2.lastIndex = 0; html = html.replace(_mdHeading2, '<h2>$1</h2>');
+    _mdHeading1.lastIndex = 0; html = html.replace(_mdHeading1, '<h1>$1</h1>');
 
     // Horizontal rule
-    html = html.replace(/^---$/gm, '<hr>');
+    _mdHr.lastIndex = 0; html = html.replace(_mdHr, '<hr>');
 
     // Bold and italic
-    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Ver.2.9 TS#62: 事前コンパイル済み正規表現使用
+    _mdBoldItalic.lastIndex = 0; html = html.replace(_mdBoldItalic, '<strong><em>$1</em></strong>');
+    _mdBold.lastIndex = 0; html = html.replace(_mdBold, '<strong>$1</strong>');
+    _mdItalic.lastIndex = 0; html = html.replace(_mdItalic, '<em>$1</em>');
 
     // Images ![alt](url) — must come before links
-    // Ver.2.9 #34: 正規表現改善 — URL内のスペースとタイトル属性対応
-    html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, alt: string, url: string, title: string | undefined) => {
+    // Ver.2.9 #34/#63: 正規表現改善 + 事前コンパイル化
+    _mdImage.lastIndex = 0;
+    html = html.replace(_mdImage, (_m, alt: string, url: string, title: string | undefined) => {
         if (_mdDangerousProto.test(url)) return `<img src="" alt="${escAttr(alt)}">`;
         const titleAttr = title ? ` title="${escAttr(title)}"` : '';
         return `<img src="${escAttr(url)}" alt="${escAttr(alt)}"${titleAttr}>`;
     });
 
     // Links [text](url)
-    // Ver.2.9 #34: 正規表現改善 — URL内のスペースとタイトル属性対応
-    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, text: string, url: string, title: string | undefined) => {
+    // Ver.2.9 #34/#63: 正規表現改善 + 事前コンパイル化
+    _mdLink.lastIndex = 0;
+    html = html.replace(_mdLink, (_m, text: string, url: string, title: string | undefined) => {
         if (_mdDangerousProto.test(url)) return `<a href="">${text}</a>`;
         const titleAttr = title ? ` title="${escAttr(title)}"` : '';
         return `<a href="${escAttr(url)}"${titleAttr}>${text}</a>`;
@@ -183,14 +206,20 @@ function markdownToHtml(md: string): string {
     // - [x] done → checked checkbox, - [ ] todo → unchecked checkbox
     // #24: [X]大文字X対応 — フラグにi��追加
     // Ver.2.9 #25: タスクリスト — 行頭スペースを許容（インデント対応）
-    html = html.replace(/^[\s]*\- \[x\] (.+)$/gim, '<li class="task done"><input type="checkbox" checked disabled> $1</li>');
-    html = html.replace(/^[\s]*\- \[ \] (.+)$/gm, '<li class="task"><input type="checkbox" disabled> $1</li>');
+    // Ver.2.9 TS#64: 事前コンパイル済み正規表現使用
+    _mdTaskDone.lastIndex = 0;
+    html = html.replace(_mdTaskDone, '<li class="task done"><input type="checkbox" checked disabled> $1</li>');
+    _mdTaskTodo.lastIndex = 0;
+    html = html.replace(_mdTaskTodo, '<li class="task"><input type="checkbox" disabled> $1</li>');
 
     // Unordered list items (must come after task lists)
-    html = html.replace(/^\- (.+)$/gm, '<li>$1</li>');
+    // Ver.2.9 TS#65: 事前コンパイル済み正規表現使用
+    _mdUl.lastIndex = 0;
+    html = html.replace(_mdUl, '<li>$1</li>');
 
     // Ordered list items: 1. item
-    html = html.replace(/^\d+\. (.+)$/gm, '<li class="ol">$1</li>');
+    _mdOl.lastIndex = 0;
+    html = html.replace(_mdOl, '<li class="ol">$1</li>');
 
     // Wrap consecutive <li> in <ul> or <ol>
     html = html.replace(/((?:<li class="ol">[\s\S]*?<\/li>\n?)+)/g, (m) => {
@@ -202,14 +231,18 @@ function markdownToHtml(md: string): string {
     });
 
     // Blockquotes — merge consecutive lines into single block
-    html = html.replace(/^&gt; (.+)$/gm, '%%BQ%%$1%%/BQ%%');
+    // Ver.2.9 TS#65: 事前コンパイル済み正規表現使用
+    _mdBqMark.lastIndex = 0;
+    html = html.replace(_mdBqMark, '%%BQ%%$1%%/BQ%%');
     html = html.replace(/((?:%%BQ%%.*%%\/BQ%%\n?)+)/g, (m) => {
         const content = m.replace(/%%\/?BQ%%/g, '').trim().replace(/\n/g, '<br>');
         return `<blockquote>${content}</blockquote>`;
     });
 
     // #120: Paragraphs — 空白のみの行を除外する条件を明確化
-    html = html.replace(/^(?!<[a-z\/])(?!%%CODEBLOCK_)(.*\S.*)$/gm, '<p>$1</p>');
+    // Ver.2.9 TS#66: 事前コンパイル済み正規表現使用
+    _mdParagraph.lastIndex = 0;
+    html = html.replace(_mdParagraph, '<p>$1</p>');
 
     // --- Footnote section ---
     const fnIds = Object.keys(footnotes);

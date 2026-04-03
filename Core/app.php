@@ -16,8 +16,8 @@ final class App
 {
     public const VERSION_MAJOR = 2;
     public const VERSION_MINOR = 9;
-    public const VERSION_BUILD = 43;
-    public const VERSION = 'Ver.2.9-43';
+    public const VERSION_BUILD = 45;
+    public const VERSION = 'Ver.2.9-45';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -25,8 +25,23 @@ final class App
     /** Minimum password length */
     private const MIN_PASSWORD_LENGTH = 8;
 
+    /** Maximum password length */
+    private const MAX_PASSWORD_LENGTH = 256;
+
+    /** Maximum username length */
+    private const MAX_USERNAME_LENGTH = 64;
+
     /** Weak passwords blacklist */
     private const WEAK_PASSWORDS = ['admin', 'password', '12345678', 'adlaire'];
+
+    /** Allowed languages */
+    private const ALLOWED_LANGUAGES = ['en', 'ja'];
+
+    /** Host validation pattern */
+    private const HOST_PATTERN = '/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/';
+
+    /** Slug sanitization pattern */
+    private const SLUG_SANITIZE_PATTERN = '/[^a-zA-Z0-9_\-]/';
 
     /** JSON encoding flags for safe JS embedding */
     private const JSON_JS_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
@@ -89,9 +104,9 @@ final class App
         $rp = is_string($rpRaw) ? $rpRaw : '';
 
         $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (!is_string($httpHost) || preg_match('/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/', $httpHost) !== 1) {
+        if (!is_string($httpHost) || preg_match(self::HOST_PATTERN, $httpHost) !== 1) {
             $httpHost = $_SERVER['SERVER_NAME'] ?? 'localhost';
-            if (!is_string($httpHost) || preg_match('/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/', $httpHost) !== 1) {
+            if (!is_string($httpHost) || preg_match(self::HOST_PATTERN, $httpHost) !== 1) {
                 $httpHost = 'localhost';
             }
         }
@@ -108,7 +123,7 @@ final class App
         $hostResult = preg_replace('#/+#', '/', $host);
         $host = '//' . (is_string($hostResult) ? $hostResult : $host);
 
-        $rpResult = preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp);
+        $rpResult = ($rp !== '') ? preg_replace('/[^a-zA-Z0-9_\-\/]/', '', $rp) : '';
         $rp = is_string($rpResult) ? trim($rpResult, '/') : '';
 
         return [$host, $rp];
@@ -179,8 +194,6 @@ final class App
             } elseif (!isset($this->config[$key]) || $this->config[$key] === '') {
                 $this->config[$key] = $this->defaults[$key] ?? $val;
             }
-
-
         }
     }
 
@@ -366,15 +379,21 @@ final class App
     private function loadLanguage(): void
     {
         $lang = $this->config['language'] ?? 'ja';
-        if (!in_array($lang, ['en', 'ja'], true)) {
+        if (!in_array($lang, self::ALLOWED_LANGUAGES, true)) {
             $lang = 'ja';
         }
         $this->language = $lang;
         $file = dirname(__DIR__) . '/data/lang/' . basename($lang) . '.json';
         if (!is_file($file)) {
             error_log('Adlaire: Language file not found: ' . $file);
-            $this->translations = [];
-            return;
+            $fallbackFile = dirname(__DIR__) . '/data/lang/ja.json';
+            if ($lang !== 'ja' && is_file($fallbackFile)) {
+                $file = $fallbackFile;
+                error_log('Adlaire: Falling back to ja.json');
+            } else {
+                $this->translations = [];
+                return;
+            }
         }
         $json = file_get_contents($file);
         if ($json === false) {
@@ -394,9 +413,14 @@ final class App
     /** @param array<string, string> $params */
     public function t(string $key, array $params = []): string
     {
+        if ($key === '') {
+            return '';
+        }
         $str = $this->translations[$key] ?? $key;
-        foreach ($params as $k => $v) {
-            $str = str_replace(':' . $k, (string) $v, $str);
+        if ($params !== []) {
+            foreach ($params as $k => $v) {
+                $str = str_replace(':' . $k, (string) $v, $str);
+            }
         }
         $str = preg_replace('/:[a-zA-Z_]+/', '', $str) ?? $str;
         return $str;
@@ -426,7 +450,7 @@ final class App
     {
         $slug = str_replace(' ', '-', $page);
         $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
-        $slug = (string) preg_replace('/[^a-zA-Z0-9_\-]/', '', $slug);
+        $slug = (string) preg_replace(self::SLUG_SANITIZE_PATTERN, '', $slug);
         return $slug;
     }
 
@@ -453,11 +477,11 @@ final class App
         $username = is_string($_POST['username'] ?? null) ? trim($_POST['username'] ?? '') : '';
         $input = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
 
-        if ($username === '' || strlen($username) > 64) {
+        if ($username === '' || strlen($username) > self::MAX_USERNAME_LENGTH) {
             return $this->t('wrong_password');
         }
 
-        if (strlen($input) > 256) {
+        if (strlen($input) > self::MAX_PASSWORD_LENGTH) {
             return $this->t('wrong_password');
         }
 
@@ -470,7 +494,7 @@ final class App
             return $this->t('wrong_password');
         }
 
-        $stored = $userData['password'];
+        $stored = (string) $userData['password'];
         if (!password_verify($input, $stored)) {
             return $this->t('wrong_password');
         }
@@ -554,6 +578,7 @@ final class App
         return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
     }
 
+    /** @return array<int, array{type: string, data: array<string, mixed>}> */
     public function getSidebarBlocks(): array
     {
         $config = $this->storage->readConfig();
@@ -565,6 +590,7 @@ final class App
         return is_array($data) ? $data : [];
     }
 
+    /** @param array<int, array{type: string, data: array<string, mixed>}> $blocks */
     public function saveSidebarBlocks(array $blocks): bool
     {
         $json = json_encode($blocks, JSON_UNESCAPED_UNICODE);
@@ -589,7 +615,7 @@ final class App
 
     public function content(string $id, string $content): void
     {
-        $format = $this->config['pageFormat'] ?? 'blocks';
+        $format = (string) ($this->config['pageFormat'] ?? 'blocks');
         $isPage = ($id === $this->config['page']);
 
         if ($format === 'blocks' && $isPage) {

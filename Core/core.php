@@ -19,13 +19,13 @@ declare(strict_types=1);
  */
 final class FileStorage
 {
-    private string $basePath;
-    private string $configFile;
-    private string $configLock;
-    private string $pagesDir;
-    private string $backupsDir;
-    private string $revisionsDir;
-    private string $usersFile;
+    private readonly string $basePath;
+    private readonly string $configFile;
+    private readonly string $configLock;
+    private readonly string $pagesDir;
+    private readonly string $backupsDir;
+    private readonly string $revisionsDir;
+    private readonly string $usersFile;
     private bool $migrated = false;
 
     /** File permission for sensitive data files */
@@ -33,6 +33,9 @@ final class FileStorage
 
     /** Directory permission */
     private const DIR_PERMISSION = 0755;
+
+    /** Public file permission for non-sensitive assets */
+    private const PUBLIC_FILE_PERMISSION = 0644;
 
     /** Maximum number of users */
     private const MAX_USERS = 3;
@@ -52,6 +55,24 @@ final class FileStorage
 
     /** JSON encoding flags for data files */
     private const JSON_FLAGS = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
+
+    /** Slug validation pattern (precompiled) */
+    private const SLUG_PATTERN = '/^[a-zA-Z0-9_-]+$/';
+
+    /** Timestamp validation pattern */
+    private const TIMESTAMP_PATTERN = '/^\d{8}_\d{6}(_[a-f0-9]+)?$/';
+
+    /** Username validation pattern */
+    private const USERNAME_PATTERN = '/^[a-zA-Z0-9_-]{1,64}$/';
+
+    /** Lock retry count */
+    private const LOCK_RETRY_COUNT = 3;
+
+    /** Lock retry wait in microseconds */
+    private const LOCK_RETRY_WAIT = 50000;
+
+    /** Memory usage threshold (80%) */
+    private const MEMORY_THRESHOLD = 0.8;
 
     public function __construct(string $basePath = 'data')
     {
@@ -104,7 +125,7 @@ final class FileStorage
         if ($slug === '') {
             return false;
         }
-        return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $slug);
+        return (bool) preg_match(self::SLUG_PATTERN, $slug);
     }
 
     /**
@@ -166,7 +187,10 @@ final class FileStorage
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
-                    $this->atomicWrite($dest, json_encode($pageData, self::JSON_FLAGS));
+                    $pageJson = json_encode($pageData, self::JSON_FLAGS);
+                    if ($pageJson !== false) {
+                        $this->atomicWrite($dest, $pageJson);
+                    }
                     @unlink($file);
                 }
             }
@@ -215,12 +239,12 @@ final class FileStorage
         }
 
         $locked = false;
-        for ($retry = 0; $retry < 3; $retry++) {
+        for ($retry = 0; $retry < self::LOCK_RETRY_COUNT; $retry++) {
             if (flock($lockFp, LOCK_EX | LOCK_NB)) {
                 $locked = true;
                 break;
             }
-            usleep(50000);
+            usleep(self::LOCK_RETRY_WAIT);
         }
         if (!$locked) {
             if (!flock($lockFp, LOCK_EX)) {
@@ -417,10 +441,11 @@ final class FileStorage
         }
 
         $pages = [];
-        $memoryLimit = (int) ini_get('memory_limit');
+        $memoryLimitRaw = ini_get('memory_limit');
+        $memoryLimit = is_string($memoryLimitRaw) ? (int) $memoryLimitRaw : 0;
         if ($memoryLimit > 0) {
             $memoryLimitBytes = $memoryLimit * 1024 * 1024;
-            if (memory_get_usage(true) > (int) ($memoryLimitBytes * 0.8)) {
+            if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {
                 error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
                 if ($cachedIndex !== null) {
                     foreach ($cachedIndex as $slug => $meta) {
@@ -444,16 +469,18 @@ final class FileStorage
             }
         } else {
             $files = glob($this->pagesDir . '/*.json');
-            if (is_array($files)) {
-                foreach ($files as $file) {
-                    if (is_dir($file) || is_link($file)) {
-                        continue;
-                    }
-                    $slug = basename($file, '.json');
-                    $data = $this->readPageData($slug);
-                    if ($data !== false) {
-                        $pages[$slug] = $data;
-                    }
+            if ($files === false) {
+                error_log('Adlaire: glob() failed for pages directory: ' . $this->pagesDir);
+                return $pages;
+            }
+            foreach ($files as $file) {
+                if (is_dir($file) || is_link($file)) {
+                    continue;
+                }
+                $slug = basename($file, '.json');
+                $data = $this->readPageData($slug);
+                if ($data !== false) {
+                    $pages[$slug] = $data;
                 }
             }
 
@@ -467,7 +494,10 @@ final class FileStorage
                     'updated_at' => $data['updated_at'] ?? '',
                 ];
             }
-            $this->atomicWrite($cacheFile, json_encode($cacheSummary, self::JSON_FLAGS));
+            $cacheJson = json_encode($cacheSummary, self::JSON_FLAGS);
+            if ($cacheJson !== false) {
+                $this->atomicWrite($cacheFile, $cacheJson);
+            }
         }
 
         return $pages;
@@ -585,10 +615,10 @@ final class FileStorage
     {
         $pattern = $this->backupsDir . '/config.*.json';
         $files = glob($pattern);
-        if (!is_array($files) || count($files) <= self::MAX_BACKUPS) {
+        if ($files === false || count($files) <= self::MAX_BACKUPS) {
             return;
         }
-        usort($files, function (string $a, string $b): int {
+        usort($files, static function (string $a, string $b): int {
             $mtimeA = filemtime($a);
             $mtimeB = filemtime($b);
             if ($mtimeA === false) { $mtimeA = 0; }
@@ -617,7 +647,12 @@ final class FileStorage
         }
 
         $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
-        $this->atomicWrite($revFile, json_encode($pageData, self::JSON_FLAGS));
+        $revJson = json_encode($pageData, self::JSON_FLAGS);
+        if ($revJson === false) {
+            error_log('Adlaire: Failed to encode revision JSON for: ' . $slug);
+            return;
+        }
+        $this->atomicWrite($revFile, $revJson);
 
         // Rotate old revisions
         $files = glob($dir . '/*.json');
@@ -668,7 +703,7 @@ final class FileStorage
         if (!self::validateSlug($slug)) {
             return false;
         }
-        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
+        if (!preg_match(self::TIMESTAMP_PATTERN, $timestamp)) {
             return false;
         }
 
@@ -702,10 +737,10 @@ final class FileStorage
             return [];
         }
         $data = json_decode($raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
             return [];
         }
-        return is_array($data) ? $data : [];
+        return array_values(array_filter($data, 'is_string'));
     }
 
     /** @param list<string> $slugs */
@@ -717,7 +752,7 @@ final class FileStorage
                 return false;
             }
         }
-        $json = json_encode($slugs, JSON_UNESCAPED_UNICODE);
+        $json = json_encode(array_values($slugs), JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             error_log('Adlaire: Failed to encode page order JSON');
             return false;
@@ -757,12 +792,13 @@ final class FileStorage
         return $result;
     }
 
+    /** @return array<string, mixed>|false */
     public function getRevisionData(string $slug, string $timestamp): array|false
     {
         if (!self::validateSlug($slug)) {
             return false;
         }
-        if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $timestamp)) {
+        if (!preg_match(self::TIMESTAMP_PATTERN, $timestamp)) {
             return false;
         }
         $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
@@ -782,6 +818,7 @@ final class FileStorage
 
     // --- User management ---
 
+    /** @return array<string, array<string, mixed>> */
     public function readUsers(): array
     {
         if (!file_exists($this->usersFile) || is_link($this->usersFile)) {
@@ -799,9 +836,10 @@ final class FileStorage
         return $data['users'] ?? [];
     }
 
+    /** @param array<string, mixed> $data */
     public function writeUser(string $username, array $data): bool
     {
-        if ($username === '' || !preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $username)) {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
             return false;
         }
         $users = $this->readUsers();
@@ -840,6 +878,7 @@ final class FileStorage
         return $this->writeUsersFile($users);
     }
 
+    /** @return array<string, array<string, mixed>> */
     public function listUsers(): array
     {
         $users = $this->readUsers();
@@ -872,6 +911,7 @@ final class FileStorage
         return file_exists($this->usersFile) && !is_link($this->usersFile);
     }
 
+    /** @return array<string, mixed>|false */
     public function getUser(string $username): array|false
     {
         $users = $this->readUsers();
@@ -881,6 +921,7 @@ final class FileStorage
         return $users[$username];
     }
 
+    /** @return array{login_id: string, password: string, token: string} */
     public function generateSubMasterCredentials(): array
     {
         $loginId = bin2hex(random_bytes(8));
@@ -906,15 +947,18 @@ final class FileStorage
     {
         $users = $this->readUsers();
         if (!isset($users[$username])) {
+            error_log('Adlaire: Cannot disable non-existent user: ' . $username);
             return false;
         }
         if (!empty($users[$username]['is_main'])) {
+            error_log('Adlaire: Cannot disable main master user');
             return false;
         }
         $users[$username]['enabled'] = false;
         return $this->writeUsersFile($users);
     }
 
+    /** @param array<string, array<string, mixed>> $users */
     private function writeUsersFile(array $users): bool
     {
         $data = [

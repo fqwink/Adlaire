@@ -27,6 +27,10 @@ require __DIR__ . '/Core/helpers.php';
 require __DIR__ . '/Core/core.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Strict');
+    ini_set('session.use_only_cookies', '1');
     session_start();
 }
 
@@ -70,7 +74,7 @@ function detect_password_hash(): array
 /** @return array{ok: bool, message: string, warning?: bool} */
 function detect_https(): array
 {
-    $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    $ok = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
     return ['ok' => $ok, 'message' => $ok ? 'HTTPS enabled' : 'HTTPS not detected (recommended)', 'warning' => !$ok];
 }
 
@@ -241,13 +245,18 @@ function install_execute(string $siteName, string $locale, string $password): ar
         return ['ok' => false, 'message' => 'Failed to encode install.lock JSON'];
     }
     $lockPath = __DIR__ . '/data/system/install.lock';
-    $lockResult = file_put_contents($lockPath, $lockJson);
-
-    if ($lockResult === false) {
+    $tmpLock = tempnam(dirname($lockPath), '.tmp_');
+    if ($tmpLock === false || file_put_contents($tmpLock, $lockJson, LOCK_EX) === false) {
+        if ($tmpLock !== false) { @unlink($tmpLock); }
         @unlink(__DIR__ . '/data/config.json');
         return ['ok' => false, 'message' => 'Failed to create install.lock'];
     }
-    chmod($lockPath, 0600);
+    chmod($tmpLock, 0600);
+    if (!rename($tmpLock, $lockPath)) {
+        @unlink($tmpLock);
+        @unlink(__DIR__ . '/data/config.json');
+        return ['ok' => false, 'message' => 'Failed to create install.lock'];
+    }
 
     return ['ok' => true, 'message' => 'Installation completed successfully'];
 }
@@ -318,6 +327,7 @@ $csrf = security_csrf_token();
     <title>Adlaire Setup — Step <?= (int) $step ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
     <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         body{font-family:Verdana,sans-serif;background:#f5f5f5;color:#333;line-height:1.6;}
@@ -464,7 +474,7 @@ $csrf = security_csrf_token();
         </select>
 
         <label>Admin Username</label>
-        <input type="text" name="admin_username" value="<?= esc($_POST['admin_username'] ?? 'admin') ?>" pattern="[a-zA-Z0-9_\-]+" maxlength="64">
+        <input type="text" name="admin_username" value="<?= esc($_POST['admin_username'] ?? 'admin') ?>" pattern="[a-zA-Z0-9_\-]{2,32}" maxlength="32" minlength="2">
 
         <label>Admin Password * (min 8 characters)</label>
         <input type="password" name="admin_password" minlength="8" required>
