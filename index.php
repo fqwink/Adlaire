@@ -51,7 +51,8 @@ $nonce = bin2hex(random_bytes(16));
 $app->nonce = $nonce;
 
 // --- Security headers ---
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
+$cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'";
+header($cspHeader);
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {
@@ -59,7 +60,6 @@ if (isset($_GET['admin'])) {
         header('Location: ?login');
         exit;
     }
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'");
     require __DIR__ . '/Core/admin-ui.php';
     ob_end_flush();
     exit;

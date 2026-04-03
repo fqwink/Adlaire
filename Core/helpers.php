@@ -45,7 +45,9 @@ function login_rate_check(): bool
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
     $rateDir = __DIR__ . '/../data/system';
     if (!is_dir($rateDir)) {
-        @mkdir($rateDir, 0755, true);
+        if (!@mkdir($rateDir, 0755, true) && !is_dir($rateDir)) {
+            return true;
+        }
     }
     $rateFile = $rateDir . '/rate_' . hash('sha256', $ip) . '.json';
 
@@ -72,7 +74,10 @@ function login_rate_check(): bool
     }
 
     $attempts[] = $now;
-    $fp = fopen($rateFile, 'c');
+    if (!is_file($rateFile)) {
+        file_put_contents($rateFile, '[]', LOCK_EX);
+    }
+    $fp = fopen($rateFile, 'r+');
     if ($fp !== false) {
         flock($fp, LOCK_EX);
         ftruncate($fp, 0);

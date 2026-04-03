@@ -44,11 +44,11 @@ function detect_files_writable(): array
     if (!is_dir($dir)) {
         $created = @mkdir($dir, 0755, true);
         if (!$created) {
-            return ['ok' => false, 'message' => 'Cannot create data/ directory'];
+            return ['ok' => false, 'message' => 'Cannot create files/ directory'];
         }
     }
     $ok = is_writable($dir);
-    return ['ok' => $ok, 'message' => $ok ? 'data/ is writable' : 'data/ is not writable (set 755)'];
+    return ['ok' => $ok, 'message' => $ok ? 'files/ is writable' : 'files/ is not writable (set 755)'];
 }
 
 function detect_session(): array
@@ -205,7 +205,8 @@ function security_csrf_verify(): bool
 
 // --- Router ---
 
-$step = max(0, min(4, (int) ($_REQUEST['step'] ?? 0)));
+define('INSTALLER_MAX_STEP', 4);
+$step = max(0, min(INSTALLER_MAX_STEP, (int) ($_REQUEST['step'] ?? 0)));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!security_csrf_verify()) {

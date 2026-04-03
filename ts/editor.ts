@@ -32,7 +32,12 @@ type BlockToolFactory = (data: Record<string, unknown>) => BlockToolConfig;
 
 function getEditorFromElement(el: HTMLElement): Editor | null {
     const editorEl = el.closest('.ce-editor') as HTMLElement | null;
-    return editorEl ? (editorEl as any).__editor ?? null : null;
+    if (!editorEl) return null;
+    const record = editorEl as unknown as Record<string, unknown>;
+    if ('__editor' in editorEl && record['__editor'] instanceof Editor) {
+        return record['__editor'];
+    }
+    return null;
 }
 
 // --- Helper: attach Backspace handler to any contentEditable block ---
@@ -291,7 +296,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 pre.className = 'ce-code';
                 const code = document.createElement('code');
                 code.contentEditable = 'true';
-                code.style.whiteSpace = 'pre-wrap';
                 code.textContent = (data.code as string) || '';
                 pre.appendChild(code);
                 pre.addEventListener('click', () => code.focus());
@@ -372,7 +376,8 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const cap = document.createElement('figcaption');
                 cap.contentEditable = 'true';
                 cap.textContent = (data.caption as string) || '';
-                cap.setAttribute('placeholder', 'Caption...');
+                const placeholderText = 'Caption...';
+                cap.setAttribute('placeholder', placeholderText.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
 
                 wrap.appendChild(urlInput);
                 wrap.appendChild(img);
@@ -411,7 +416,8 @@ class InlineToolbar {
         this.el.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
             btn.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                const action = btn.dataset.action!;
+                const action = btn.dataset.action;
+                if (!action) return;
                 if (action === 'bold') {
                     this.toggleInlineTag('strong');
                 } else if (action === 'italic') {
@@ -485,14 +491,26 @@ class InlineToolbar {
         if (!sel || sel.isCollapsed || !sel.rangeCount) return;
 
         const range = sel.getRangeAt(0);
+        const savedRange = range.cloneRange();
         const a = document.createElement('a');
         a.href = /^\s*javascript\s*:/i.test(url) ? '' : url;
         try {
             range.surroundContents(a);
         } catch {
-            const contents = range.extractContents();
-            a.appendChild(contents);
-            range.insertNode(a);
+            try {
+                const contents = range.extractContents();
+                a.appendChild(contents);
+                range.insertNode(a);
+            } catch {
+                // フォールバック失敗時はselectionを復元
+                sel.removeAllRanges();
+                sel.addRange(savedRange);
+            }
+        } finally {
+            // selection が失われた場合に復元
+            if (sel.rangeCount === 0) {
+                sel.addRange(savedRange);
+            }
         }
     }
 
@@ -504,8 +522,9 @@ class InlineToolbar {
         }
 
         const range = sel.getRangeAt(0);
-        const ancestor = range.commonAncestorContainer as HTMLElement;
-        if (!ancestor.closest?.('.ce-editor') && !(ancestor.parentElement?.closest('.ce-editor'))) {
+        const ancestor = range.commonAncestorContainer;
+        const el = ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentElement : ancestor as HTMLElement;
+        if (!el || !el.closest('.ce-editor')) {
             this.el.style.display = 'none';
             return;
         }

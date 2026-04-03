@@ -158,6 +158,8 @@ final class App
 
             if (isset($stored[$key])) {
                 $this->config[$key] = $stored[$key];
+            } elseif (!isset($this->config[$key]) || $this->config[$key] === '') {
+                $this->config[$key] = $this->defaults[$key] ?? $val;
             }
 
             match ($key) {
@@ -325,8 +327,9 @@ final class App
     {
         $str = $this->translations[$key] ?? $key;
         foreach ($params as $k => $v) {
-            $str = str_replace(':' . $k, $v, $str);
+            $str = str_replace(':' . $k, (string) $v, $str);
         }
+        $str = preg_replace('/:[a-zA-Z_]+/', '', $str) ?? $str;
         return $str;
     }
 
@@ -406,9 +409,10 @@ final class App
             return;
         }
         $token = csrf_token();
-        $safeToken = json_encode($token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $safeLang = json_encode($this->language, JSON_HEX_TAG | JSON_HEX_AMP);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', JSON_HEX_TAG | JSON_HEX_AMP);
+        $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+        $safeToken = json_encode($token, $jsonFlags);
+        $safeLang = json_encode($this->language, $jsonFlags);
+        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', $jsonFlags);
         $n = $this->nonce !== '' ? " nonce=\"{$this->nonce}\"" : '';
         echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
@@ -445,7 +449,12 @@ final class App
 
     public function saveSidebarBlocks(array $blocks): bool
     {
-        return $this->storage->writeConfigValue('sidebar_blocks', json_encode($blocks, JSON_UNESCAPED_UNICODE));
+        $json = json_encode($blocks, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            error_log('Adlaire: Failed to encode sidebar blocks JSON: ' . json_last_error_msg());
+            return false;
+        }
+        return $this->storage->writeConfigValue('sidebar_blocks', $json);
     }
 
     public function scriptTags(bool $adminMode = false): void
@@ -471,11 +480,15 @@ final class App
         if ($isBlocks) {
             $blocksB64 = '';
             if (isset($this->config['pageBlocks'])) {
-                $blocksB64 = base64_encode(json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP));
+                $json = json_encode($this->config['pageBlocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+                if ($json !== false) {
+                    $blocksB64 = base64_encode($json);
+                }
             }
             echo "<div class='blocks-content' data-blocks-b64='" . esc($blocksB64) . "'></div>";
         } elseif ($isMarkdown) {
-            $encoded = esc(base64_encode($content));
+            $b64 = base64_encode($content);
+            $encoded = esc($b64 !== false ? $b64 : '');
             echo "<div class='markdown-content' data-raw-b64='{$encoded}'></div>";
         } else {
             echo $content;

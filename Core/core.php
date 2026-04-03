@@ -175,6 +175,7 @@ final class FileStorage
 
         $data = json_decode($json, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Adlaire: Failed to parse config.json: ' . json_last_error_msg());
             return [];
         }
         return is_array($data) ? $data : [];
@@ -339,7 +340,9 @@ final class FileStorage
                     @unlink($rf);
                 }
             }
-            rmdir($revDir);
+            if (!@rmdir($revDir)) {
+                error_log('Adlaire: Failed to remove revision directory: ' . $revDir);
+            }
         }
 
         $this->invalidatePageCache();
@@ -471,8 +474,12 @@ final class FileStorage
     private function atomicWrite(string $path, string $content): bool
     {
         $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
         $tmp = tempnam($dir, '.tmp_');
         if ($tmp === false) {
+            error_log('Adlaire: tempnam() failed for directory: ' . $dir);
             return false;
         }
 
@@ -523,10 +530,16 @@ final class FileStorage
     {
         $pattern = $this->backupsDir . '/config.*.json';
         $files = glob($pattern);
-        if (!is_array($files) || count($files) < self::MAX_BACKUPS) {
+        if (!is_array($files) || count($files) <= self::MAX_BACKUPS) {
             return;
         }
-        sort($files);
+        usort($files, function (string $a, string $b): int {
+            $mtimeA = filemtime($a);
+            $mtimeB = filemtime($b);
+            if ($mtimeA === false) { $mtimeA = 0; }
+            if ($mtimeB === false) { $mtimeB = 0; }
+            return $mtimeA <=> $mtimeB;
+        });
         $toRemove = array_slice($files, 0, max(0, count($files) - self::MAX_BACKUPS));
         foreach ($toRemove as $old) {
             @unlink($old);
@@ -542,7 +555,10 @@ final class FileStorage
     {
         $dir = $this->revisionsDir . '/' . $slug;
         if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                error_log('Adlaire: Failed to create revision directory: ' . $dir);
+                return;
+            }
         }
 
         $revFile = $dir . '/' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6) . '.json';
