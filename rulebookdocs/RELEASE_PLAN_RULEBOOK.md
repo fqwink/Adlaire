@@ -1,7 +1,7 @@
 # Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.2.9
+- 文書バージョン: Ver.3.0
 - 作成日: 2026-04-02
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
@@ -648,6 +648,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 |---------|------|:----:|
 | セキュリティ | **API キー認証の必須化**（`LICENSE_SYSTEM_RULEBOOK.md` 準拠） | 計画 |
 | フロントエンド | **ES モジュール移行**（Deno 移行に伴い JS 出力を ES modules 化、PHP テンプレートの `<script type="module">` 対応） | 計画 |
+| CI/CD | **CI/CD 全自動リリース整備**（`ARCHITECTURE_RULEBOOK.md` §7 準拠。GitHub Actions、TS 型チェック + PHP 静的解析、ZIP 自動生成・自動リリース） | 計画 |
 | 品質 | バグ修正・精査（50件以上、CLAUDE.md 準拠） | 計画 |
 
 ---

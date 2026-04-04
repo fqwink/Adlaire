@@ -54,6 +54,7 @@
 | Ver.1.3 | 2026-04-02 | §2.2/§5 に Core/license.php・LICENSE_SYSTEM_RULEBOOK.md・Licenses/・REVISION_HISTORY.md を追加 |
 | Ver.1.4 | 2026-04-03 | §3.1 data/system/users.json追加、§6.1 認証方式をマスター管理者モデル(メイン+サブ)に変更、マイグレーション規則追記 |
 | Ver.1.5 | 2026-04-04 | §4 TypeScript ビルドランタイムを Node.js/npm/tsc から Deno に変更（Ver.3.0 以降）、§5 deno.json・scripts/build.ts をプロジェクト構成に追加、package.json / tsconfig.json 廃止 |
+| Ver.1.6 | 2026-04-04 | §7 CI/CD・リリース規約を新設（全自動リリース、ZIP形式、品質チェック: deno check + PHPStan）、§8-10 セクション番号繰り下げ |
 
 ## API_RULEBOOK.md（API・データ）
 
@@ -95,6 +96,7 @@
 | Ver.2.7 | 2026-04-03 | §4.1 Ver.2.9 マスター管理者M1-M10策定、追加品質確定360件策定 |
 | Ver.2.8 | 2026-04-03 | Ver.2.9 マスター管理者+品質確定448件全件実装完了、現行バージョンを Ver.2.9-46 に更新 |
 | Ver.2.9 | 2026-04-04 | §5 Ver.3.0系リリース計画を暫定承認として策定（Ver.3.0〜3.8）、RSS不採用確定、Deno移行を前提として明記 |
+| Ver.3.0 | 2026-04-04 | §5.1 Ver.3.0 に CI/CD 全自動リリース整備を追加（ARCHITECTURE_RULEBOOK.md §7 準拠） |
 
 ## LICENSE_SYSTEM_RULEBOOK.md（ライセンスシステム）
 
