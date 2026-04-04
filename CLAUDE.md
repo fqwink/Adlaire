@@ -19,6 +19,7 @@
   - `rulebookdocs/GENERATOR_RULEBOOK.md` — 静的サイト生成ルールブック
   - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — リリース計画ルールブック
   - `rulebookdocs/LICENSE_SYSTEM_RULEBOOK.md` — ライセンスシステムルールブック
+  - `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` — ライセンスサーバールールブック
   - `rulebookdocs/BAAS_HUB_RULEBOOK.md` — BaaS連携Hubルールブック
   - `rulebookdocs/REVISION_HISTORY.md` — 全ルールブック改訂履歴
   - ※ `rulebookdocs/` 内に README.md は作成しない（CHARTER.md が構成を管理）
