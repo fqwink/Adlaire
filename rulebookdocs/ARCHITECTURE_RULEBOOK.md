@@ -1,9 +1,9 @@
 # Adlaire Architecture RULEBOOK
 
 - 文書名: Adlaire Architecture RULEBOOK
-- 文書バージョン: Ver.1.3
+- 文書バージョン: Ver.1.5
 - 作成日: 2026-04-02
-- 最終更新: 2026-04-02
+- 最終更新: 2026-04-04
 - 対象製品: Adlaire Static CMS
 - 文書種別: アーキテクチャ・ファイル構成・ビルド・セキュリティを定義する技術規範文書
 - 文書目的: Adlaire のコアアーキテクチャ、ファイル構成、TypeScript/JS 規約、ビルドプロセス、セキュリティ基盤を恒常的規範として定義する
@@ -118,24 +118,30 @@ data/
 ## 4.1 基本方針
 
 - **TypeScript を全面的に採用する**。JavaScript の直接記述は禁止。
-- **TypeScript バージョンは 5 系に固定**（`~5.8`）。メジャーバージョン 6 以降への更新は別途検討。
+- **ビルドランタイムは Deno を採用する**（Ver.3.0 以降）。Node.js / npm は使用しない。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
+- TypeScript バージョンは Deno に組み込まれたものを使用する。Deno のメジャーバージョン更新は別途検討。
 
 ## 4.2 ディレクトリ配置
 
 - TypeScript ソース: `ts/` ディレクトリ
 - コンパイル済み JavaScript: `js/` ディレクトリ（自動生成）
+- ビルドスクリプト: `scripts/build.ts`
 - `js/` 内のファイルを手動編集することを禁止する。
 
 ## 4.3 ビルド手順
 
 ```bash
-npm install       # 初回のみ
-npm run build     # TypeScript → JavaScript コンパイル（tsc）
+deno task build   # TypeScript → JavaScript コンパイル
+deno task check   # 型チェックのみ（コンパイルなし）
+deno task watch   # ウォッチモード（開発時）
 ```
 
-- 本番環境に Node.js ビルドを持ち込まない（DIRECTION_RULEBOOK.md §7.3 準拠）。
+- 本番環境に Deno ビルドを持ち込まない（DIRECTION_RULEBOOK.md §7.3 準拠）。
 - ビルド済みリリース物が配置済みであることを前提とする。
+- `deno.json` をプロジェクト設定ファイルとして使用する（`package.json` / `tsconfig.json` は廃止）。
+- コンパイラオプションは `deno.json` の `compilerOptions` セクションに定義する。
+- ビルドスクリプト（`scripts/build.ts`）は `jsr:@deno/emit` を使用して TypeScript をトランスパイルする。
 
 ---
 
@@ -179,7 +185,9 @@ Adlaire/
 │   └── admin.css              #   管理 UI スタイルシート
 ├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
-├── package.json / tsconfig.json
+├── deno.json                      # Deno 設定・タスク定義（Ver.3.0 以降）
+├── scripts/                       # ビルドスクリプト
+│   └── build.ts                   #   TypeScript → JavaScript ビルドスクリプト
 ├── release-manifest.json      # 配布バンドル整合性検証用
 ├── VERSION                    # バージョン情報ファイル
 ├── CLAUDE.md                  # 開発規約
