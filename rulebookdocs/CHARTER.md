@@ -61,9 +61,10 @@
 > 詳細は `ARCHITECTURE_RULEBOOK.md` を参照。以下は要約。
 
 - **PHP 8.3 以上必須**（`declare(strict_types=1)`）
-- **TypeScript 5 系固定**（`~5.8`）、JavaScript 直接記述禁止
+- **TypeScript ビルドランタイム: Deno**（Ver.3.0 以降）、JavaScript 直接記述禁止
 - ソース: `ts/` → 出力: `js/`
-- ビルド: `npm install` → `npm run build`（`tsc`）
+- ビルド: `deno task build`（`@deno/emit` によるトランスパイル）
+- 設定: `deno.json`（`package.json` / `tsconfig.json` は廃止）
 
 ---
 

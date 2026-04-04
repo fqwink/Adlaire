@@ -13,6 +13,7 @@
 | 改訂 | 2026-04-02 | §10-11 リリース計画を RELEASE_PLAN_RULEBOOK.md に移動、§8 セットアップツールのパスを Core/ / data/ に更新 |
 | 改訂 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | 改訂 | 2026-04-03 | §8 セットアップツール: メインマスター管理者ログインID入力追加、users.json生成、config.jsonパスワード保存禁止、権限0600追加 |
+| 改訂 | 2026-04-04 | §7 開発基盤: TypeScript ビルドランタイムを Node.js/npm/tsc から Deno に変更（Ver.3.0 以降）、deno.json・@deno/emit を正式採用、package.json / tsconfig.json 廃止 |
 
 ## DIRECTION_RULEBOOK.md（製品方向性）
 
@@ -51,6 +52,7 @@
 | Ver.1.2 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | Ver.1.3 | 2026-04-02 | §2.2/§5 に Core/license.php・LICENSE_SYSTEM_RULEBOOK.md・Licenses/・REVISION_HISTORY.md を追加 |
 | Ver.1.4 | 2026-04-03 | §3.1 data/system/users.json追加、§6.1 認証方式をマスター管理者モデル(メイン+サブ)に変更、マイグレーション規則追記 |
+| Ver.1.5 | 2026-04-04 | §4 TypeScript ビルドランタイムを Node.js/npm/tsc から Deno に変更（Ver.3.0 以降）、§5 deno.json・scripts/build.ts をプロジェクト構成に追加、package.json / tsconfig.json 廃止 |
 
 ## API_RULEBOOK.md（API・データ）
 

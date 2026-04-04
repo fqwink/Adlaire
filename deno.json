@@ -1,0 +1,19 @@
+{
+  "tasks": {
+    "build": "deno run --allow-read --allow-write scripts/build.ts",
+    "check": "deno check ts/editInplace.ts ts/markdown.ts",
+    "watch": "deno run --allow-read --allow-write --watch=ts/ scripts/build.ts"
+  },
+  "compilerOptions": {
+    "target": "ES2021",
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "imports": {
+    "@deno/emit": "jsr:@deno/emit@^0.46.0"
+  }
+}
