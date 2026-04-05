@@ -75,25 +75,35 @@ export const api = {
         updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(`API error: ${res.status}`); }
         const json = await res.json();
-        return json.pages;
+        // R3-1: json.pages null/undefined安全化 — 空オブジェクトフォールバック
+        return json.pages ?? {};
     },
 
     /**
      * Get a single page with full content and metadata.
      */
     // #105: getPage — CSRF token更新追加
+    // R3-2: slug空文字チェック追加
     async getPage(slug: string): Promise<PageData> {
+        if (!slug) throw new Error('getPage: slug is required');
         const res = await fetch(buildApiUrl('pages', { slug }));
         updateCsrfFromResponse(res);
-        if (!res.ok) { throw new Error(`API error: ${res.status}`); }
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
         const json = await res.json();
+        // R3-3: json.data null安全化
+        if (!json.data) throw new Error('getPage: empty response data');
         return json.data;
     },
 
     /**
      * Create or update a page.
      */
+    // R3-4: savePage slug空文字チェック + R3-5: format入力検証
     async savePage(slug: string, content: string, format: string = 'blocks'): Promise<SavePageResult> {
+        if (!slug) throw new Error('savePage: slug is required');
+        if (format !== 'blocks' && format !== 'markdown' && format !== 'html') {
+            throw new Error('savePage: invalid format');
+        }
         const body = new URLSearchParams();
         body.append('slug', slug);
         body.append('format', format);
@@ -124,7 +134,9 @@ export const api = {
     /**
      * Delete a page.
      */
+    // R3-6: deletePage slug空文字チェック
     async deletePage(slug: string): Promise<void> {
+        if (!slug) throw new Error('deletePage: slug is required');
         const res = await fetch(buildApiUrl('pages', { slug }), {
             method: 'DELETE',
             headers: { 'X-CSRF-Token': csrfToken },
@@ -139,7 +151,9 @@ export const api = {
      * List revisions for a page.
      */
     // #44: listRevisions エラーログ追加
+    // R3-7: listRevisions slug空文字チェック
     async listRevisions(slug: string): Promise<Revision[]> {
+        if (!slug) return [];
         const res = await fetch(buildApiUrl('revisions', { slug }));
         updateCsrfFromResponse(res);
         if (!res.ok) {
@@ -154,7 +168,10 @@ export const api = {
      * Restore a page from a specific revision.
      */
     // #101: restoreRevision — res.json()失敗時のエラーハンドリング追加
+    // R3-8: restoreRevision slug/timestamp空文字チェック + R3-9: timestampフォーマット検証
     async restoreRevision(slug: string, timestamp: string): Promise<void> {
+        if (!slug) throw new Error('restoreRevision: slug is required');
+        if (!timestamp || !/^\d+$/.test(timestamp)) throw new Error('restoreRevision: invalid timestamp');
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
         body.append('csrf', csrfToken);
@@ -174,7 +191,9 @@ export const api = {
      * Search pages by query string.
      */
     // #44: search エラーログ追加
+    // R3-10: search空クエリ早期リターン
     async search(query: string): Promise<SearchResult[]> {
+        if (!query || !query.trim()) return [];
         const res = await fetch(buildApiUrl('search', { q: query }));
         updateCsrfFromResponse(res);
         if (!res.ok) {
@@ -189,10 +208,11 @@ export const api = {
      * Export all site data as JSON.
      */
     // #106: exportSite — CSRF token更新追加 + エラーメッセージ統一
+    // R3-11: exportSite extractApiError統一
     async exportSite(): Promise<string> {
         const res = await fetch(buildApiUrl('export'));
         updateCsrfFromResponse(res);
-        if (!res.ok) { throw new Error(`API error: ${res.status}`); }
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
         return res.text();
     },
 
@@ -200,7 +220,9 @@ export const api = {
      * Import site data from JSON.
      */
     // #102: importSite — !res.okチェックをjson.parse前に移動し安全化
+    // R3-12: importSite data空チェック + R3-13: json.imported null安全化
     async importSite(data: string): Promise<{ config: boolean; pages: number }> {
+        if (!data) throw new Error('importSite: data is required');
         const res = await fetch(buildApiUrl('import'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -211,10 +233,12 @@ export const api = {
             throw new Error(await extractApiError(res, res.status));
         }
         const json = await res.json();
-        return json.imported;
+        return json.imported ?? { config: false, pages: 0 };
     },
 
+    // R3-14: reorderPages空配列チェック
     async reorderPages(slugs: string[]): Promise<void> {
+        if (!Array.isArray(slugs) || slugs.length === 0) return;
         const res = await fetch(buildApiUrl('reorder'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -226,7 +250,10 @@ export const api = {
         }
     },
 
+    // R3-15: bulkStatus 空配列/空status防止
     async bulkStatus(slugs: string[], status: string): Promise<void> {
+        if (!Array.isArray(slugs) || slugs.length === 0) throw new Error('bulkStatus: no slugs provided');
+        if (!status) throw new Error('bulkStatus: status is required');
         const res = await fetch(buildApiUrl('bulk'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -238,7 +265,9 @@ export const api = {
         }
     },
 
+    // R3-16: bulkDelete 空配列防止
     async bulkDelete(slugs: string[]): Promise<void> {
+        if (!Array.isArray(slugs) || slugs.length === 0) throw new Error('bulkDelete: no slugs provided');
         const res = await fetch(buildApiUrl('bulk'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -268,8 +297,10 @@ export const api = {
     // --- User Management APIs (Ver.2.9: Master管理者対応) ---
 
     // Ver.2.9 TS#86: listUsers catch時にconsole.warn追加
+    // R3-17: listUsers CSRF token更新漏れ修正
     async listUsers(): Promise<UserInfo[]> {
         const res = await fetch(buildApiUrl('users'));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             console.warn('listUsers failed:', res.status);
             throw new Error(await extractApiError(res, res.status));
@@ -335,7 +366,9 @@ export const api = {
     },
 
     // Ver.2.9 TS#90: saveSidebar catch時にconsole.warn追加
+    // R3-18: saveSidebar blocks空チェック
     async saveSidebar(blocks: string): Promise<void> {
+        if (!blocks) throw new Error('saveSidebar: blocks is required');
         const body = new URLSearchParams();
         body.append('blocks', blocks);
         body.append('csrf', csrfToken);

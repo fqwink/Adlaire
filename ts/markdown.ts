@@ -35,7 +35,9 @@ const _mdParagraph = /^(?!<[a-z\/])(?!%%CODEBLOCK_)(.*\S.*)$/gm;
 const _mdEscAttr = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+// R3-22: markdownToHtml入力null/undefined安全化
 export function markdownToHtml(md: string): string {
+    if (!md) return '';
     let html = md;
 
     // --- Extract fenced code blocks BEFORE escaping (preserve raw content) ---
@@ -59,8 +61,10 @@ export function markdownToHtml(md: string): string {
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     // Inline code (skip placeholder patterns) — #25: 複数行対応（[\s\S]で改行を含む）
+    // R3-21: inline code内のplaceholderパターンも保護
     html = html.replace(/`([^`]+?)`/g, (m, code) => {
         if (m.includes('%%CODEBLOCK_')) return m;
+        if (code.includes('%%CODEBLOCK_')) return m;
         return `<code>${code}</code>`;
     });
 
@@ -134,9 +138,11 @@ export function markdownToHtml(md: string): string {
     // Ver.2.9 #34/#63: 正規表現改善 + 事前コンパイル化
     _mdLink.lastIndex = 0;
     html = html.replace(_mdLink, (_m, text: string, url: string, title: string | undefined) => {
-        if (_mdDangerousProto.test(url)) return `<a href="">${text}</a>`;
+        // R3-23: _mdDangerousProto.lastIndexリセット漏れ修正（global flagなしだが安全化）
+        if (_mdDangerousProto.test(url)) return `<a href="">${escAttr(text)}</a>`;
         const titleAttr = title ? ` title="${escAttr(title)}"` : '';
-        return `<a href="${escAttr(url)}"${titleAttr}>${text}</a>`;
+        // R3-24: リンクテキストもescAttr適用（XSS防止）
+        return `<a href="${escAttr(url)}"${titleAttr}>${escAttr(text)}</a>`;
     });
 
     // --- Tables ---
@@ -225,8 +231,9 @@ export function markdownToHtml(md: string): string {
     html = html.replace(/((?:<li class="ol">[\s\S]*?<\/li>\n?)+)/g, (m) => {
         return '<ol>' + m.replaceAll(' class="ol"', '') + '</ol>';
     });
+    // R3-25: task-list liが<ul>内にもラップされる — taskクラス付きliも対象に含める
     html = html.replace(/((?:<li[\s>][\s\S]*?<\/li>\n?)+)/g, (m) => {
-        if (m.startsWith('<ol>')) return m;
+        if (m.startsWith('<ol>') || m.startsWith('<ul>')) return m;
         return '<ul>' + m + '</ul>';
     });
 

@@ -81,7 +81,8 @@ function handleApiGenerate(FileStorage $storage): void
     }
 
     $pages = $storage->listPublishedPages();
-    $theme = basename($app->config['themeSelect']);
+    $themeRaw = $app->config['themeSelect'] ?? 'AP-Default';
+    $theme = basename(is_string($themeRaw) ? $themeRaw : 'AP-Default');
     $themePath = dirname(__DIR__) . '/themes/' . $theme;
     $count = 0;
     $skipped = 0;
@@ -166,20 +167,23 @@ function handleApiGenerate(FileStorage $storage): void
         $format = $data['format'] ?? 'blocks';
         $contentHtml = '';
 
-        if ($format === 'blocks' && isset($data['blocks'])) {
+        if ($format === 'blocks' && isset($data['blocks']) && is_array($data['blocks'])) {
             $contentHtml = renderBlocksToHtml($data['blocks']);
         } elseif ($format === 'markdown') {
-            $contentHtml = renderMarkdownToHtml($data['content']);
+            $contentHtml = renderMarkdownToHtml((string) ($data['content'] ?? ''));
         } else {
-            $contentHtml = esc($data['content'] ?? '');
+            $contentHtml = esc((string) ($data['content'] ?? ''));
         }
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
 
         $writeFailed = false;
         if ($slug === 'home') {
-            if (file_put_contents($distDir . '/index.html', $pageHtml) === false) {
+            $homeResult = file_put_contents($distDir . '/index.html', $pageHtml);
+            if ($homeResult === false) {
                 $writeFailed = true;
+            } else {
+                @chmod($distDir . '/index.html', GENERATOR_FILE_PERMISSION);
             }
         }
         $pageDir = $distDir . '/' . $slug;
@@ -189,8 +193,11 @@ function handleApiGenerate(FileStorage $storage): void
             $details[] = ['slug' => $slug, 'result' => 'failed'];
             continue;
         }
-        if (file_put_contents($pageDir . '/index.html', $pageHtml) === false) {
+        $pageWriteResult = file_put_contents($pageDir . '/index.html', $pageHtml);
+        if ($pageWriteResult === false) {
             $writeFailed = true;
+        } else {
+            @chmod($pageDir . '/index.html', GENERATOR_FILE_PERMISSION);
         }
 
         if ($writeFailed) {
@@ -206,7 +213,8 @@ function handleApiGenerate(FileStorage $storage): void
     // Generate sitemap.xml
     $httpsVal = $_SERVER['HTTPS'] ?? '';
     $isHttps = is_string($httpsVal) && $httpsVal !== '' && $httpsVal !== 'off';
-    $host = ($isHttps ? 'https' : 'http') . ':' . rtrim($app->host, '/');
+    $hostTrimmed = rtrim($app->host, '/');
+    $host = ($isHttps ? 'https' : 'http') . ':' . $hostTrimmed;
     $basePath = '';
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
@@ -225,6 +233,7 @@ function handleApiGenerate(FileStorage $storage): void
         apiError(500, 'Failed to write sitemap.xml');
         return;
     }
+    @chmod($distDir . '/sitemap.xml', GENERATOR_FILE_PERMISSION);
 
     // Save build state for diff builds
     $buildStateJson = json_encode([
@@ -235,6 +244,7 @@ function handleApiGenerate(FileStorage $storage): void
         apiError(500, 'Failed to write build state');
         return;
     }
+    @chmod($distDir . '/.build_state.json', GENERATOR_FILE_PERMISSION);
 
     $buildTimeMs = (int) ((hrtime(true) - $startTime) / 1_000_000);
     $pagesTotal = count($pages);

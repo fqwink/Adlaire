@@ -28,7 +28,10 @@ function verifyApiAuth(FileStorage $storage): bool
     if (isset($userData['enabled']) && $userData['enabled'] === false) {
         return false;
     }
-    return hash_equals((string) $userData['password'], $sessionHash);
+    if (!is_string($userData['password'])) {
+        return false;
+    }
+    return hash_equals($userData['password'], $sessionHash);
 }
 
 // --- Admin edit handler ---
@@ -108,10 +111,11 @@ function handleEdit(): void
 
 function handleApi(): void
 {
-    $endpoint = $_GET['api'] ?? $_POST['api'] ?? null;
+    $endpoint = $_GET['api'] ?? null;
     if ($endpoint === null || !is_string($endpoint)) {
         return;
     }
+    $endpoint = trim($endpoint);
 
     $storage = new FileStorage('data');
     $method = $_SERVER['REQUEST_METHOD'];
@@ -181,12 +185,13 @@ function handleApi(): void
 
 function handleApiPages(FileStorage $storage, string $method): void
 {
-    $slug = $_REQUEST['slug'] ?? null;
+    $slug = $_GET['slug'] ?? $_POST['slug'] ?? null;
     if ($slug !== null && is_string($slug)) {
         $slug = trim($slug);
     }
 
-    $action = is_string($_REQUEST['action'] ?? '') ? ($_REQUEST['action'] ?? '') : '';
+    $action = $_GET['action'] ?? $_POST['action'] ?? '';
+    $action = is_string($action) ? $action : '';
 
     if ($method === 'POST' && $action === 'reorder') {
         apiPageReorder($storage);
@@ -360,10 +365,17 @@ function apiPageDelete(FileStorage $storage, string|null $slug): void
         return;
     }
 
-    if (!csrf_verify()) {
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!is_string($csrfToken) || $csrfToken === '') {
         apiError(403, 'CSRF verification failed');
         return;
     }
+    $session = $_SESSION['csrf'] ?? '';
+    if (!is_string($session) || $session === '' || !hash_equals($session, $csrfToken)) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
 
     $result = $storage->deletePage($slug);
     if (!$result) {
@@ -376,13 +388,14 @@ function apiPageDelete(FileStorage $storage, string|null $slug): void
 
 function handleApiRevisions(FileStorage $storage, string $method): void
 {
-    $slug = $_REQUEST['slug'] ?? null;
+    $slug = $_GET['slug'] ?? $_POST['slug'] ?? null;
     if (!is_string($slug) || !FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
 
-    $action = is_string($_REQUEST['action'] ?? '') ? ($_REQUEST['action'] ?? '') : '';
+    $action = $_GET['action'] ?? $_POST['action'] ?? '';
+    $action = is_string($action) ? $action : '';
     if ($method === 'GET' && $action === 'diff') {
         apiRevisionDiff($storage, $slug);
         return;
@@ -436,18 +449,14 @@ const API_SEARCH_SNIPPET_CONTEXT = 40;
 
 function handleApiSearch(FileStorage $storage): void
 {
-    $rawQuery = is_string($_REQUEST['q'] ?? null) ? trim($_REQUEST['q'] ?? '') : '';
+    $rawQuery = is_string($_GET['q'] ?? null) ? trim($_GET['q'] ?? '') : '';
     if ($rawQuery === '' || mb_strlen($rawQuery, 'UTF-8') > API_SEARCH_MAX_QUERY_LENGTH) {
         apiResponse(['results' => []]);
         return;
     }
 
     $query = mb_strtolower($rawQuery, 'UTF-8');
-    static $cachedPages = null;
-    if ($cachedPages === null) {
-        $cachedPages = $storage->listPublishedPages();
-    }
-    $pages = $cachedPages;
+    $pages = $storage->listPublishedPages();
     $results = [];
 
     foreach ($pages as $slug => $data) {
@@ -594,10 +603,7 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
-    static $rawInput = null;
-    if ($rawInput === null) {
-        $rawInput = file_get_contents('php://input', false, null, 0, $maxImportSize + 1);
-    }
+    $rawInput = file_get_contents('php://input', false, null, 0, $maxImportSize + 1);
     $input = ($rawInput !== false && $rawInput !== '') ? $rawInput : '';
     if ($input === '') {
         $input = is_string($_POST['data'] ?? null) ? ($_POST['data'] ?? '') : '';
@@ -859,11 +865,18 @@ function handleApiUsers(FileStorage $storage, string $method): void
     }
 
     if ($method === 'DELETE') {
-        if (!csrf_verify()) {
+        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!is_string($csrfToken) || $csrfToken === '') {
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $username = is_string($_REQUEST['username'] ?? null) ? trim($_REQUEST['username'] ?? '') : '';
+        $csrfSession = $_SESSION['csrf'] ?? '';
+        if (!is_string($csrfSession) || $csrfSession === '' || !hash_equals($csrfSession, $csrfToken)) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        $username = is_string($_GET['username'] ?? null) ? trim($_GET['username'] ?? '') : '';
         if ($username === '') {
             apiError(400, 'Invalid username');
             return;
@@ -903,12 +916,20 @@ function apiPageReorder(FileStorage $storage): void
         return;
     }
 
+    // Deduplicate to prevent ordering inconsistencies
+    $seen = [];
+    $uniqueSlugs = [];
     foreach ($slugs as $s) {
         if (!is_string($s) || !FileStorage::validateSlug($s)) {
             apiError(400, 'Invalid slug in list');
             return;
         }
+        if (!isset($seen[$s])) {
+            $seen[$s] = true;
+            $uniqueSlugs[] = $s;
+        }
     }
+    $slugs = $uniqueSlugs;
 
     $result = $storage->savePageOrder($slugs);
     if (!$result) {

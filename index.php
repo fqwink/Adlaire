@@ -110,6 +110,8 @@ if (isset($_GET['preview'])) {
         header('Location: ?login');
         exit;
     }
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
     if (is_string($previewSlug) && FileStorage::validateSlug($previewSlug)) {
         $previewData = $app->storage->readPageData($previewSlug);

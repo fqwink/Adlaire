@@ -57,7 +57,9 @@ const REVOKE_URL_DELAY_MS = 5000;
 const FEEDBACK_DISPLAY_MS = 1500;
 const SEARCH_DEBOUNCE_MS = 150;
 
+// R4-9: nl2br入力null安全化
 function nl2br(s: string): string {
+    if (!s) return '';
     return s.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br />$2');
 }
 
@@ -152,8 +154,10 @@ function plainTextEdit(span: HTMLElement): void {
 
     const textarea = document.createElement('textarea');
     textarea.name = 'textarea';
-    textarea.id = id + '_field';
-    textarea.setAttribute('title', titleAttr);
+    // R3-27: textarea id — id空文字の場合の安全チェック
+    textarea.id = id ? id + '_field' : '';
+    // R3-28: title属性に生のtitleAttrを設定（HTML属性値にタグが混入しないように）
+    if (title) textarea.title = title;
     textarea.value = content;
 
     // #90: saved二重防止改善 — blurイベントのonce指定
@@ -958,6 +962,8 @@ function initGenerateReport(): void {
         })
         .then(res => {
             updateCsrfFromResponse(res);
+            // R4-10: generate API !res.okチェック追加
+            if (!res.ok) throw new Error(`API error: ${res.status}`);
             return res.json();
         })
         .then(json => {
