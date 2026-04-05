@@ -56,6 +56,7 @@
 | Ver.1.5 | 2026-04-04 | §4 TypeScript ビルドランタイムを Node.js/npm/tsc から Deno に変更（Ver.3.0 以降）、§5 deno.json・scripts/build.ts をプロジェクト構成に追加、package.json / tsconfig.json 廃止 |
 | Ver.1.6 | 2026-04-04 | §7 CI/CD・リリース規約を新設（全自動リリース、ZIP形式、品質チェック: deno check + PHPStan）、§8-10 セクション番号繰り下げ |
 | Ver.1.7 | 2026-04-04 | §7.4 配布チャンネルを確定: 公式サイト（Adlaire自身で構築・静的生成、自前サーバーで管理）を唯一の配布チャンネルとする |
+| Ver.1.9 | 2026-04-05 | §5 プロジェクト構成を Ver.3.0 実装に合わせて全面更新（ts/public.ts追加、js/admin.js+public.js、scripts/、adlaire-license-server/、.github/、phpstan.neon、license.json、LICENSE_SERVER_RULEBOOK.md追加）|
 | Ver.1.8 | 2026-04-04 | §4.3 ビルドツールを @deno/emit → npm:esbuild に変更（IIFE バンドル対応）、§4.4 ES モジュール移行仕様を新設（バンドル方式: admin.js/public.js、IIFE出力、グローバル公開関数定義、個別scriptタグ廃止）、CI/CD実装ファイル追加（.github/workflows/ci.yml, release.yml, phpstan.neon）、.htaccess更新（deno.json/phpstan.neonアクセス制限）、ES モジュール移行実装（全TSファイルにexport/import導入、ts/public.ts新設、scripts/build.tsバンドル対応、globals.d.ts簡素化） |
 
 ## API_RULEBOOK.md（API・データ）
@@ -112,6 +113,7 @@
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
 | Ver.1.0 | 2026-04-04 | 初版: 公式サイトAPIキー認証・認可管理システム仕様を新設。システム構成（PHP+SQLite）、API 4エンドポイント（register/verify/renew/third-party）、DB設計（licenses/contracts/audit_log）、キー生成仕様（PRI/SEC/TPK）、管理ダッシュボード、セキュリティ要件、開発Phase 1-4を定義 |
+| Ver.1.1 | 2026-04-05 | §1.2 ルールブック規律の全面適用を新設（Adlaireのルールブック規律・バグ修正ポリシー・命名規則を全面適用）、§1.4 ソースコード管理を新設（adlaire-license-server/で当面管理）、§1.5 基本方針にdeclare(strict_types=1)必須を追記 |
 
 ## BAAS_HUB_RULEBOOK.md（BaaS連携Hub）
 

@@ -1,21 +1,28 @@
 {
     "product": "Adlaire",
     "channel": "release",
-    "version": "2.3.0",
-    "bundle_format": 1,
+    "version": "3.0-47",
+    "bundle_format": 2,
     "required_files": [
         "index.php",
-        "helpers.php",
-        "core.php",
-        "app.php",
-        "renderer.php",
-        "api.php",
-        "generator.php",
-        "admin-ui.php",
         "bundle-installer.php",
         ".htaccess",
+        "VERSION",
+        "release-manifest.json",
+        "README.md",
+        "Core/helpers.php",
+        "Core/license.php",
+        "Core/core.php",
+        "Core/app.php",
+        "Core/renderer.php",
+        "Core/api.php",
+        "Core/generator.php",
+        "Core/admin-ui.php",
+        "Core/.htaccess",
+        "js/admin.js",
+        "js/public.js",
         "themes",
         "data/lang",
-        "js"
+        "Licenses/LICENSE_Ver.2.0"
     ]
 }

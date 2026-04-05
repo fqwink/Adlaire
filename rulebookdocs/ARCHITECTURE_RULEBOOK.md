@@ -1,7 +1,7 @@
 # Adlaire Architecture RULEBOOK
 
 - 文書名: Adlaire Architecture RULEBOOK
-- 文書バージョン: Ver.1.8
+- 文書バージョン: Ver.1.9
 - 作成日: 2026-04-02
 - 最終更新: 2026-04-04
 - 対象製品: Adlaire Static CMS
@@ -213,14 +213,19 @@ Adlaire/
 │   ├── generator.php          #   静的サイト生成
 │   └── admin-ui.php           #   管理 UI テンプレート
 ├── ts/                        # TypeScript ソース
-│   ├── globals.d.ts           #   グローバル型定義
-│   ├── autosize.ts            #   textarea 自動リサイズ
+│   ├── globals.d.ts           #   グローバル型定義（csrfToken + 共有インターフェース）
+│   ├── editInplace.ts         #   管理画面エントリポイント（インプレース編集・format 切替）
+│   ├── public.ts              #   公開ページエントリポイント（描画のみ）
 │   ├── editor.ts              #   ブロックエディタ
-│   ├── editInplace.ts         #   インプレース編集・format 切替
+│   ├── autosize.ts            #   textarea 自動リサイズ
 │   ├── i18n.ts                #   多言語化モジュール
 │   ├── markdown.ts            #   Markdown→HTML コンバーター
 │   └── api.ts                 #   REST API クライアント
-├── js/                        # コンパイル済み JavaScript（自動生成）
+├── js/                        # バンドル済み JavaScript（自動生成・手動編集禁止）
+│   ├── admin.js               #   管理画面用 IIFE バンドル
+│   └── public.js              #   公開ページ用 IIFE バンドル
+├── scripts/                   # ビルドスクリプト
+│   └── build.ts               #   esbuild IIFE バンドル生成
 ├── data/                      # データストレージ
 │   ├── lang/                  #   翻訳ファイル（JSON、公開許可）
 │   ├── config.json            #   サイト設定
@@ -229,16 +234,18 @@ Adlaire/
 │   ├── revisions/{slug}/      #   リビジョン履歴
 │   ├── backups/               #   設定バックアップ
 │   ├── system/install.lock    #   インストール済みフラグ
-│   └── system/license.key    #   API キーファイル
+│   └── system/license.json    #   ライセンスデータ（JSON）
 ├── themes/                    # テーマディレクトリ
 │   ├── AP-Default/            #   theme.php + style.css
 │   ├── AP-Adlaire/            #   theme.php + style.css
 │   └── admin.css              #   管理 UI スタイルシート
 ├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
-├── deno.json                      # Deno 設定・タスク定義（Ver.3.0 以降）
-├── scripts/                       # ビルドスクリプト
-│   └── build.ts                   #   TypeScript → JavaScript ビルドスクリプト
+├── adlaire-license-server/    # ライセンスサーバー（当面は本体リポジトリ内で管理）
+├── .github/                   # CI/CD
+│   └── workflows/             #   GitHub Actions ワークフロー
+├── deno.json                  # Deno 設定・タスク定義
+├── phpstan.neon               # PHPStan 静的解析設定
 ├── release-manifest.json      # 配布バンドル整合性検証用
 ├── VERSION                    # バージョン情報ファイル
 ├── CLAUDE.md                  # 開発規約
@@ -253,6 +260,7 @@ Adlaire/
 │   ├── GENERATOR_RULEBOOK.md  #   静的サイト生成
 │   ├── RELEASE_PLAN_RULEBOOK.md     # リリース計画
 │   ├── LICENSE_SYSTEM_RULEBOOK.md   # ライセンスシステム
+│   ├── LICENSE_SERVER_RULEBOOK.md   # ライセンスサーバー
 │   └── REVISION_HISTORY.md   #   改訂履歴
 ├── docs/                      # ドキュメントフォルダ
 │   └── CHANGES.md             #   変更履歴
