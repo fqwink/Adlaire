@@ -16,6 +16,9 @@ jobs:
     name: Build & Release
     needs: ci
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adlaire-cms
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,7 +76,7 @@ jobs:
             js/ \
             themes/ \
             data/lang/ \
-            Licenses/ \
+            ../Licenses/ \
             -x "Core/.htaccess" \
             || true
 
@@ -86,6 +89,7 @@ jobs:
 
       - name: Create Git tag
         if: steps.version.outputs.skip == 'false'
+        working-directory: .
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -97,5 +101,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.zip_name }}
-          path: ${{ env.zip_name }}
+          path: adlaire-cms/${{ env.zip_name }}
           retention-days: 90

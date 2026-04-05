@@ -1,53 +1,15 @@
-# Adlaire Static CMS（略：ASCMS / アドレイル・スタティックCMS）
+# Adlaire Group 統合リポジトリ
 
-**現在のバージョン: Ver.3.0-47**
+Adlaire Group 及び 倉田和宏が関わる全てのプロジェクト開発の統合リポジトリ。
 
-Adlaire は、日本語圏で扱いやすい軽量フラットファイル CMS であり、編集のしやすさと静的配信の安全性を両立することを目的とする。
+## プロジェクト一覧
 
-## 主な機能
-
-- **ブロックエディタ** — Editor.js ライクなブロック単位編集（7ブロック型）
-- **Markdown対応** — ブロック ↔ Markdown の format 切替
-- **管理ツール専用UI** — 公開ページから分離された管理ダッシュボード
-- **フラットファイルCMS** — データベース不要、JSONベースのデータ管理
-- **静的サイト生成** — `dist/` に HTML/CSS/JS を出力
-- **REST API** — ページ CRUD、検索、リビジョン、エクスポート/インポート
-- **多言語化（i18n）** — 日本語 / 英語対応
-- **リビジョン管理** — 最大30世代の自動保存・復元
-- **下書き / 公開** — ページステータス管理
-- **セキュリティ** — bcrypt認証、CSRFワンタイムトークン、レートリミット、APIキー認証
-- **CI/CD** — GitHub Actions による自動品質チェック・自動リリース
-
-## Requirements
-
-- PHP 8.3+
-- Apache（mod_rewrite）
-- Deno 2.x（ビルド時のみ / TypeScript コンパイル・バンドル用）
-
-## ビルド
-
-```bash
-deno task build   # TypeScript → JavaScript バンドル（js/admin.js + js/public.js）
-deno task check   # 型チェックのみ
-deno task watch   # ウォッチモード（開発時）
-```
-
-## インストール
-
-1. 公式サイトからリリース ZIP をダウンロード
-2. ファイルを Web サーバーにアップロード
-3. `data/` ディレクトリに書き込み権限(755)を設定
-4. ブラウザでアクセスすると `bundle-installer.php` が起動
-5. セットアップウィザードに従いサイト名・管理者アカウントを設定
-6. `?admin` から管理ダッシュボードにアクセス
-
-## バージョン規則
-
-`Ver.{Major}.{Minor}-{Build}` 形式。
-
-- **Major**: 後方互換性のない変更。Minor を 0 にリセット。
-- **Minor**: 後方互換性のある機能追加・改善。
-- **Build**: 累積リビジョン番号。**リセット禁止**。すべてのリリースで単調増加。
+| ディレクトリ | プロジェクト | 概要 |
+|-------------|------------|------|
+| `adlaire-cms/` | **Adlaire Static CMS** | 軽量フラットファイル型静的 CMS |
+| `adlaire-license-server/` | **Adlaire License Server** | API キー認証・認可管理システム |
+| `Adlaire_BaaS/` | **Adlaire BaaS** | 標準 BaaS 連携基盤 |
+| `adlaire-deploy/` | **Adlaire Deploy** | セルフホスト型デプロイプラットフォーム |
 
 ## LICENSE
 
