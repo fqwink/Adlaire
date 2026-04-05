@@ -5,6 +5,12 @@
 > **RULEBOOK に記載のない機能を実装してはならない。**
 > 新機能・変更は、**まず RULEBOOK に仕様を策定・記載してから実装に着手すること。**
 
+## リポジトリ方針
+
+- 本リポジトリ（`fqwink/Adlaire`）は、**Adlaire Group 及び 倉田和宏が関わる全てのプロジェクト開発の統合リポジトリ**である。
+- 各プロジェクトはプロジェクトルート直下のディレクトリで管理する（例: `adlaire-license-server/`）。
+- 各プロジェクトにも Adlaire のルールブック規律を全面適用する。
+
 ## ドキュメント配置
 
 - `CLAUDE.md` — 開発規約（プロジェクトルート）
@@ -30,6 +36,9 @@
 - `adlaire-license-server/` — ライセンスサーバー（プロジェクトルート）
   - 当面は Adlaire 本体リポジトリ内で管理。将来的に別リポジトリへ移行予定。
   - 仕様は `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` に従う。
+- `Adlaire_BaaS/` — Adlaire BaaS（プロジェクトルート）
+  - Adlaire 統合リポジトリ内で管理。
+  - 仕様は `Adlaire_BaaS/rulebookdocs/BAAS_SPEC.md` に従う。
 
 ## ドキュメント命名規則
 
@@ -60,6 +69,13 @@
 - `js/` 内の手動編集禁止
 
 > バージョン規則・廃止ポリシーは `rulebookdocs/CHARTER.md` §5-6 を参照。
+
+## コミット前チェック義務
+
+- **TypeScript の型チェック（`deno task check`）をコミット前に必ず実行すること。**
+- **PHPStan の静的解析（`phpstan analyse --configuration=phpstan.neon`）をコミット前に必ず実行すること。**
+- 型エラー・静的解析エラーが残存する状態でのコミットを禁止する。
+- CI（GitHub Actions）でも同一チェックを自動実行するが、ローカルでの事前確認を義務とする。
 
 ## バグ修正ポリシー
 
