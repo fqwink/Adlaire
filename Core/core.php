@@ -581,7 +581,7 @@ final class FileStorage
     public function listPublishedPages(): array
     {
         $all = $this->listPages();
-        return array_filter($all, fn(array $data) => ($data['status'] ?? 'published') === 'published');
+        return array_filter($all, fn(array $data) => $data['status'] === 'published');
     }
 
     public function isConfigKey(string $key): bool

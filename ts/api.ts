@@ -8,6 +8,8 @@
  * Requires: csrfToken global variable set by PHP.
  */
 
+/// <reference path="./globals.d.ts" />
+
 // #64: PageSummary partial response対応 — フィールドをoptionalに
 interface PageSummary {
     format?: string;

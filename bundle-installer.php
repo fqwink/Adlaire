@@ -472,7 +472,7 @@ $csrf = security_csrf_token();
         <select name="default_locale">
 <?php foreach (INSTALLER_SUPPORTED_LOCALES as $loc): ?>
 <?php $labels = ['ja' => '日本語', 'en' => 'English']; ?>
-            <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc] ?? $loc) ?></option>
+            <option value="<?= esc($loc) ?>" <?= ($_POST['default_locale'] ?? 'ja') === $loc ? 'selected' : '' ?>><?= esc($labels[$loc]) ?></option>
 <?php endforeach; ?>
         </select>
 

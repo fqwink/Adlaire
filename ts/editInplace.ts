@@ -13,10 +13,11 @@
  * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
  */
 
+/// <reference path="./globals.d.ts" />
+
 import { autosize } from './autosize.ts';
 import { markdownToHtml } from './markdown.ts';
-// R5-28: EditorData型のインポート漏れ修正
-import { Editor, renderBlocks, sanitizeHtml, escHtml, type BlockData, type EditorData } from './editor.ts';
+import { Editor, renderBlocks, sanitizeHtml, escHtml, type EditorData } from './editor.ts';
 import { api, updateCsrfFromResponse } from './api.ts';
 import { i18n } from './i18n.ts';
 
@@ -24,17 +25,16 @@ declare const pageLang: string | undefined;
 declare const pageFormat: string | undefined;
 
 // Expose globals for PHP templates
-(window as Record<string, unknown>).markdownToHtml = markdownToHtml;
-(window as Record<string, unknown>).renderBlocks = renderBlocks;
-(window as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
-(window as Record<string, unknown>).escHtml = escHtml;
+(window as unknown as Record<string, unknown>).markdownToHtml = markdownToHtml;
+(window as unknown as Record<string, unknown>).renderBlocks = renderBlocks;
+(window as unknown as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
+(window as unknown as Record<string, unknown>).escHtml = escHtml;
 
 let changing = false;
 let activeEditor: InstanceType<typeof Editor> | null = null;
 // #5: CSRF同時リクエスト防止用のセーブキュー
 let fieldSaveQueue: Promise<void> = Promise.resolve();
-// #12: flushSave競合防止フラグ
-let flushSaving = false;
+// #12: flushSave競合防止 — フラグは各関数内のローカルスコープで管理
 // Ver.2.9 TS#3/TS#7: sendBeacon用のCSRFトークンキャッシュ — 最後の有効トークンを保持
 let _lastValidCsrfToken: string = '';
 
