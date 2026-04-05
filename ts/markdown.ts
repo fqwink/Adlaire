@@ -155,6 +155,8 @@ export function markdownToHtml(md: string): string {
             row.split('|').slice(1, -1).map(cell => cell.trim());
 
         const headerCells = parseRow(rows[0]);
+        // R5-29: テーブル列数最大制限 — DoS防止（50列超はスキップ）
+        if (headerCells.length === 0 || headerCells.length > 50) return tableBlock;
 
         // Check if row 2 is separator (|---|---|) — #23: alignment情報保持
         const sep = rows[1];
@@ -280,6 +282,8 @@ export function markdownToHtml(md: string): string {
 
     // Clean up excessive newlines
     html = html.replace(/\n{2,}/g, '\n');
+    // R5-30: 末尾の空<p></p>タグ除去
+    html = html.replace(/<p>\s*<\/p>/g, '');
 
     return html.trim();
 }
