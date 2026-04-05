@@ -862,17 +862,22 @@ function initRevisionDiff(): void {
         const btn = document.createElement('button');
         btn.className = 'ce-btn ce-btn--diff';
         btn.textContent = i18n.t('show_diff');
+        // R5-25: diff操作中のボタン無効化
         btn.addEventListener('click', () => {
+            if (btn.disabled) return;
             const t2 = item.dataset.timestamp || '';
             const t1 = items[idx + 1]?.dataset.timestamp || '';
             if (!t1 || !t2) return;
             // #99: timestampバリデーション（数字のみ許可）
             if (!/^\d+$/.test(t1) || !/^\d+$/.test(t2)) return;
 
+            btn.disabled = true;
             api.getRevisionDiff(slug, t1, t2).then(diff => {
                 showRevisionDiffModal(diff);
             }).catch(() => {
                 alert(i18n.t('diff_error'));
+            }).finally(() => {
+                btn.disabled = false;
             });
         });
         item.appendChild(btn);

@@ -557,6 +557,10 @@ const API_SEARCH_SNIPPET_CONTEXT = 40;
 
 function handleApiSearch(FileStorage $storage): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
     $rawQuery = is_string($_GET['q'] ?? null) ? trim($_GET['q'] ?? '') : '';
     if ($rawQuery === '' || mb_strlen($rawQuery, 'UTF-8') > API_SEARCH_MAX_QUERY_LENGTH) {
         apiResponse(['results' => []]);
@@ -844,9 +848,13 @@ function handleApiImport(FileStorage $storage): void
 
 function handleApiVersion(): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
     header('Cache-Control: public, max-age=60');
     $versionFile = dirname(__DIR__) . '/VERSION';
-    $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
+    $version = (file_exists($versionFile) && !is_link($versionFile)) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
     apiResponse([
         'product' => 'Adlaire',
@@ -1166,6 +1174,10 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     $t2 = is_string($_GET['t2'] ?? '') ? ($_GET['t2'] ?? '') : '';
     if ($t1 === '' || $t2 === '') {
         apiError(400, 'Missing t1 or t2');
+        return;
+    }
+    if ($t1 === $t2) {
+        apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => [], 'removed' => [], 'changed' => []], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return;
     }
 

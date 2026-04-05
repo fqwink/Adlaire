@@ -829,7 +829,9 @@ export class InlineToolbar {
         this.el.remove();
     }
 
+    // R5-24: toggleInlineTag tagName入力検証 — 予期しないタグ名防止
     private toggleInlineTag(tagName: string): void {
+        if (tagName !== 'strong' && tagName !== 'em') return;
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.rangeCount) return;
 

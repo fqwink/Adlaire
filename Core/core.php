@@ -919,7 +919,7 @@ final class FileStorage
 
     public function deleteUser(string $username): bool
     {
-        if ($username === '') {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
             return false;
         }
         $users = $this->readUsers();
@@ -974,8 +974,11 @@ final class FileStorage
     /** @return array<string, mixed>|false */
     public function getUser(string $username): array|false
     {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
+            return false;
+        }
         $users = $this->readUsers();
-        if (!isset($users[$username])) {
+        if (!isset($users[$username]) || !is_array($users[$username])) {
             return false;
         }
         return $users[$username];
