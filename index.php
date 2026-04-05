@@ -65,13 +65,7 @@ if ($licenseError !== null) {
     exit;
 }
 
-handleApi();
-handleEdit();
-
-$app = App::getInstance();
-
 $nonce = bin2hex(random_bytes(16));
-$app->nonce = $nonce;
 
 // --- Security headers ---
 $cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'";
@@ -79,6 +73,12 @@ header($cspHeader);
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+
+handleApi();
+handleEdit();
+
+$app = App::getInstance();
+$app->nonce = $nonce;
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {

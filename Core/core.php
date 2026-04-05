@@ -447,8 +447,9 @@ final class FileStorage
             $unit = strtolower(substr(trim($memoryLimitRaw), -1));
             $memoryLimitBytes = match ($unit) {
                 'g' => $val * 1024 * 1024 * 1024,
+                'm' => $val * 1024 * 1024,
                 'k' => $val * 1024,
-                default => $val * 1024 * 1024,
+                default => $val,
             };
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {
                 error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');

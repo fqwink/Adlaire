@@ -68,6 +68,7 @@ function fieldSave(key: string, val: string): void {
     if (val.length > FIELD_SAVE_MAX_LENGTH) {
         console.warn('fieldSave: content exceeds max length, skipping save for:', key);
         showFieldFeedback(key, false);
+        changing = false;
         return;
     }
     // #5: CSRF同時リクエスト時のトークン不整合対策 — キューで直列化
@@ -363,7 +364,7 @@ function initBlockEditor(): void {
         let sidebarBlocksRaw = sidebarEl.dataset.blocks || '';
         const sidebarB64 = sidebarEl.dataset.blocksB64;
         if (sidebarB64) {
-            try { sidebarBlocksRaw = atob(sidebarB64); } catch { /* empty */ }
+            try { sidebarBlocksRaw = new TextDecoder().decode(Uint8Array.from(atob(sidebarB64), c => c.charCodeAt(0))); } catch { /* empty */ }
         }
         let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
         if (sidebarBlocksRaw) {

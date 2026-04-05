@@ -449,7 +449,7 @@ final class App
     public static function getSlug(string $page): string
     {
         $slug = str_replace(' ', '-', $page);
-        $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = strtolower($slug);
         $slug = (string) preg_replace(self::SLUG_SANITIZE_PATTERN, '', $slug);
         return $slug;
     }

@@ -171,22 +171,26 @@ export function sanitizeHtml(html: string): string {
     _sanHexEscape.lastIndex = 0;
     s = s.replace(_sanHexEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     // Phase 2: 危険タグの除去 — Ver.2.9 TS#67: 事前コンパイル済み正規表現使用
-    _sanScript.lastIndex = 0; s = s.replace(_sanScript, '');
-    _sanIframe.lastIndex = 0; s = s.replace(_sanIframe, '');
-    _sanObject.lastIndex = 0; s = s.replace(_sanObject, '');
-    _sanEmbed.lastIndex = 0; s = s.replace(_sanEmbed, '');
-    // #6: SVG内onclick等のネスト対応 - SVGタグ全体を除去
-    _sanSvg.lastIndex = 0; s = s.replace(_sanSvg, '');
-    _sanForm.lastIndex = 0; s = s.replace(_sanForm, '');
-    _sanInput.lastIndex = 0; s = s.replace(_sanInput, '');
-    _sanButton.lastIndex = 0; s = s.replace(_sanButton, '');
-    _sanMeta.lastIndex = 0; s = s.replace(_sanMeta, '');
-    _sanBase.lastIndex = 0; s = s.replace(_sanBase, '');
-    _sanLink.lastIndex = 0; s = s.replace(_sanLink, '');
-    // #114: <style>タグ除去（CSSインジェクション対策）
-    _sanStyle.lastIndex = 0; s = s.replace(_sanStyle, '');
-    // #115: <textarea>タグ除去（コンテンツインジェクション対策）
-    _sanTextarea.lastIndex = 0; s = s.replace(_sanTextarea, '');
+    let prev: string;
+    do {
+        prev = s;
+        _sanScript.lastIndex = 0; s = s.replace(_sanScript, '');
+        _sanIframe.lastIndex = 0; s = s.replace(_sanIframe, '');
+        _sanObject.lastIndex = 0; s = s.replace(_sanObject, '');
+        _sanEmbed.lastIndex = 0; s = s.replace(_sanEmbed, '');
+        // #6: SVG内onclick等のネスト対応 - SVGタグ全体を除去
+        _sanSvg.lastIndex = 0; s = s.replace(_sanSvg, '');
+        _sanForm.lastIndex = 0; s = s.replace(_sanForm, '');
+        _sanInput.lastIndex = 0; s = s.replace(_sanInput, '');
+        _sanButton.lastIndex = 0; s = s.replace(_sanButton, '');
+        _sanMeta.lastIndex = 0; s = s.replace(_sanMeta, '');
+        _sanBase.lastIndex = 0; s = s.replace(_sanBase, '');
+        _sanLink.lastIndex = 0; s = s.replace(_sanLink, '');
+        // #114: <style>タグ除去（CSSインジェクション対策）
+        _sanStyle.lastIndex = 0; s = s.replace(_sanStyle, '');
+        // #115: <textarea>タグ除去（コンテンツインジェクション対策）
+        _sanTextarea.lastIndex = 0; s = s.replace(_sanTextarea, '');
+    } while (s !== prev);
     // Phase 3: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
     _sanNewlineInTag.lastIndex = 0; s = s.replace(_sanNewlineInTag, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
@@ -1530,11 +1534,11 @@ export function renderBlocks(blocks: BlockData[]): string {
             case 'paragraph': {
                 const text = String(d.text || '');
                 // Ver.2.9 #35: 空paragraphは空行として出力（完全除去はしない）
-                return `<p>${escHtml(text)}</p>`;
+                return `<p>${sanitizeHtml(text)}</p>`;
             }
             case 'heading': {
                 const lvl = Math.max(1, Math.min(3, Number(d.level) || 2));
-                return `<h${lvl}>${escHtml(String(d.text || ''))}</h${lvl}>`;
+                return `<h${lvl}>${sanitizeHtml(String(d.text || ''))}</h${lvl}>`;
             }
             case 'list': {
                 const tag = d.style === 'ordered' ? 'ol' : 'ul';
@@ -1545,7 +1549,7 @@ export function renderBlocks(blocks: BlockData[]): string {
             case 'code':
                 return `<pre><code>${escHtml(String(d.code || ''))}</code></pre>`;
             case 'quote':
-                return `<blockquote>${escHtml(String(d.text || ''))}</blockquote>`;
+                return `<blockquote>${sanitizeHtml(String(d.text || ''))}</blockquote>`;
             case 'delimiter':
                 return '<hr>';
             // #117: image alt属性にcaptionをフォールバック出力

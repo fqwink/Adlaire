@@ -87,6 +87,7 @@ function sortPagesByUpdated(array &$pages): void
 
 function renderAdminDashboard(App $app, string $n): void
 {
+    $csrfToken = csrf_token();
     $pages = $app->storage->listPages();
     $pageOrder = $app->storage->getPageOrder();
 
@@ -113,10 +114,10 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
     echo '<input type="text" id="page-search" placeholder="' . esc($app->t('admin_search')) . '" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">';
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
-    echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
-    echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc(csrf_token()) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
+    echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc($csrfToken) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
+    echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc($csrfToken) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
     $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc(csrf_token()) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
+    echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc($csrfToken) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
     echo '<thead><tr><th style="width:30px;"><input type="checkbox" id="select-all"></th><th>' . esc($app->t('admin_slug')) . '</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
@@ -135,7 +136,7 @@ function renderAdminDashboard(App $app, string $n): void
         echo "<td class='{$statusClass}'>" . esc($status) . "</td>";
         echo "<td>" . esc($updated) . "</td>";
         $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
+        echo "<td class='actions'><a href='?admin=edit&page={$safeSlug}'>" . esc($app->t('admin_edit')) . "</a><a href='{$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_view')) . "</a><a href='?preview={$safeSlug}' target='_blank' rel='noopener'>" . esc($app->t('admin_preview')) . "</a><a href='#' class='admin-btn--danger' style='font-size:12px;padding:2px 6px;color:#c33;' data-action='delete' data-slug={$jsonSlug} data-csrf='" . esc($csrfToken) . "'>" . esc($app->t('admin_delete')) . "</a></td>";
         echo "</tr>";
     }
     if (empty($pages)) {
@@ -224,7 +225,7 @@ function renderAdminDashboard(App $app, string $n): void
 
     // Export/Import/Generate
     echo '<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">';
-    echo '<a class="admin-btn admin-btn--outline" href="?api=export">' . esc($app->t('admin_export')) . '</a>';
+    echo '<button class="admin-btn admin-btn--outline" data-action="export-site">' . esc($app->t('admin_export')) . '</button>';
     echo '<label class="admin-btn admin-btn--outline" style="cursor:pointer;">' . esc($app->t('admin_import')) . ' <input type="file" accept=".json" style="display:none;" data-action="import-site"></label>';
     echo '<button class="admin-btn" data-action="generate-site">' . esc($app->t('admin_generate')) . '</button>';
     echo '</div>';
@@ -245,6 +246,14 @@ function renderAdminDashboard(App $app, string $n): void
     echo '};reader.readAsText(file);}';
     echo '});';
     echo 'document.addEventListener("click",function(e){';
+    echo 'var expBtn=e.target.closest("[data-action=\\"export-site\\"]");';
+    echo 'if(expBtn){';
+    echo 'var body=new URLSearchParams();body.append("csrf",csrfToken);';
+    echo 'fetch("index.php?api=export",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})';
+    echo '.then(function(r){if(!r.ok)throw new Error("Export failed");var cd=r.headers.get("Content-Disposition");var fn="adlaire-export.json";if(cd){var m=cd.match(/filename="([^"]+)"/);if(m)fn=m[1];}return r.blob().then(function(b){return{blob:b,filename:fn};});})';
+    echo '.then(function(d){var url=URL.createObjectURL(d.blob);var a=document.createElement("a");a.href=url;a.download=d.filename;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);})';
+    echo '.catch(function(err){alert("Export error: "+err.message);});';
+    echo 'return;}';
     echo 'var btn=e.target.closest("[data-action=\\"generate-site\\"]");';
     echo 'if(!btn)return;';
     echo 'var el=document.getElementById("generate-result");';
@@ -443,6 +452,7 @@ function renderAdminEditor(App $app, string $n): void
 
 function renderAdminUsers(App $app, string $n): void
 {
+    $csrfToken = csrf_token();
     if (!$app->isMainMaster()) {
         echo '<section class="admin-section"><p>' . esc($app->t('admin_cannot_delete_self')) . '</p></section>';
         return;
@@ -482,7 +492,7 @@ function renderAdminUsers(App $app, string $n): void
             echo "<a href='#' class='admin-btn admin-btn--outline' style='font-size:12px;padding:2px 8px;color:#f90;' data-action='disable-user' data-user={$jsonUser}>" . esc($app->t('admin_disable_user')) . "</a> ";
         }
         if (!$isSelf) {
-            echo "<a href='#' class='admin-btn admin-btn--danger' style='font-size:12px;padding:2px 8px;' data-action='delete-user' data-user={$jsonUser} data-csrf='" . esc(csrf_token()) . "'>" . esc($app->t('admin_delete_user')) . "</a>";
+            echo "<a href='#' class='admin-btn admin-btn--danger' style='font-size:12px;padding:2px 8px;' data-action='delete-user' data-user={$jsonUser} data-csrf='" . esc($csrfToken) . "'>" . esc($app->t('admin_delete_user')) . "</a>";
         }
         echo "</td></tr>";
     }
