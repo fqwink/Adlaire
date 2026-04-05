@@ -39,6 +39,9 @@
 - `Adlaire_BaaS/` — Adlaire BaaS（プロジェクトルート）
   - Adlaire 統合リポジトリ内で管理。
   - 仕様は `Adlaire_BaaS/rulebookdocs/Adlaire_BaaS.md` に従う。
+- `adlaire-deploy/` — Adlaire Deploy（プロジェクトルート）
+  - Adlaire 統合リポジトリ内で管理。
+  - 仕様は `adlaire-deploy/rulebookdocs/DEPLOY_PLATFORM_RULEBOOK.md` に従う。
 
 ## ドキュメント命名規則
 
