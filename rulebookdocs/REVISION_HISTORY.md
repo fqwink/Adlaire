@@ -56,6 +56,7 @@
 | Ver.1.5 | 2026-04-04 | §4 TypeScript ビルドランタイムを Node.js/npm/tsc から Deno に変更（Ver.3.0 以降）、§5 deno.json・scripts/build.ts をプロジェクト構成に追加、package.json / tsconfig.json 廃止 |
 | Ver.1.6 | 2026-04-04 | §7 CI/CD・リリース規約を新設（全自動リリース、ZIP形式、品質チェック: deno check + PHPStan）、§8-10 セクション番号繰り下げ |
 | Ver.1.7 | 2026-04-04 | §7.4 配布チャンネルを確定: 公式サイト（Adlaire自身で構築・静的生成、自前サーバーで管理）を唯一の配布チャンネルとする |
+| Ver.1.8 | 2026-04-04 | §4.4 ES モジュール移行仕様を新設（バンドル方式: admin.js/public.js、IIFE出力、グローバル公開関数定義、個別scriptタグ廃止）、CI/CD実装ファイル追加（.github/workflows/ci.yml, release.yml, phpstan.neon）、.htaccess更新（deno.json/phpstan.neonアクセス制限） |
 
 ## API_RULEBOOK.md（API・データ）
 

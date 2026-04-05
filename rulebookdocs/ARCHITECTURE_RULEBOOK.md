@@ -1,7 +1,7 @@
 # Adlaire Architecture RULEBOOK
 
 - 文書名: Adlaire Architecture RULEBOOK
-- 文書バージョン: Ver.1.7
+- 文書バージョン: Ver.1.8
 - 作成日: 2026-04-02
 - 最終更新: 2026-04-04
 - 対象製品: Adlaire Static CMS
@@ -142,6 +142,57 @@ deno task watch   # ウォッチモード（開発時）
 - `deno.json` をプロジェクト設定ファイルとして使用する（`package.json` / `tsconfig.json` は廃止）。
 - コンパイラオプションは `deno.json` の `compilerOptions` セクションに定義する。
 - ビルドスクリプト（`scripts/build.ts`）は `jsr:@deno/emit` を使用して TypeScript をトランスパイルする。
+
+## 4.4 ES モジュール移行（Ver.3.0）
+
+> Ver.2.x 系の `module: none`（グローバルスクリプト方式）を廃止し、ES モジュールに移行する。
+
+### 4.4.1 基本方針
+
+- TypeScript ソースに `import` / `export` 文を導入する。
+- ビルドスクリプトが全モジュールを**単一バンドルファイル `js/main.js`** に結合する。
+- PHP テンプレートは `<script>` タグ 1つで `js/main.js` をロードする。
+- バンドルは IIFE（即時実行関数式）形式で出力し、モジュールスコープで隔離する。
+- PHP 側から参照が必要なグローバル関数は、エントリポイントで明示的に `window` に公開する。
+
+### 4.4.2 エントリポイント
+
+- **管理画面エントリ**: `ts/editInplace.ts`（全モジュールをインポート）
+- **公開ページエントリ**: `ts/public.ts`（新設。`markdown.ts` 等の公開側必要モジュールのみインポート）
+- ビルドスクリプトはエントリポイントごとにバンドルを出力する。
+
+### 4.4.3 出力ファイル
+
+| 出力ファイル | エントリポイント | 用途 |
+|-------------|----------------|------|
+| `js/admin.js` | `ts/editInplace.ts` | 管理画面用（全機能） |
+| `js/public.js` | `ts/public.ts` | 公開ページ用（描画のみ） |
+
+### 4.4.4 PHP 側の変更
+
+- `App::scriptTags()` を変更: 個別 `<script>` タグの列挙 → 単一 `<script>` タグに変更。
+- 管理画面: `<script src="js/admin.js"></script>`
+- 公開ページ: `<script src="js/public.js"></script>`
+- `ADMIN_SCRIPTS` / `PUBLIC_SCRIPTS` 定数を廃止する。
+
+### 4.4.5 グローバル公開関数
+
+以下の関数は PHP テンプレートまたはインラインスクリプトから参照されるため、バンドル内でグローバルに公開する。
+
+| 関数 | 用途 |
+|------|------|
+| `markdownToHtml()` | Markdown → HTML 変換（公開ページ描画） |
+| `renderBlocks()` | ブロック → HTML 変換（公開ページ描画） |
+| `sanitizeHtml()` | HTML サニタイズ |
+| `escHtml()` | HTML エスケープ |
+
+公開方法: エントリポイントで `(window as any).functionName = functionName;` として明示的に代入する。
+
+### 4.4.6 廃止項目
+
+- `module: none` によるグローバルスクリプト方式を廃止する。
+- 個別 JS ファイルの `<script>` タグ複数読み込みを廃止する。
+- `ts/globals.d.ts` のグローバル関数宣言を廃止し、モジュールインポートに置換する。
 
 ---
 
