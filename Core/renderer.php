@@ -66,7 +66,7 @@ function renderMarkdownToHtml(string $md): string
     $md = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $md) ?? $md;
     $html = htmlspecialchars($md, ENT_QUOTES, 'UTF-8');
 
-    $html = preg_replace_callback('/```(\w+)?\n([\s\S]*?)```/', function ($m) {
+    $html = preg_replace_callback('/```(\w+)?\n([\s\S]*?)```/s', function ($m) {
         $cls = $m[1] ? ' class="language-' . esc($m[1]) . '"' : '';
         $code = htmlspecialchars(htmlspecialchars_decode(trim($m[2]), ENT_QUOTES), ENT_QUOTES, 'UTF-8');
         return '<pre><code' . $cls . '>' . $code . '</code></pre>';
@@ -77,9 +77,9 @@ function renderMarkdownToHtml(string $md): string
     $html = preg_replace('/^## (.+)$/m', '<h2>$1</h2>', $html) ?? $html;
     $html = preg_replace('/^# (.+)$/m', '<h1>$1</h1>', $html) ?? $html;
     $html = preg_replace('/^---$/m', '<hr>', $html) ?? $html;
-    $html = preg_replace('/\*\*\*(.+?)\*\*\*/', '<strong><em>$1</em></strong>', $html) ?? $html;
-    $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html) ?? $html;
-    $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html) ?? $html;
+    $html = preg_replace('/\*\*\*(.+?)\*\*\*/s', '<strong><em>$1</em></strong>', $html) ?? $html;
+    $html = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $html) ?? $html;
+    $html = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $html) ?? $html;
     $html = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function ($m) {
         $url = html_entity_decode($m[2], ENT_QUOTES, 'UTF-8');
         $urlDouble = html_entity_decode($url, ENT_QUOTES, 'UTF-8');

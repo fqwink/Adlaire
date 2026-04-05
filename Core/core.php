@@ -343,6 +343,16 @@ final class FileStorage
         }
 
         $path = $this->pagesDir . '/' . $slug . '.json';
+
+        // Ensure target is within pagesDir
+        $realPagesDir = realpath($this->pagesDir);
+        if ($realPagesDir === false) {
+            return false;
+        }
+        $resolvedPath = $realPagesDir . DIRECTORY_SEPARATOR . $slug . '.json';
+        if (!str_starts_with($resolvedPath, $realPagesDir . DIRECTORY_SEPARATOR)) {
+            return false;
+        }
         $now = date('c');
 
         $existing = $this->readPageData($slug);
@@ -383,6 +393,13 @@ final class FileStorage
 
         $path = $this->pagesDir . '/' . $slug . '.json';
         if (!file_exists($path) || is_link($path)) {
+            return false;
+        }
+
+        // Path traversal check
+        $realPath = realpath($path);
+        $realPagesDir = realpath($this->pagesDir);
+        if ($realPath === false || $realPagesDir === false || !str_starts_with($realPath, $realPagesDir . DIRECTORY_SEPARATOR)) {
             return false;
         }
 
@@ -535,6 +552,11 @@ final class FileStorage
         $data = $this->readPageData($slug);
         if ($data === false) {
             return false;
+        }
+
+        // Skip if status is already the same
+        if (($data['status'] ?? 'published') === $status) {
+            return true;
         }
 
         $data['status'] = $status;

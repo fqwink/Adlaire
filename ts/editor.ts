@@ -58,6 +58,7 @@ export function getEditorFromElement(el: HTMLElement): Editor | null {
 
 // --- Helper: attach Backspace handler to any contentEditable block ---
 
+// R3-19: attachBackspaceHandler blockがnullの場合の安全チェック + R3-20: idx === 0のときの処理漏れ
 function attachBackspaceHandler(el: HTMLElement): void {
     el.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && (el.textContent?.trim() === '')) {
@@ -67,7 +68,9 @@ function attachBackspaceHandler(el: HTMLElement): void {
             // #12: focusout前の状態保存トリガー
             editor.saveUndoState();
             const block = el.closest('.ce-block') as HTMLElement;
+            if (!block) return;
             const idx = editor.getBlockIndex(block);
+            if (idx < 0) return;
             if (idx > 0) {
                 editor.removeBlock(idx);
                 editor.focusBlock(idx - 1);
@@ -223,7 +226,11 @@ export class UndoManager {
     // #118: push最適化 — raw比較を先に行い、不一致時のみ正規化比較
     // Ver.2.9 #21: 連続pushのデバウンス（300ms以内の同一操作を統合）
     push(state: EditorData): void {
+        // R4-1: state null/undefinedチェック
+        if (!state) return;
         const json = JSON.stringify(state);
+        // R4-2: JSON.stringify結果のundefinedチェック（循環参照等）
+        if (!json) return;
         const now = Date.now();
         // Ver.2.9 TS#21: maxSize/pointer整合性 — pointerがstack範囲外の場合に補正
         if (this.pointer >= this.stack.length) {
@@ -342,8 +349,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 attachBackspaceHandler(el);
                 return el;
             },
+            // R4-6: paragraph save時にsanitizeHtml適用
             save(el) {
-                return { text: el.innerHTML };
+                return { text: sanitizeHtml(el.innerHTML) };
             },
         };
     },
@@ -397,8 +405,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 wrap.appendChild(headingEl);
                 return wrap;
             },
+            // R4-7: heading save時にsanitizeHtml適用
             save() {
-                return { text: headingEl.innerHTML, level };
+                return { text: sanitizeHtml(headingEl.innerHTML), level };
             },
         };
     },
@@ -610,8 +619,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 });
                 return bq;
             },
+            // R4-8: quote save時にsanitizeHtml適用
             save(el) {
-                return { text: el.innerHTML };
+                return { text: sanitizeHtml(el.innerHTML) };
             },
         };
     },
@@ -961,6 +971,7 @@ export class Editor {
         this.container.classList.add('ce-editor');
         (this.container as any).__editor = this;
 
+        // R3-26: destroy済みの場合は再初期化不可の保護
         // Ver.2.9 #6: 各Editorインスタンスごとに独立したInlineToolbarを生成
         this.ownInlineToolbar = new InlineToolbar();
         _editorInlineToolbarMap.set(this.container, this.ownInlineToolbar);
@@ -1089,7 +1100,11 @@ export class Editor {
         };
     }
 
+    // R4-3: destroy重複呼び出し防止フラグ
+    private destroyed = false;
     destroy(): void {
+        if (this.destroyed) return;
+        this.destroyed = true;
         this.clear();
         // Ver.2.9 TS#49: destroy時にUndoManagerをクリアしてメモリ解放
         this.undoManager.clear();
@@ -1520,8 +1535,10 @@ export class Editor {
 
 // --- Render blocks to HTML (for visitor view) ---
 
+// R4-4: escHtml入力null/undefined安全化 + R4-5: シングルクォートもエスケープ
 export function escHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Ver.2.9 #35: 空コンテンツ — 空paragraphはスキップ、data未定義時の安全処理

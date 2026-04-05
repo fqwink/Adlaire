@@ -219,7 +219,7 @@ final class App
         $sessionHash = is_string($_SESSION['l'] ?? null) ? ($_SESSION['l'] ?? '') : '';
         if ($sessionUser !== '' && $sessionHash !== '') {
             $userData = $this->storage->getUser($sessionUser);
-            if ($userData !== false && isset($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
+            if ($userData !== false && isset($userData['password']) && is_string($userData['password']) && hash_equals($userData['password'], $sessionHash)) {
                 if (isset($userData['enabled']) && $userData['enabled'] === false) {
                     session_regenerate_id(true);
                     $_SESSION = [];
@@ -233,9 +233,11 @@ final class App
         }
 
         if (isset($_GET['logout'])) {
-            $_SESSION = [];
-            session_regenerate_id(true);
-            session_destroy();
+            if ($this->isLoggedIn()) {
+                $_SESSION = [];
+                session_regenerate_id(true);
+                session_destroy();
+            }
             header('Location: ./');
             exit;
         }
@@ -466,6 +468,10 @@ final class App
 
     public function login(): string
     {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return '';
+        }
+
         if (!csrf_verify()) {
             return $this->t('csrf_error');
         }
@@ -514,6 +520,9 @@ final class App
                 return $this->t('wrong_password');
             }
             if (strlen($newPass) < self::MIN_PASSWORD_LENGTH) {
+                return $this->t('password_too_short');
+            }
+            if (strlen($newPass) > self::MAX_PASSWORD_LENGTH) {
                 return $this->t('password_too_short');
             }
             if (in_array(strtolower($newPass), self::WEAK_PASSWORDS, true)) {
@@ -585,10 +594,14 @@ final class App
     {
         $config = $this->storage->readConfig();
         $raw = $config['sidebar_blocks'] ?? '';
-        if ($raw === '') {
+        if (!is_string($raw) || $raw === '') {
             return [];
         }
         $data = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Adlaire: Failed to decode sidebar_blocks: ' . json_last_error_msg());
+            return [];
+        }
         return is_array($data) ? $data : [];
     }
 
@@ -618,7 +631,7 @@ final class App
     public function content(string $id, string $content): void
     {
         $format = (string) ($this->config['pageFormat'] ?? 'blocks');
-        $isPage = ($id === $this->config['page']);
+        $isPage = ($id === ($this->config['page'] ?? ''));
 
         if ($format === 'blocks' && $isPage) {
             $blocksB64 = '';
