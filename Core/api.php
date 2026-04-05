@@ -587,8 +587,8 @@ function handleApiSearch(FileStorage $storage): void
         $results[] = [
             'slug'       => $slug,
             'snippet'    => strip_tags($snippet),
-            'format'     => $data['format'] ?? 'blocks',
-            'status'     => $data['status'] ?? 'published',
+            'format'     => $data['format'],
+            'status'     => $data['status'],
             'updated_at' => $data['updated_at'],
         ];
     }

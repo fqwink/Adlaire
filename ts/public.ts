@@ -10,7 +10,7 @@ import { markdownToHtml } from './markdown.ts';
 import { renderBlocks, sanitizeHtml, escHtml } from './editor.ts';
 
 // Expose globals for PHP theme templates
-(window as Record<string, unknown>).markdownToHtml = markdownToHtml;
-(window as Record<string, unknown>).renderBlocks = renderBlocks;
-(window as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
-(window as Record<string, unknown>).escHtml = escHtml;
+(window as unknown as Record<string, unknown>).markdownToHtml = markdownToHtml;
+(window as unknown as Record<string, unknown>).renderBlocks = renderBlocks;
+(window as unknown as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
+(window as unknown as Record<string, unknown>).escHtml = escHtml;

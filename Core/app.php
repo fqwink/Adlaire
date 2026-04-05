@@ -58,7 +58,7 @@ final class App
     public readonly string $host;
     public readonly string $requestPage;
     public string $credit;
-    public readonly string $language;
+    public string $language;
     public string $nonce = '';
 
     public readonly FileStorage $storage;

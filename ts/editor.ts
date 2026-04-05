@@ -8,6 +8,8 @@
  * Spec: EDITOR_RULEBOOK.md §13 (Ver.2.5 エディタ高度化仕様)
  */
 
+import { i18n } from './i18n.ts';
+
 // --- Types ---
 
 export interface BlockData {
