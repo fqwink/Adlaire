@@ -38,6 +38,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 require __DIR__ . '/Core/helpers.php';
+require __DIR__ . '/Core/license.php';
 require __DIR__ . '/Core/core.php';
 require __DIR__ . '/Core/app.php';
 require __DIR__ . '/Core/renderer.php';
@@ -49,6 +50,18 @@ require __DIR__ . '/Core/generator.php';
 // Redirect to installer if not yet set up
 if (!file_exists(__DIR__ . '/data/system/install.lock') && file_exists(__DIR__ . '/bundle-installer.php')) {
     header('Location: bundle-installer.php');
+    exit;
+}
+
+// --- License gate ---
+$licenseError = LicenseManager::check();
+if ($licenseError !== null) {
+    http_response_code(503);
+    $safeMsg = htmlspecialchars($licenseError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    echo "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Adlaire - License Required</title></head>";
+    echo "<body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\">";
+    echo "<h1>503 Service Unavailable</h1><p>{$safeMsg}</p>";
+    echo "<p><a href=\"?admin\">License Settings</a></p></body></html>";
     exit;
 }
 
