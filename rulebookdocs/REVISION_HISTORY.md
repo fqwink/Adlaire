@@ -58,6 +58,7 @@
 | Ver.1.7 | 2026-04-04 | §7.4 配布チャンネルを確定: 公式サイト（Adlaire自身で構築・静的生成、自前サーバーで管理）を唯一の配布チャンネルとする |
 | Ver.1.8 | 2026-04-04 | §4.3 ビルドツールを @deno/emit → npm:esbuild に変更（IIFE バンドル対応）、§4.4 ES モジュール移行仕様を新設（バンドル方式: admin.js/public.js、IIFE出力、グローバル公開関数定義、個別scriptタグ廃止）、CI/CD実装ファイル追加（.github/workflows/ci.yml, release.yml, phpstan.neon）、.htaccess更新（deno.json/phpstan.neonアクセス制限）、ES モジュール移行実装（全TSファイルにexport/import導入、ts/public.ts新設、scripts/build.tsバンドル対応、globals.d.ts簡素化） |
 | Ver.1.9 | 2026-04-05 | §5 プロジェクト構成を Ver.3.0 実装に合わせて全面更新（ts/public.ts追加、js/admin.js+public.js、scripts/、adlaire-license-server/、.github/、phpstan.neon、license.json、LICENSE_SERVER_RULEBOOK.md追加）|
+| Ver.2.0 | 2026-04-05 | §4.1 `npm:` プレフィックスのインポートを全面禁止（セキュリティ観点）、§4.3 ビルドスクリプトを `npm:esbuild` → esbuild バイナリ（`Deno.Command` 経由、`--allow-run=esbuild` 限定）に変更。CI/CD（release.yml）に esbuild バイナリの GitHub Releases からの直接取得ステップを追加 |
 
 ## API_RULEBOOK.md（API・データ）
 

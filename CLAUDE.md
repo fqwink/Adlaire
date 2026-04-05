@@ -67,6 +67,7 @@
 - **TypeScript ビルドランタイム: Deno**、JS 直接記述禁止、`ts/` → `js/` バンドル生成
 - ビルド: `deno task build`（esbuild IIFE バンドル → `js/admin.js` + `js/public.js`）
 - `js/` 内の手動編集禁止
+- **`npm:` プレフィックスのインポートを全面禁止**（セキュリティ観点。サプライチェーン攻撃・依存関係混乱攻撃対策）
 
 > バージョン規則・廃止ポリシーは `rulebookdocs/CHARTER.md` §5-6 を参照。
 

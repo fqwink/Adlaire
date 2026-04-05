@@ -119,6 +119,7 @@ data/
 
 - **TypeScript を全面的に採用する**。JavaScript の直接記述は禁止。
 - **ビルドランタイムは Deno を採用する**（Ver.3.0 以降）。Node.js / npm は使用しない。
+- **`npm:` プレフィックスのインポートを全面禁止する**（セキュリティ観点）。`npm:` 経由の依存はサプライチェーン攻撃・依存関係混乱攻撃のリスクを持つため、Deno の npm 互換機能であっても使用してはならない。
 - すべての JavaScript は **TypeScript からのコンパイル生成を義務化** する。
 - TypeScript バージョンは Deno に組み込まれたものを使用する。Deno のメジャーバージョン更新は別途検討。
 
@@ -141,7 +142,9 @@ deno task watch   # ウォッチモード（開発時）
 - ビルド済みリリース物が配置済みであることを前提とする。
 - `deno.json` をプロジェクト設定ファイルとして使用する（`package.json` / `tsconfig.json` は廃止）。
 - コンパイラオプションは `deno.json` の `compilerOptions` セクションに定義する。
-- ビルドスクリプト（`scripts/build.ts`）は `npm:esbuild`（Deno npm 互換経由）を使用してバンドル・トランスパイルする。
+- ビルドスクリプト（`scripts/build.ts`）は **esbuild バイナリを `Deno.Command` 経由で実行する**。`npm:esbuild` は使用しない。
+- esbuild バイナリは GitHub Releases（`https://github.com/evanw/esbuild/releases`）から直接取得する。npm レジストリを経由しない。
+- `--allow-run` は `esbuild` のみに限定する（`--allow-run=esbuild`）。任意コマンド実行を禁止する。
 
 ## 4.4 ES モジュール移行（Ver.3.0）
 

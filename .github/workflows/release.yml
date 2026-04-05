@@ -43,6 +43,17 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install esbuild
+        if: steps.version.outputs.skip == 'false'
+        env:
+          ESBUILD_VERSION: "0.25.4"
+        run: |
+          curl -fsSL "https://github.com/evanw/esbuild/releases/download/v${ESBUILD_VERSION}/esbuild-linux-x64.zip" -o esbuild.zip
+          unzip esbuild.zip
+          chmod +x esbuild
+          sudo mv esbuild /usr/local/bin/esbuild
+          esbuild --version
+
       - name: Build TypeScript
         if: steps.version.outputs.skip == 'false'
         run: deno task build
