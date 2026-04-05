@@ -112,6 +112,7 @@
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
 | Ver.1.0 | 2026-04-04 | 初版: 公式サイトAPIキー認証・認可管理システム仕様を新設。システム構成（PHP+SQLite）、API 4エンドポイント（register/verify/renew/third-party）、DB設計（licenses/contracts/audit_log）、キー生成仕様（PRI/SEC/TPK）、管理ダッシュボード、セキュリティ要件、開発Phase 1-4を定義 |
+| Ver.1.1 | 2026-04-05 | §1.2 ルールブック規律の全面適用を新設（Adlaireのルールブック規律・バグ修正ポリシー・命名規則を全面適用）、§1.4 ソースコード管理を新設（adlaire-license-server/で当面管理）、§1.5 基本方針にdeclare(strict_types=1)必須を追記 |
 
 ## BAAS_HUB_RULEBOOK.md（BaaS連携Hub）
 

@@ -27,6 +27,9 @@
   - `docs/CHANGES.md` — 変更履歴
 - `Licenses/` — ライセンスフォルダ（プロジェクトルート）
   - `Licenses/LICENSE_Ver.2.0` — Adlaire License Ver.2.0
+- `adlaire-license-server/` — ライセンスサーバー（プロジェクトルート）
+  - 当面は Adlaire 本体リポジトリ内で管理。将来的に別リポジトリへ移行予定。
+  - 仕様は `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` に従う。
 
 ## ドキュメント命名規則
 
@@ -42,14 +45,18 @@
 - リリース計画は `RELEASE_PLAN_RULEBOOK.md` に集約。
 - セットアップ・アップデート実装仕様は `CHARTER.md` §8-9 に記載。
 - **ルールブックの策定が完了するまで、実装に着手してはならない。**
+- **`adlaire-license-server/` にも Adlaire のルールブック規律を全面適用する。**
+  - `LICENSE_SERVER_RULEBOOK.md` が仕様の正とする。
+  - RULEBOOK に記載のない機能を実装してはならない。
+  - バグ修正ポリシー・ドキュメント命名規則等もすべて同一基準で適用する。
 
 ## 技術規約
 
 > 詳細は `rulebookdocs/ARCHITECTURE_RULEBOOK.md` を参照。
 
 - **PHP 8.3+**（`declare(strict_types=1)`）、ルート2 + `Core/` 8ファイル構成
-- **TypeScript 5 系固定**（`~5.8`）、JS 直接記述禁止、`ts/` → `js/` コンパイル生成
-- ビルド: `npm install` → `npm run build`（`tsc`）
+- **TypeScript ビルドランタイム: Deno**、JS 直接記述禁止、`ts/` → `js/` バンドル生成
+- ビルド: `deno task build`（esbuild IIFE バンドル → `js/admin.js` + `js/public.js`）
 - `js/` 内の手動編集禁止
 
 > バージョン規則・廃止ポリシーは `rulebookdocs/CHARTER.md` §5-6 を参照。

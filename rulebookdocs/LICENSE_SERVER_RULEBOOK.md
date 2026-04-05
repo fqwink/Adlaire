@@ -1,7 +1,7 @@
 # Adlaire License Server RULEBOOK
 
 - 文書名: Adlaire License Server RULEBOOK
-- 文書バージョン: Ver.1.0
+- 文書バージョン: Ver.1.1
 - 作成日: 2026-04-04
 - 対象製品: Adlaire License Server
 - 文書種別: 公式サイト APIキー認証・認可管理システムの技術規範文書
@@ -17,14 +17,28 @@
 License Server は Adlaire Static CMS 本体とは独立したシステムであり、将来的に別リポジトリで管理する。
 現段階では Adlaire 本体のルールブック内で仕様を管理する。
 
-### 1.2 上位原則
+### 1.2 ルールブック規律の全面適用
+
+- **Adlaire のルールブック規律を全面的に適用する。**
+- RULEBOOK に記載のない機能を実装してはならない。
+- 新機能・変更は、まず RULEBOOK に仕様を策定・記載してから実装に着手すること。
+- バグ修正ポリシー（50件以上精査、致命的・重大・中程度を最優先）を適用する。
+- ドキュメント命名規則（大文字・アンダースコア区切り）を適用する。
+- バージョン規則（`CHARTER.md` §5）、廃止ポリシー（`CHARTER.md` §6）を適用する。
+
+### 1.3 上位原則
 
 - `LICENSE_SYSTEM_RULEBOOK.md` のキー体系・フロー仕様に準拠する。
 - 公式サイトの配置方針（`ARCHITECTURE_RULEBOOK.md` §7.4）に準拠する。
 
-### 1.3 基本方針
+### 1.4 ソースコード管理
 
-- **PHP 8.3+ で実装**する。
+- 当面は Adlaire 本体リポジトリの `adlaire-license-server/` ディレクトリで管理する。
+- 将来的に `fqwink/adlaire-license-server` リポジトリへ移行する。
+
+### 1.5 基本方針
+
+- **PHP 8.3+ で実装**する（`declare(strict_types=1)` 必須）。
 - **SQLite を初期 DB** として採用する。
 - 公式サイトと同一の自前サーバーに配置する。
 - 管理ダッシュボードは Adlaire Group メンバーのみがアクセスする。
