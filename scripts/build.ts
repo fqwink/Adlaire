@@ -8,7 +8,7 @@
  * - js/public.js ← ts/public.ts（公開ページ用・描画のみ）
  */
 
-import * as esbuild from "npm:esbuild@^0.25";
+import * as esbuild from "npm:esbuild@~0.25";
 
 const BUNDLES = [
   {
