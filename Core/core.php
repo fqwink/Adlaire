@@ -445,10 +445,11 @@ final class FileStorage
         $val = is_string($memoryLimitRaw) ? (int) $memoryLimitRaw : 0;
         if ($val > 0) {
             $unit = strtolower(substr(trim($memoryLimitRaw), -1));
-            $memoryLimitBytes = match ($unit) {
-                'g' => $val * 1024 * 1024 * 1024,
-                'm' => $val * 1024 * 1024,
-                'k' => $val * 1024,
+            $memoryLimitBytes = match (true) {
+                $unit === 'g' => $val * 1024 * 1024 * 1024,
+                $unit === 'm' => $val * 1024 * 1024,
+                $unit === 'k' => $val * 1024,
+                ctype_digit($unit) => $val,
                 default => $val,
             };
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {

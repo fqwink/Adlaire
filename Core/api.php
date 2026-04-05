@@ -724,14 +724,10 @@ function handleApiVersion(): void
     $versionFile = dirname(__DIR__) . '/VERSION';
     $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
-    $lockFile = dirname(__DIR__) . '/data/system/install.lock';
-    $installed = file_exists($lockFile) && !is_link($lockFile);
-
     apiResponse([
         'product' => 'Adlaire',
         'version' => $version,
         'app_version' => App::VERSION,
-        'installed' => $installed,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
