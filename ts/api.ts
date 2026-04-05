@@ -362,9 +362,12 @@ export const api = {
     },
 
     // Ver.2.9 #33: パスワード検証 — クライアント側バリデーション追加
+    // R5-33: updateMainPassword最大長チェック + R5-34: 文字列型検証
     async updateMainPassword(currentPassword: string, newPassword: string): Promise<void> {
+        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') throw new Error('Invalid password type');
         if (!currentPassword || !newPassword) throw new Error('Password fields are required');
         if (newPassword.length < 8) throw new Error('Password must be at least 8 characters');
+        if (newPassword.length > 128) throw new Error('Password must be at most 128 characters');
         const res = await fetch(buildApiUrl('users'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
