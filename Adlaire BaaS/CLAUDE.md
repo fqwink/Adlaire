@@ -60,4 +60,4 @@
 
 ## リポジトリ管理
 
-- Adlaire 統合リポジトリ（`fqwink/Adlaire`）の `Adlaire_BaaS/` ディレクトリで管理する。
+- Adlaire 統合リポジトリ（`fqwink/Adlaire`）の `Adlaire BaaS/` ディレクトリで管理する。

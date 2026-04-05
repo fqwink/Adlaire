@@ -42,5 +42,5 @@
 
 ## リポジトリ管理
 
-- 当面は Adlaire 本体リポジトリの `adlaire-license-server/` ディレクトリで管理する。
-- 将来的に `fqwink/adlaire-license-server` リポジトリへ移行予定。
+- 当面は Adlaire 本体リポジトリの `Adlaire License Server/` ディレクトリで管理する。
+- 将来的に別リポジトリへ移行予定。

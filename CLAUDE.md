@@ -19,42 +19,42 @@
 
 | ディレクトリ | プロジェクト | 状態 | 仕様 |
 |-------------|------------|------|------|
-| `adlaire-cms/` | **Adlaire Static CMS** | Ver.3.0-47 | `adlaire-cms/rulebookdocs/` |
-| `adlaire-license-server/` | **Adlaire License Server** | 初期実装済 | `adlaire-license-server/rulebookdocs/` |
-| `Adlaire_BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire_BaaS/rulebookdocs/` |
-| `adlaire-deploy/` | **Adlaire Deploy** | Phase 0 完了 | `adlaire-deploy/rulebookdocs/` |
+| `Adlaire Static CMS/` | **Adlaire Static CMS** | Ver.3.0-47 | `Adlaire Static CMS/rulebookdocs/` |
+| `Adlaire License Server/` | **Adlaire License Server** | 初期実装済 | `Adlaire License Server/rulebookdocs/` |
+| `Adlaire BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire BaaS/rulebookdocs/` |
+| `Adlaire Deploy/` | **Adlaire Deploy** | Phase 0 完了 | `Adlaire Deploy/rulebookdocs/` |
 
-### Adlaire Static CMS (`adlaire-cms/`)
+### Adlaire Static CMS (`Adlaire Static CMS/`)
 
 軽量・高セキュリティなフラットファイル型静的 CMS。
 PHP 8.3+ / TypeScript (Deno) / JSON フラットファイルストレージ。
 
-- 仕様の正: `adlaire-cms/rulebookdocs/` 内の各ルールブック
-- 開発規約: `adlaire-cms/CLAUDE.md`
+- 仕様の正: `Adlaire Static CMS/rulebookdocs/` 内の各ルールブック
+- 開発規約: `Adlaire Static CMS/CLAUDE.md`
 
-### Adlaire License Server (`adlaire-license-server/`)
+### Adlaire License Server (`Adlaire License Server/`)
 
 公式サイト API キー認証・認可管理システム。
 PHP 8.3+ / SQLite。当面は本リポジトリ内で管理。将来的に別リポジトリへ移行予定。
 
-- 仕様の正: `adlaire-license-server/rulebookdocs/LICENSE_SERVER_RULEBOOK.md`
-- 開発規約: `adlaire-license-server/CLAUDE.md`
+- 仕様の正: `Adlaire License Server/rulebookdocs/LICENSE_SERVER_RULEBOOK.md`
+- 開発規約: `Adlaire License Server/CLAUDE.md`
 
-### Adlaire BaaS (`Adlaire_BaaS/`)
+### Adlaire BaaS (`Adlaire BaaS/`)
 
 Adlaire Static CMS に対する標準 BaaS 連携基盤。
 Deno / TypeScript / Deno KV。
 
-- 仕様の正: `Adlaire_BaaS/rulebookdocs/Adlaire_BaaS.md`
-- 開発規約: `Adlaire_BaaS/CLAUDE.md`
+- 仕様の正: `Adlaire BaaS/rulebookdocs/Adlaire_BaaS.md`
+- 開発規約: `Adlaire BaaS/CLAUDE.md`
 
-### Adlaire Deploy (`adlaire-deploy/`)
+### Adlaire Deploy (`Adlaire Deploy/`)
 
 VPS・オンプレミスで構築可能な、Deno ベースのセルフホスト型デプロイプラットフォーム。
 Deno / TypeScript。
 
-- 仕様の正: `adlaire-deploy/rulebookdocs/DEPLOY_PLATFORM_RULEBOOK.md`
-- 開発規約: `adlaire-deploy/CLAUDE.md`
+- 仕様の正: `Adlaire Deploy/rulebookdocs/DEPLOY_PLATFORM_RULEBOOK.md`
+- 開発規約: `Adlaire Deploy/CLAUDE.md`
 
 ---
 
@@ -98,4 +98,5 @@ Deno / TypeScript。
 - `README.md` — 統合リポジトリ説明
 - `Licenses/` — 共通ライセンスフォルダ
   - `Licenses/LICENSE_Ver.2.0` — Adlaire License Ver.2.0
+- `Distribution/` — 配布専用ディレクトリ（リリース ZIP 等の配布物を集約）
 - `.github/` — CI/CD（GitHub Actions）

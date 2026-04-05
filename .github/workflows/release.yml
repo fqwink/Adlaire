@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: adlaire-cms
+        working-directory: Adlaire Static CMS
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,5 +101,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.zip_name }}
-          path: adlaire-cms/${{ env.zip_name }}
+          path: Adlaire Static CMS/${{ env.zip_name }}
           retention-days: 90

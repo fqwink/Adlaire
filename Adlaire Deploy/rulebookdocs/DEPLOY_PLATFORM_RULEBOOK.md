@@ -36,7 +36,7 @@ Deno Deploy の思想（TypeScript ネイティブ・ゼロコンフィグ・即
 
 ## 1.5 ソースコード管理
 
-- Adlaire 統合リポジトリ（`fqwink/Adlaire`）内の `adlaire-deploy/` ディレクトリで管理する。
+- Adlaire 統合リポジトリ（`fqwink/Adlaire`）内の `Adlaire Deploy/` ディレクトリで管理する。
 
 ---
 

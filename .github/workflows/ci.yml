@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: adlaire-cms
+        working-directory: Adlaire Static CMS
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: adlaire-cms
+        working-directory: Adlaire Static CMS
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
