@@ -1,5 +1,41 @@
 # CHANGES - 変更履歴
 
+## Ver.3.0-47 (2026-04-05)
+
+### 基盤刷新（破壊的変更）
+
+#### ビルドシステム
+* TypeScript ビルドランタイムを Node.js/npm/tsc から **Deno** に移行
+* esbuild による IIFE バンドル生成（`js/admin.js` + `js/public.js`）
+* `package.json` / `tsconfig.json` を廃止、`deno.json` に統一
+* `scripts/build.ts` を新設（esbuild バンドルスクリプト）
+
+#### ES モジュール移行
+* 全 TypeScript ファイルに `export` / `import` を導入
+* `ts/public.ts` を新設（公開ページ用エントリポイント）
+* `ts/globals.d.ts` を簡素化（`csrfToken` + 共有インターフェースのみ）
+* 個別 `<script>` タグの複数読み込みを廃止、単一バンドルに統一
+
+#### CI/CD
+* `.github/workflows/ci.yml`: PR/push 時に `deno check` + PHPStan 自動実行
+* `.github/workflows/release.yml`: VERSION 変更時に自動ビルド・ZIP 生成・タグ作成
+* `phpstan.neon` を新設（PHP 8.3, level 6）
+* リリース成果物は ZIP 形式、配布チャンネルは公式サイトのみ
+
+#### API キー認証
+* `Core/license.php` を新設（LicenseManager クラス）
+* 3層キー体系: システム固有 + プライマリー + セカンド（+ サードパーティー）
+* セットアップ時 API キー不要、初回ログインから猶予期間 3日
+* 管理画面ライセンス設定 UI + `?api=license` エンドポイント追加
+
+#### ライセンスサーバー
+* `adlaire-license-server/` を新設（公式サーバー側 APIキー認証・認可管理システム）
+* PHP 8.3+ / SQLite / API 4エンドポイント / 管理ダッシュボード
+
+#### バグ修正
+* 全5回のバグ修正ラウンド実施（PHP 102件 + TS 109件 = 計211件修正）
+* 致命的・重大バグを最優先で修正
+
 ## Ver.2.9-46 (2026-04-03)
 
 ### 追加品質確定TS側軽微改善（60件精査・60件実装）
