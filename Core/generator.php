@@ -35,7 +35,7 @@ function handleApiGenerate(FileStorage $storage): void
 
     $app = App::getInstance();
     $distDir = dirname(__DIR__) . '/dist';
-    $force = ($_POST['force'] ?? $_REQUEST['force'] ?? '') === 'true';
+    $force = ($_POST['force'] ?? '') === 'true';
     $buildStateFile = $distDir . '/.build_state.json';
     $lastBuildTime = '';
 

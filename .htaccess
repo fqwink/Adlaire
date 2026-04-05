@@ -19,13 +19,10 @@ RewriteRule .* - [F,L]
 <Files ".htaccess">
     Require all denied
 </Files>
-<Files "tsconfig.json">
+<Files "deno.json">
     Require all denied
 </Files>
-<Files "package.json">
-    Require all denied
-</Files>
-<Files "package-lock.json">
+<Files "phpstan.neon">
     Require all denied
 </Files>
 

@@ -38,6 +38,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 require __DIR__ . '/Core/helpers.php';
+require __DIR__ . '/Core/license.php';
 require __DIR__ . '/Core/core.php';
 require __DIR__ . '/Core/app.php';
 require __DIR__ . '/Core/renderer.php';
@@ -52,13 +53,19 @@ if (!file_exists(__DIR__ . '/data/system/install.lock') && file_exists(__DIR__ .
     exit;
 }
 
-handleApi();
-handleEdit();
-
-$app = App::getInstance();
+// --- License gate ---
+$licenseError = LicenseManager::check();
+if ($licenseError !== null) {
+    http_response_code(503);
+    $safeMsg = htmlspecialchars($licenseError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    echo "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Adlaire - License Required</title></head>";
+    echo "<body style=\"font-family:sans-serif;text-align:center;padding:60px 20px\">";
+    echo "<h1>503 Service Unavailable</h1><p>{$safeMsg}</p>";
+    echo "<p><a href=\"?admin\">License Settings</a></p></body></html>";
+    exit;
+}
 
 $nonce = bin2hex(random_bytes(16));
-$app->nonce = $nonce;
 
 // --- Security headers ---
 $cspHeader = "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'";
@@ -66,6 +73,12 @@ header($cspHeader);
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+
+handleApi();
+handleEdit();
+
+$app = App::getInstance();
+$app->nonce = $nonce;
 
 // --- Admin UI routing ---
 if (isset($_GET['admin'])) {

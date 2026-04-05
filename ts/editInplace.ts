@@ -10,12 +10,23 @@
  *
  * Also handles format switching via the format toolbar.
  *
- * Requires: autosize.ts, markdown.ts, editor.ts, i18n.ts, api.ts
  * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
  */
 
+import { autosize } from './autosize.ts';
+import { markdownToHtml } from './markdown.ts';
+import { Editor, renderBlocks, sanitizeHtml, escHtml, type BlockData } from './editor.ts';
+import { api, updateCsrfFromResponse } from './api.ts';
+import { i18n } from './i18n.ts';
+
 declare const pageLang: string | undefined;
 declare const pageFormat: string | undefined;
+
+// Expose globals for PHP templates
+(window as Record<string, unknown>).markdownToHtml = markdownToHtml;
+(window as Record<string, unknown>).renderBlocks = renderBlocks;
+(window as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
+(window as Record<string, unknown>).escHtml = escHtml;
 
 let changing = false;
 let activeEditor: InstanceType<typeof Editor> | null = null;
@@ -57,6 +68,7 @@ function fieldSave(key: string, val: string): void {
     if (val.length > FIELD_SAVE_MAX_LENGTH) {
         console.warn('fieldSave: content exceeds max length, skipping save for:', key);
         showFieldFeedback(key, false);
+        changing = false;
         return;
     }
     // #5: CSRF同時リクエスト時のトークン不整合対策 — キューで直列化
@@ -116,7 +128,7 @@ function showFieldFeedback(key: string, success: boolean): void {
     const escapedKey = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(key)
         : key.replace(/([^\w-])/g, '\\$1');
-    const el = document.querySelector(`[onchange*="fieldSave(\\"${escapedKey}\\""]`) as HTMLElement
+    const el = document.querySelector(`[data-field="${escapedKey}"]`) as HTMLElement
         || document.getElementById(key);
     if (!el) return;
     const orig = el.style.borderColor;
@@ -135,7 +147,7 @@ function plainTextEdit(span: HTMLElement): void {
     const isMarkdown = span.dataset.format === 'markdown';
 
     const content = isMarkdown
-        ? span.innerHTML
+        ? (span.textContent || '')
         : (span.textContent || '');
 
     const textarea = document.createElement('textarea');
@@ -162,8 +174,7 @@ function plainTextEdit(span: HTMLElement): void {
     span.textContent = '';
     span.appendChild(textarea);
     textarea.focus();
-    // #36: typeof autosize チェックをより堅牢に
-    if (typeof autosize !== 'undefined' && typeof autosize === 'function') { autosize(textarea); }
+    autosize(textarea);
 }
 
 function richTextHook(span: HTMLElement): void {
@@ -183,7 +194,7 @@ function renderMarkdownContent(): void {
         let raw: string;
         if (b64) {
             // Ver.2.9 TS#88: atob失敗時console.warn
-            try { raw = atob(b64); } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
+            try { raw = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
         } else {
             raw = el.textContent || '';
         }
@@ -202,7 +213,7 @@ function renderBlocksContent(): void {
         const b64 = el.dataset.blocksB64;
         if (b64) {
             // Ver.2.9 TS#89: atob失敗時console.warn
-            try { raw = atob(b64); } catch (e) { console.warn('renderBlocksContent: atob failed', e); }
+            try { raw = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); } catch (e) { console.warn('renderBlocksContent: atob failed', e); }
         }
         if (!raw) return;
         try {
@@ -225,7 +236,7 @@ function initBlockEditor(): void {
         let blocksRaw = wrapper.dataset.blocks || '';
         const blocksB64 = wrapper.dataset.blocksB64;
         if (blocksB64) {
-            try { blocksRaw = atob(blocksB64); } catch { /* empty */ }
+            try { blocksRaw = new TextDecoder().decode(Uint8Array.from(atob(blocksB64), c => c.charCodeAt(0))); } catch { /* empty */ }
         }
         let blocks: { type: string; data: Record<string, unknown> }[] = [];
         if (blocksRaw) {
@@ -353,7 +364,7 @@ function initBlockEditor(): void {
         let sidebarBlocksRaw = sidebarEl.dataset.blocks || '';
         const sidebarB64 = sidebarEl.dataset.blocksB64;
         if (sidebarB64) {
-            try { sidebarBlocksRaw = atob(sidebarB64); } catch { /* empty */ }
+            try { sidebarBlocksRaw = new TextDecoder().decode(Uint8Array.from(atob(sidebarB64), c => c.charCodeAt(0))); } catch { /* empty */ }
         }
         let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
         if (sidebarBlocksRaw) {
@@ -377,7 +388,7 @@ function initBlockEditor(): void {
             if (sidebarFlushSaving) return;
             sidebarFlushSaving = true;
             const saved = sidebarEditor.save();
-            const json = JSON.stringify(saved.blocks);
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             if (json === sidebarLastJson) { sidebarFlushSaving = false; return; }
             sidebarLastJson = json;
             showSaveIndicator(sidebarEl, 'saving');
@@ -411,7 +422,7 @@ function initBlockEditor(): void {
                 sidebarSaveTimer = null;
             }
             const saved = sidebarEditor.save();
-            const json = JSON.stringify(saved.blocks);
+            const json = JSON.stringify(saved.blocks, _sortedReplacer);
             if (json === sidebarLastJson) return;
             sidebarLastJson = json;
             const body = new URLSearchParams();
@@ -966,15 +977,12 @@ function initGenerateReport(): void {
 // Ver.2.9 TS#1: downloadCredentials XSS防止 — escHtml()適用で表示時XSS防止
 // Ver.2.9 TS#40: URL.revokeObjectURL早期破棄防止 — setTimeout内で破棄
 function downloadCredentials(username: string, password: string, token: string): void {
-    const safeUser = escHtml(username);
-    const safePw = escHtml(password);
-    const safeToken = escHtml(token);
     // Ver.2.9 TS#94: downloadCredentials i18n化
     const content = `${i18n.t('cred_file_title') || 'Adlaire Sub-Master Credentials'}\n` +
         `================================\n` +
-        `${i18n.t('cred_file_login_id') || 'Login ID'}: ${safeUser}\n` +
-        `${i18n.t('cred_file_password') || 'Password'}: ${safePw}\n` +
-        `${i18n.t('cred_file_token') || 'Token'}: ${safeToken}\n` +
+        `${i18n.t('cred_file_login_id') || 'Login ID'}: ${username}\n` +
+        `${i18n.t('cred_file_password') || 'Password'}: ${password}\n` +
+        `${i18n.t('cred_file_token') || 'Token'}: ${token}\n` +
         `================================\n` +
         `${i18n.t('cred_file_warning') || 'WARNING: This file is shown only once. Keep it safe.'}\n`;
     const blob = new Blob([content], { type: 'text/plain' });

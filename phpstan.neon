@@ -1,0 +1,9 @@
+parameters:
+  level: 6
+  phpVersion: 80300
+  paths:
+    - index.php
+    - bundle-installer.php
+    - Core/
+  excludePaths:
+    - Core/admin-ui.php

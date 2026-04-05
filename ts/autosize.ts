@@ -6,7 +6,7 @@
  * Vanilla TypeScript replacement for jQuery autosize plugin.
  */
 
-function autosize(textarea: HTMLTextAreaElement): void {
+export function autosize(textarea: HTMLTextAreaElement): void {
     if (textarea.dataset.autosize === 'true') return;
     textarea.dataset.autosize = 'true';
 

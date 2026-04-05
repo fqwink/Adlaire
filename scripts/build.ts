@@ -3,67 +3,59 @@
  * Runtime: Deno
  * Usage: deno task build
  *
- * ts/ 内の TypeScript ファイルを @deno/emit でトランスパイルし js/ に出力する。
+ * ES モジュール対応: エントリポイントごとに IIFE バンドルを生成する。
+ * - js/admin.js  ← ts/editInplace.ts（管理画面用・全機能）
+ * - js/public.js ← ts/public.ts（公開ページ用・描画のみ）
  */
 
-import { transpile } from "@deno/emit";
+import * as esbuild from "npm:esbuild@~0.25";
 
-const TS_DIR = new URL("../ts/", import.meta.url);
-const JS_DIR = "js";
-
-/** トランスパイル対象エントリポイント（インポートグラフの起点） */
-const ENTRY_POINTS: string[] = [
-  "editInplace.ts",
-  "markdown.ts",
+const BUNDLES = [
+  {
+    entryPoint: "ts/editInplace.ts",
+    outfile: "js/admin.js",
+    label: "admin",
+  },
+  {
+    entryPoint: "ts/public.ts",
+    outfile: "js/public.js",
+    label: "public",
+  },
 ];
 
-const compilerOptions = {
-  target: "ES2021" as const,
-  strict: true,
-  lib: ["ES2021", "dom", "dom.iterable"],
-  noUnusedLocals: true,
-  noUnusedParameters: true,
-  noFallthroughCasesInSwitch: true,
-  forceConsistentCasingInFileNames: true,
-};
-
 async function build(): Promise<void> {
-  await Deno.mkdir(JS_DIR, { recursive: true });
+  await Deno.mkdir("js", { recursive: true });
 
-  const processed = new Set<string>();
   let hasError = false;
 
-  for (const entry of ENTRY_POINTS) {
-    const entryUrl = new URL(entry, TS_DIR);
-
-    let result: Map<string, string>;
+  for (const bundle of BUNDLES) {
     try {
-      result = await transpile(entryUrl, { compilerOptions });
+      const result = await esbuild.build({
+        entryPoints: [bundle.entryPoint],
+        bundle: true,
+        outfile: bundle.outfile,
+        platform: "browser",
+        target: "es2021",
+        format: "iife",
+        treeShaking: true,
+        charset: "utf8",
+      });
+
+      if (result.errors.length > 0) {
+        console.error(`  [error] ${bundle.label}:`, result.errors);
+        hasError = true;
+      } else {
+        const stat = await Deno.stat(bundle.outfile);
+        const sizeKB = ((stat.size ?? 0) / 1024).toFixed(1);
+        console.log(`  \u2713 ${bundle.outfile} (${sizeKB} KB)`);
+      }
     } catch (e) {
-      console.error(`[error] transpile failed: ${entry}`);
-      console.error(e);
+      console.error(`  [error] ${bundle.label}: ${e}`);
       hasError = true;
-      continue;
-    }
-
-    for (const [moduleUrl, code] of result) {
-      if (processed.has(moduleUrl)) continue;
-      processed.add(moduleUrl);
-
-      const urlObj = new URL(moduleUrl);
-      const basename = urlObj.pathname.split("/").pop() ?? "";
-
-      // .d.ts / globals は出力しない
-      if (!basename || basename.endsWith(".d.ts")) continue;
-      // ts/ 配下のファイルのみ出力対象
-      if (!moduleUrl.includes("/ts/")) continue;
-
-      const jsName = basename.replace(/\.ts$/, ".js");
-      const outPath = `${JS_DIR}/${jsName}`;
-      await Deno.writeTextFile(outPath, code);
-      console.log(`  \u2713 ${outPath}`);
     }
   }
+
+  esbuild.stop();
 
   if (hasError) {
     console.error("\nBuild failed.");

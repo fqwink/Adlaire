@@ -11,7 +11,7 @@
 
 type Translations = Record<string, string>;
 
-const i18n = {
+export const i18n = {
     lang: 'ja',
     translations: {} as Translations,
     ready: Promise.resolve(),

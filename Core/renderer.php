@@ -13,13 +13,13 @@ declare(strict_types=1);
  */
 
 /** Allowed image URL pattern (protocol-relative // is forbidden) */
-const RENDERER_RENDERER_IMAGE_URL_PATTERN = '#^(?:https?://[^\s<>"]+|/[a-zA-Z0-9_./-][^\s<>"]*|[a-zA-Z0-9_./-][^\s<>"]*)$#';
+const RENDERER_IMAGE_URL_PATTERN = '#^(?:https?://[^\s<>"]+|/[a-zA-Z0-9_./-][^\s<>"]*|[a-zA-Z0-9_./-][^\s<>"]*)$#';
 
 /** Dangerous URI scheme pattern */
-const RENDERER_RENDERER_DANGEROUS_SCHEME_PATTERN = '/^\s*(javascript|vbscript|data)\s*:/i';
+const RENDERER_DANGEROUS_SCHEME_PATTERN = '/^\s*(javascript|vbscript|data)\s*:/i';
 
 /** Protocol-relative URL pattern */
-const RENDERER_RENDERER_PROTOCOL_RELATIVE_PATTERN = '#^\s*//#';
+const RENDERER_PROTOCOL_RELATIVE_PATTERN = '#^\s*//#';
 
 /** Maximum heading level */
 const RENDERER_MAX_HEADING_LEVEL = 3;

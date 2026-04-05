@@ -99,7 +99,7 @@ final class App
     private function parseHost(): array
     {
         $rpRaw = isset($_GET['page'])
-            ? preg_replace('#/+#', '/', urldecode($_GET['page']))
+            ? preg_replace('#/+#', '/', $_GET['page'])
             : '';
         $rp = is_string($rpRaw) ? $rpRaw : '';
 
@@ -260,7 +260,7 @@ final class App
             $changePwSubmit = esc($this->t('change_password_submit'));
             $nonceAttr = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
             $this->config['content'] = <<<HTML
-                <form action='' method='POST'{$nonceAttr}>
+                <form action='' method='POST'>
                 <input type='hidden' name='csrf' value='{$csrf}'>
                 <label>{$usernameLabel}</label>
                 <input type='text' name='username' autocomplete='username' id='login-username'>
@@ -449,7 +449,7 @@ final class App
     public static function getSlug(string $page): string
     {
         $slug = str_replace(' ', '-', $page);
-        $slug = mb_convert_case($slug, MB_CASE_LOWER, 'UTF-8');
+        $slug = strtolower($slug);
         $slug = (string) preg_replace(self::SLUG_SANITIZE_PATTERN, '', $slug);
         return $slug;
     }
@@ -526,6 +526,7 @@ final class App
             $_SESSION['user'] = $username;
             $_SESSION['role'] = $userData['role'] ?? 'master';
             $_SESSION['is_main'] = $isMain;
+            $_SESSION['last_activity'] = time();
             return $this->t('password_changed');
         }
 
@@ -536,6 +537,7 @@ final class App
         $_SESSION['role'] = $userData['role'] ?? 'master';
         $_SESSION['is_main'] = $isMain;
         $_SESSION['last_activity'] = time();
+        LicenseManager::initOnFirstLogin();
         header('Location: ' . $this->host);
         exit;
     }
@@ -556,7 +558,7 @@ final class App
         if (is_array($adminHeadHooks)) {
             foreach ($adminHeadHooks as $tag) {
                 if (is_string($tag)) {
-                    echo "\t" . esc($tag) . "\n";
+                    echo "\t" . $tag . "\n";
                 }
             }
         }
@@ -602,7 +604,7 @@ final class App
     }
 
     private const ADMIN_SCRIPTS = ['autosize', 'markdown', 'i18n', 'api', 'editor', 'editInplace'];
-    private const PUBLIC_SCRIPTS = ['markdown', 'editInplace'];
+    private const PUBLIC_SCRIPTS = ['public'];
 
     public function scriptTags(bool $adminMode = false): void
     {
