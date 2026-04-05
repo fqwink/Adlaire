@@ -1172,7 +1172,9 @@ export class Editor {
         }
     }
 
+    // R5-36: insertBlock destroy後の呼び出し防止
     insertBlock(type: string, data: Record<string, unknown>, index: number): void {
+        if (this.destroyed) return;
         // #29: index負数チェック追加
         index = Math.max(0, index);
         // #72: createBlockWrapperのtype検証（ツールが存在しない場合は無視）
@@ -1209,7 +1211,9 @@ export class Editor {
 
     // Ver.2.9 #14: ブロック削除改善 — 削除後に隣接ブロックへフォーカス移動
     // Ver.2.9 TS#17: removeBlock undo状態保存 — 削除前に状態を保存
+    // R5-35: removeBlock destroy後の呼び出し防止
     removeBlock(index: number): void {
+        if (this.destroyed) return;
         if (index < 0 || index >= this.blockElements.length) return;
         // Ver.2.9 TS#17: 削除前にundo状態を保存（復元可能にする）
         if (!this.isUndoRedoing) this.saveUndoState();
@@ -1272,7 +1276,9 @@ export class Editor {
 
     // --- #25: Undo/Redo ---
     // Ver.2.9 TS#78: publicに変更してas anyキャスト削減
+    // R5-31: saveUndoState destroy後の呼び出し防止
     saveUndoState(): void {
+        if (this.destroyed) return;
         this.undoManager.push(this.save());
     }
 

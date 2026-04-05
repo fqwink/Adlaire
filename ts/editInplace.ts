@@ -145,8 +145,6 @@ function showFieldFeedback(key: string, success: boolean): void {
 function plainTextEdit(span: HTMLElement): void {
     const id = span.id;
     const title = span.getAttribute('title');
-    // #108: title属性値のエスケープ（引用符対策）
-    const titleAttr = title ? `"${title.replace(/"/g, '&quot;')}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
 
     // R5-26: markdown/非markdown分岐が同一ロジック — 意図を明確化
@@ -1138,6 +1136,11 @@ function initUserManagement(): void {
             }
             if (newPw !== confirmPw) {
                 alert(i18n.t('password_mismatch') || 'New password and confirmation do not match.');
+                return;
+            }
+            // R5-32: パスワード最大長チェック（128文字）— サーバーバッファ超過防止
+            if (newPw.length > 128) {
+                alert(i18n.t('password_too_long') || 'Password must be at most 128 characters long.');
                 return;
             }
             // Ver.2.9 #33: パスワード検証 — 最小長チェック（8文字以上）
