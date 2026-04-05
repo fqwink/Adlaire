@@ -144,6 +144,7 @@ deno task watch   # ウォッチモード（開発時）
 - コンパイラオプションは `deno.json` の `compilerOptions` セクションに定義する。
 - ビルドスクリプト（`scripts/build.ts`）は **esbuild バイナリを `Deno.Command` 経由で実行する**。`npm:esbuild` は使用しない。
 - esbuild バイナリは GitHub Releases（`https://github.com/evanw/esbuild/releases`）から直接取得する。npm レジストリを経由しない。
+- esbuild のバージョンは **`deno.json` の `esbuildVersion` フィールドで一元管理する**。CI/CD は `deno.json` から読み取ること（`jq -r '.esbuildVersion' deno.json`）。バージョン変更は `deno.json` のみを更新すれば全体に反映される。
 - `--allow-run` は `esbuild` のみに限定する（`--allow-run=esbuild`）。任意コマンド実行を禁止する。
 
 ## 4.4 ES モジュール移行（Ver.3.0）

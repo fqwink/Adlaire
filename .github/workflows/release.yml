@@ -45,9 +45,8 @@ jobs:
 
       - name: Install esbuild
         if: steps.version.outputs.skip == 'false'
-        env:
-          ESBUILD_VERSION: "0.25.4"
         run: |
+          ESBUILD_VERSION=$(jq -r '.esbuildVersion' deno.json)
           curl -fsSL "https://github.com/evanw/esbuild/releases/download/v${ESBUILD_VERSION}/esbuild-linux-x64.zip" -o esbuild.zip
           unzip esbuild.zip
           chmod +x esbuild

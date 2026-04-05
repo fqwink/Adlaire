@@ -4,6 +4,7 @@
     "check": "deno check ts/editInplace.ts ts/public.ts",
     "watch": "deno run --allow-read --allow-write --allow-env --allow-run=esbuild --watch=ts/ scripts/build.ts"
   },
+  "esbuildVersion": "0.25.4",
   "compilerOptions": {
     "target": "ES2021",
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
