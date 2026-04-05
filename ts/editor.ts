@@ -165,9 +165,13 @@ const _sanJsProto = /(href|src)\s*=\s*["']?\s*(?:javascript|&#0*106;?|&#x0*6a;?|
 const _sanJsSimple = /(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
 const _sanDangerousProto = /(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi;
 const _sanDataJs = /\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
+// R5-1: action属性のjavascript:プロトコル除去パターン追加
+const _sanActionJs = /action\s*=\s*["']?\s*(?:javascript|data|vbscript)\s*:[^"'>]*/gi;
 
 // #47: replace chain順序保証 — 1) Unicode decode → 2) 危険タグ除去 → 3) on*属性除去 → 4) プロトコル除去
+// R5-2: sanitizeHtml入力null/undefined安全化
 export function sanitizeHtml(html: string): string {
+    if (!html) return '';
     // Phase 1: Unicode escape sequences decode（最初に実行 — TS#4: エスケープによるバイパス防止）
     _sanUnicodeEscape.lastIndex = 0;
     let s = html.replace(_sanUnicodeEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
@@ -206,6 +210,8 @@ export function sanitizeHtml(html: string): string {
     // #4: about: / data: プロトコルフィルタ追加
     _sanDangerousProto.lastIndex = 0; s = s.replace(_sanDangerousProto, '$1=""');
     _sanDataJs.lastIndex = 0; s = s.replace(_sanDataJs, '');
+    // R5-1: action属性のjavascript:プロトコルも除去
+    _sanActionJs.lastIndex = 0; s = s.replace(_sanActionJs, 'action=""');
     return s;
 }
 
@@ -602,10 +608,19 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 bq.innerHTML = sanitizeHtml((data.text as string) || '');
                 attachBackspaceHandler(bq);
                 // #74: blockquoteのネスト防止（paste時にblockquoteタグを除去）
+                // R5-12: document.execCommand非推奨→Selection API使用
                 bq.addEventListener('paste', (e) => {
                     e.preventDefault();
                     const text = e.clipboardData?.getData('text/plain') || '';
-                    document.execCommand('insertText', false, text);
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount) {
+                        const range = sel.getRangeAt(0);
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(text));
+                        range.collapse(false);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
                 });
                 // #17: blockquote focusoutでのセーブ検知改善
                 // #75: delimiter含むfocusout処理
@@ -697,11 +712,16 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 // Ver.2.9 TS#98: image URLプレースホルダーi18n化
                 urlInput.placeholder = i18n.t('image_url_placeholder') || 'Image URL...';
                 urlInput.value = initialUrl;
+                // R4-19: image URL入力デバウンス（連続入力時のパフォーマンス改善）
+                let imgUrlTimer: ReturnType<typeof setTimeout> | null = null;
                 urlInput.addEventListener('input', () => {
-                    const val = urlInput.value;
-                    img.src = isDangerousUrl(val) ? '' : val;
-                    // #19: URLの割り当て時にonerror属性をnullに設定
-                    img.onerror = null;
+                    if (imgUrlTimer) clearTimeout(imgUrlTimer);
+                    imgUrlTimer = setTimeout(() => {
+                        const val = urlInput.value.trim();
+                        img.src = isDangerousUrl(val) ? '' : val;
+                        // #19: URLの割り当て時にonerror属性をnullに設定
+                        img.onerror = null;
+                    }, 200);
                 });
 
                 const cap = document.createElement('figcaption');
@@ -718,12 +738,15 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 return wrap;
             },
             // Ver.2.9 TS#91: null安全チェック強化
+            // R5-22: image save — URL値のトリミング + R5-23: dangerousUrl再チェック
             save(el) {
                 const urlInput = el.querySelector<HTMLInputElement>('.ce-image__url');
                 const cap = el.querySelector('figcaption');
                 const img = el.querySelector('img');
+                const rawUrl = (urlInput?.value ?? img?.src ?? '').trim();
+                const safeUrl = isDangerousUrl(rawUrl) ? '' : rawUrl;
                 return {
-                    url: urlInput?.value ?? img?.src ?? '',
+                    url: safeUrl,
                     caption: cap?.textContent ?? '',
                     alt: img?.alt ?? '',
                 };
@@ -740,9 +763,14 @@ export class InlineToolbar {
     // #32: selectionchange多重登録防止用AbortController
     private selectionAc: AbortController;
 
+    // R5-13: InlineToolbar destroyed状態フラグ
+    private isDestroyed = false;
     constructor() {
         this.el = document.createElement('div');
         this.el.className = 'ce-inline-toolbar';
+        // R5-14: InlineToolbar role属性追加（アクセシビリティ）
+        this.el.setAttribute('role', 'toolbar');
+        this.el.setAttribute('aria-label', 'Inline formatting');
         this.el.innerHTML = `
             <button data-action="bold" title="Bold"><b>B</b></button>
             <button data-action="italic" title="Italic"><i>I</i></button>
@@ -792,7 +820,10 @@ export class InlineToolbar {
         document.addEventListener('selectionchange', this.selectionHandler, { signal: this.selectionAc.signal });
     }
 
+    // R5-15: destroy重複呼び出し防止
     destroy(): void {
+        if (this.isDestroyed) return;
+        this.isDestroyed = true;
         // #32: AbortControllerでリスナーを確実に解除
         this.selectionAc.abort();
         this.el.remove();
@@ -889,6 +920,8 @@ export class InlineToolbar {
     }
 
     private update(): void {
+        // R5-16: destroyed後のupdate防止
+        if (this.isDestroyed) return;
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.rangeCount) {
             this.el.style.display = 'none';
@@ -1041,7 +1074,9 @@ export class Editor {
         });
     }
 
+    // R5-5: create el nullチェック
     static create(el: HTMLElement, config?: { tools?: Record<string, BlockToolFactory>; data?: EditorData }): Editor {
+        if (!el) throw new Error('Editor.create: container element is required');
         const editor = new Editor(el, config?.tools);
         if (config?.data?.blocks?.length) {
             editor.render(config.data);
@@ -1210,6 +1245,8 @@ export class Editor {
         this.blockTools.splice(to, 0, tool);
         this.blockTypes.splice(to, 0, type);
 
+        // R4-20: moveBlock DOM更新 — el.isConnected確認追加
+        if (!el.isConnected) return;
         if (to >= this.blockElements.length - 1) {
             this.container.appendChild(el);
         } else {

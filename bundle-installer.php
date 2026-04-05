@@ -119,10 +119,10 @@ define('INSTALLER_SUPPORTED_LOCALES', ['ja', 'en']);
 function validate_input(array $post): array
 {
     $errors = [];
-    $siteName = trim($post['site_name'] ?? '');
-    $locale = $post['default_locale'] ?? '';
-    $password = $post['admin_password'] ?? '';
-    $confirm = $post['admin_password_confirm'] ?? '';
+    $siteName = is_string($post['site_name'] ?? '') ? trim($post['site_name'] ?? '') : '';
+    $locale = is_string($post['default_locale'] ?? '') ? ($post['default_locale'] ?? '') : '';
+    $password = is_string($post['admin_password'] ?? '') ? ($post['admin_password'] ?? '') : '';
+    $confirm = is_string($post['admin_password_confirm'] ?? '') ? ($post['admin_password_confirm'] ?? '') : '';
 
     if ($siteName === '') {
         $errors[] = 'Site name is required';
@@ -130,7 +130,7 @@ function validate_input(array $post): array
     if (mb_strlen($siteName, 'UTF-8') > 100) {
         $errors[] = 'Site name must be 100 characters or less';
     }
-    $adminUsername = trim($post['admin_username'] ?? '');
+    $adminUsername = is_string($post['admin_username'] ?? '') ? trim($post['admin_username'] ?? '') : '';
     if ($adminUsername === '') {
         $adminUsername = 'admin';
     }
@@ -265,18 +265,17 @@ function install_execute(string $siteName, string $locale, string $password): ar
 
 function security_csrf_token(): string
 {
-    $_SESSION['installer_csrf'] = bin2hex(random_bytes(32));
-    return $_SESSION['installer_csrf'];
+    return $_SESSION['installer_csrf'] ??= bin2hex(random_bytes(32));
 }
 
 function security_csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? '';
     $session = $_SESSION['installer_csrf'] ?? '';
-    if ($token === '' || $session === '' || !hash_equals($session, $token)) {
+    if (!is_string($token) || !is_string($session) || $token === '' || $session === '' || !hash_equals($session, $token)) {
         return false;
     }
-    $_SESSION['installer_csrf'] = bin2hex(random_bytes(32));
+    unset($_SESSION['installer_csrf']);
     return true;
 }
 
@@ -293,11 +292,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validate and install
         $errors = validate_input($_POST);
         if (empty($errors)) {
-            $GLOBALS['_installer_username'] = trim($_POST['admin_username'] ?? 'admin');
+            $rawUsername = is_string($_POST['admin_username'] ?? '') ? trim($_POST['admin_username'] ?? '') : 'admin';
+            $GLOBALS['_installer_username'] = $rawUsername !== '' ? $rawUsername : 'admin';
+            $rawSiteName = is_string($_POST['site_name'] ?? '') ? trim($_POST['site_name'] ?? '') : '';
+            $rawLocale = is_string($_POST['default_locale'] ?? '') ? ($_POST['default_locale'] ?? '') : 'ja';
+            $rawPassword = is_string($_POST['admin_password'] ?? '') ? ($_POST['admin_password'] ?? '') : '';
             $result = install_execute(
-                trim($_POST['site_name']),
-                $_POST['default_locale'],
-                $_POST['admin_password']
+                $rawSiteName,
+                $rawLocale,
+                $rawPassword
             );
             if ($result['ok']) {
                 $step = 4; // Finish

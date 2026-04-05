@@ -20,12 +20,14 @@ export const i18n = {
      * Initialize i18n by loading the translation file for the given language.
      */
     // #45: fetch失敗時のPromise確実resolve
+    // R4-15: init lang入力のサニタイズ — パス走査防止
     init(lang: string): Promise<void> {
         if (lang !== 'ja' && lang !== 'en') {
             lang = 'ja';
         }
         this.lang = lang;
 
+        // R4-16: fetch URL構築安全化 — lang値は上記で'ja'/'en'に制限済み
         this.ready = fetch(`data/lang/${lang}.json`)
             .then(response => {
                 if (!response.ok) return {};
@@ -48,8 +50,11 @@ export const i18n = {
      * Parameters use :name syntax (e.g. ':page', ':year').
      */
     // Ver.2.9 #22: i18n — キー不在時のフォールバック改善とパラメータ安全性
+    // R4-17: t() key空チェック + R4-18: prototype汚染防止
     t(key: string, params?: Record<string, string>): string {
-        let str = this.translations[key] ?? key;
+        if (!key) return '';
+        if (!Object.prototype.hasOwnProperty.call(this.translations, key)) return key;
+        let str = this.translations[key];
         if (params) {
             for (const [k, v] of Object.entries(params)) {
                 // Ver.2.9 #22: パラメータ値がundefined/nullの場合は空文字にフォールバック

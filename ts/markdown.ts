@@ -148,7 +148,8 @@ export function markdownToHtml(md: string): string {
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
         const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
-        if (rows.length < 2) return tableBlock;
+        // R5-3: テーブル最大行数制限 — DoS防止（1000行超はスキップ）
+        if (rows.length < 2 || rows.length > 1000) return tableBlock;
 
         const parseRow = (row: string): string[] =>
             row.split('|').slice(1, -1).map(cell => cell.trim());
@@ -259,7 +260,11 @@ export function markdownToHtml(md: string): string {
             // #8: footnote IDは既にescAttr済み、テキストもエスケープ
             // #121: back-linkは最初の参照IDを使用
             const firstRef = fnRefFirstById[id] ?? 1;
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-${firstRef}">\u21A9</a></li>`;
+            // R5-4: footnote参照のないfootnote定義はback-linkを省略
+            const backLink = id in fnRefFirstById
+                ? ` <a href="#fnref-${id}-${firstRef}">\u21A9</a>`
+                : '';
+            html += `<li id="fn-${id}">${footnotes[id]}${backLink}</li>`;
         });
         html += '</ol></section>';
     }

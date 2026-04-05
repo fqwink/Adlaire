@@ -198,12 +198,18 @@ function renderMarkdownContent(): void {
         let raw: string;
         if (b64) {
             // Ver.2.9 TS#88: atob失敗時console.warn
-            try { raw = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
+            // R5-7: b64空文字チェック（空文字でatobするとエラーにはならないが空結果）
+            try { raw = b64.trim() ? new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))) : ''; } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
         } else {
             raw = el.textContent || '';
         }
+        // R5-8: markdownToHtml型チェック強化
         if (typeof markdownToHtml === 'function') {
-            el.innerHTML = sanitizeHtml(markdownToHtml(raw));
+            try {
+                el.innerHTML = sanitizeHtml(markdownToHtml(raw));
+            } catch (e) {
+                console.warn('renderMarkdownContent: markdownToHtml failed', e);
+            }
         }
     });
 }
@@ -236,6 +242,8 @@ function renderBlocksContent(): void {
 
 function initBlockEditor(): void {
     document.querySelectorAll<HTMLElement>('.ce-editor-wrapper').forEach(wrapper => {
+        // R4-23: wrapper.id空チェック — idのないラッパーは保存先が不明のためスキップ
+        if (!wrapper.id) { console.warn('initBlockEditor: wrapper has no id, skipping'); return; }
         // Support both data-blocks (JSON) and data-blocks-b64 (base64-encoded JSON)
         let blocksRaw = wrapper.dataset.blocks || '';
         const blocksB64 = wrapper.dataset.blocksB64;
@@ -244,7 +252,11 @@ function initBlockEditor(): void {
         }
         let blocks: { type: string; data: Record<string, unknown> }[] = [];
         if (blocksRaw) {
-            try { blocks = JSON.parse(blocksRaw); } catch (err) { console.warn('Failed to parse blocks:', err); }
+            try {
+                const parsed = JSON.parse(blocksRaw);
+                // R4-24: JSON.parse結果のArray.isArrayチェック
+                blocks = Array.isArray(parsed) ? parsed : [];
+            } catch (err) { console.warn('Failed to parse blocks:', err); }
         }
 
         const editorData = {
@@ -313,10 +325,12 @@ function initBlockEditor(): void {
         wrapper.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
             // #40: relatedTargetチェック拡大（.ce-toolbox, .ce-inline-toolbar含む）
+            // R5-20: block toolbar含むフォーカス制御追加（main editor）
             if (related && (
                 wrapper.contains(related) ||
                 (related as HTMLElement).closest?.('.ce-toolbox') ||
-                (related as HTMLElement).closest?.('.ce-inline-toolbar')
+                (related as HTMLElement).closest?.('.ce-inline-toolbar') ||
+                (related as HTMLElement).closest?.('.ce-block__toolbar')
             )) return;
 
             // #36: saveTimer null代入の明確化
@@ -372,7 +386,11 @@ function initBlockEditor(): void {
         }
         let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
         if (sidebarBlocksRaw) {
-            try { sidebarBlocks = JSON.parse(sidebarBlocksRaw); } catch (err) { console.warn('Failed to parse sidebar blocks:', err); }
+            // R4-25: sidebar JSON.parse結果のArray.isArrayチェック
+            try {
+                const parsed = JSON.parse(sidebarBlocksRaw);
+                sidebarBlocks = Array.isArray(parsed) ? parsed : [];
+            } catch (err) { console.warn('Failed to parse sidebar blocks:', err); }
         }
 
         const sidebarData: EditorData = {
@@ -408,10 +426,12 @@ function initBlockEditor(): void {
         sidebarEl.addEventListener('focusout', (e) => {
             const related = (e as FocusEvent).relatedTarget as Node | null;
             // #84: sidebar focusoutのrelatedTarget拡大（toolbox, inline-toolbar含む）
+            // R4-13: block toolbar含むフォーカス制御追加
             if (related && (
                 sidebarEl.contains(related) ||
                 (related as HTMLElement).closest?.('.ce-toolbox') ||
-                (related as HTMLElement).closest?.('.ce-inline-toolbar')
+                (related as HTMLElement).closest?.('.ce-inline-toolbar') ||
+                (related as HTMLElement).closest?.('.ce-block__toolbar')
             )) return;
             if (sidebarSaveTimer) clearTimeout(sidebarSaveTimer);
             // Ver.2.9 TS#79: マジックナンバー定数化
@@ -557,6 +577,11 @@ function switchFormat(slug: string, newFormat: string): void {
         // #43: sanitizeHtml適用
         tmp.innerHTML = sanitizeHtml(currentContent);
         currentContent = tmp.textContent || '';
+    }
+    // R5-21: switchFormat内容最大長チェック — 巨大データの送信防止
+    if (currentContent.length > FIELD_SAVE_MAX_LENGTH) {
+        alert(i18n.t('content_too_large') || 'Content too large for format switch.');
+        return;
     }
 
     // #15: ロールバック関数
@@ -854,7 +879,9 @@ function initRevisionDiff(): void {
     });
 }
 
+// R5-11: showRevisionDiffModal diff null安全化
 function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; changed: unknown[] }): void {
+    if (!diff) return;
     let modal = document.querySelector<HTMLElement>('.ce-diff-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -915,7 +942,9 @@ function showRevisionDiffModal(diff: { added: unknown[]; removed: unknown[]; cha
 // --- Generate report (#F) ---
 
 // Ver.2.9 TS#83: GenerateReport型を使用
+// R4-14: showGenerateReport reportフィールド型安全化
 function showGenerateReport(report: GenerateReport): void {
+    if (!report || typeof report !== 'object') return;
     let container = document.querySelector<HTMLElement>('.ce-generate-report');
     if (!container) {
         container = document.createElement('div');
@@ -996,9 +1025,13 @@ function downloadCredentials(username: string, password: string, token: string):
     const a = document.createElement('a');
     a.href = url;
     // Ver.2.9 TS#1: ファイル名もエスケープ（特殊文字除去）
-    const safeFilename = username.replace(/[^a-zA-Z0-9_-]/g, '_');
+    // R5-9: safeFilename空文字防止 — 全文字除去時のフォールバック
+    const safeFilename = username.replace(/[^a-zA-Z0-9_-]/g, '_') || 'user';
     a.download = `adlaire-sub-master-${safeFilename}.txt`;
+    document.body.appendChild(a);
     a.click();
+    // R5-10: アンカー要素のDOM除去
+    document.body.removeChild(a);
     // Ver.2.9 TS#40/#79: revokeObjectURLを遅延実行 + マジックナンバー定数化
     setTimeout(() => { URL.revokeObjectURL(url); }, REVOKE_URL_DELAY_MS);
 }
@@ -1053,9 +1086,13 @@ function initUserManagement(): void {
                 const username = target.dataset.username;
                 if (!username) return;
                 if (!confirm(i18n.t('confirm_disable_user', { username: escHtml(username) }) || `Disable user "${username}"?`)) return;
+                // R5-6: disableUser操作中のボタン無効化
+                const disableBtn = target as HTMLButtonElement;
+                disableBtn.disabled = true;
                 api.disableUser(username).then(() => {
                     location.reload();
                 }).catch((err: unknown) => {
+                    disableBtn.disabled = false;
                     alert(err instanceof Error ? err.message : String(err));
                 });
             }
@@ -1205,6 +1242,8 @@ function initEditInplace(): void {
             if (changing) return;
             changing = true;
 
+            // R4-11: span.id空チェック — idのないspanは編集不可
+            if (!span.id) { changing = false; return; }
             if (span.classList.contains('richText')) {
                 richTextHook(span);
             } else {
@@ -1214,8 +1253,10 @@ function initEditInplace(): void {
     });
 
     // Toggle sections
+    // R4-12: toggleイベント伝播防止
     document.querySelectorAll<HTMLElement>('.toggle').forEach(toggle => {
-        toggle.addEventListener('click', () => {
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
             document.querySelectorAll<HTMLElement>('.hide').forEach(el => {
                 if (el.style.display === 'none' || el.style.display === '') {
                     el.style.display = 'block';
