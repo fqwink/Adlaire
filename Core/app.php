@@ -189,7 +189,7 @@ final class App
 
             $this->defaults[$key] ??= $val;
 
-            if (isset($stored[$key])) {
+            if (isset($stored[$key]) && is_string($stored[$key])) {
                 $this->config[$key] = $stored[$key];
             } elseif (!isset($this->config[$key]) || $this->config[$key] === '') {
                 $this->config[$key] = $this->defaults[$key] ?? $val;
@@ -335,7 +335,7 @@ final class App
         }
         $config = $this->storage->readConfig();
         $passwordHash = $config['password'] ?? '';
-        if ($passwordHash === '') {
+        if (!is_string($passwordHash) || $passwordHash === '') {
             return;
         }
         $userData = [
@@ -418,7 +418,8 @@ final class App
         if ($key === '') {
             return '';
         }
-        $str = $this->translations[$key] ?? $key;
+        $raw = $this->translations[$key] ?? $key;
+        $str = is_string($raw) ? $raw : $key;
         if ($params !== []) {
             foreach ($params as $k => $v) {
                 $str = str_replace(':' . $k, (string) $v, $str);
@@ -547,7 +548,11 @@ final class App
         $_SESSION['is_main'] = $isMain;
         $_SESSION['last_activity'] = time();
         LicenseManager::initOnFirstLogin();
-        header('Location: ' . $this->host);
+        $redirectHost = $this->host;
+        if (!is_string($redirectHost) || $redirectHost === '') {
+            $redirectHost = './';
+        }
+        header('Location: ' . $redirectHost);
         exit;
     }
 
@@ -576,13 +581,22 @@ final class App
     /** @return array{name: string, description: string, version: string, author: string} */
     public function loadThemeJson(string $themeName): array
     {
-        $path = dirname(__DIR__) . '/themes/' . basename($themeName) . '/theme.json';
-        if (is_file($path)) {
+        $safeTheme = basename($themeName);
+        if ($safeTheme === '' || $safeTheme === '.' || $safeTheme === '..') {
+            return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
+        }
+        $path = dirname(__DIR__) . '/themes/' . $safeTheme . '/theme.json';
+        if (is_file($path) && !is_link($path)) {
             $json = file_get_contents($path);
             if ($json !== false) {
                 $data = json_decode($json, true);
                 if (is_array($data)) {
-                    return $data;
+                    return [
+                        'name' => is_string($data['name'] ?? null) ? $data['name'] : $safeTheme,
+                        'description' => is_string($data['description'] ?? null) ? $data['description'] : '',
+                        'version' => is_string($data['version'] ?? null) ? $data['version'] : '',
+                        'author' => is_string($data['author'] ?? null) ? $data['author'] : '',
+                    ];
                 }
             }
         }

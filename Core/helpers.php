@@ -25,7 +25,7 @@ function csrf_token(): string
 function csrf_verify(): bool
 {
     $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!is_string($token) || $token === '') {
+    if (!is_string($token) || $token === '' || strlen($token) > 128) {
         return false;
     }
     $session = $_SESSION['csrf'] ?? '';
@@ -80,10 +80,26 @@ function login_rate_check(): bool
         }
     }
 
-    $attempts = array_values(array_filter($attempts, fn(mixed $t) => is_int($t) && ($now - $t) < LOGIN_WINDOW_SECONDS));
+    $attempts = array_values(array_filter($attempts, fn(mixed $t) => is_int($t) && $t > 0 && ($now - $t) < LOGIN_WINDOW_SECONDS));
     $attemptCount = count($attempts);
 
     if ($attemptCount >= LOGIN_MAX_ATTEMPTS) {
+        // Write back the filtered attempts to keep the rate file current
+        if (is_file($rateFile)) {
+            $fp = fopen($rateFile, 'r+');
+            if ($fp !== false) {
+                flock($fp, LOCK_EX);
+                ftruncate($fp, 0);
+                rewind($fp);
+                $encoded = json_encode($attempts);
+                if ($encoded !== false) {
+                    fwrite($fp, $encoded);
+                }
+                fflush($fp);
+                flock($fp, LOCK_UN);
+                fclose($fp);
+            }
+        }
         return false;
     }
 

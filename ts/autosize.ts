@@ -6,7 +6,9 @@
  * Vanilla TypeScript replacement for jQuery autosize plugin.
  */
 
+// R4-21: autosize入力null/非textarea安全化
 export function autosize(textarea: HTMLTextAreaElement): void {
+    if (!textarea || !(textarea instanceof HTMLTextAreaElement)) return;
     if (textarea.dataset.autosize === 'true') return;
     textarea.dataset.autosize = 'true';
 
@@ -48,6 +50,8 @@ export function autosize(textarea: HTMLTextAreaElement): void {
         if (!textarea.isConnected) {
             ac.abort();
             observer.disconnect();
+            // R4-22: DOM除去時にgcCheckIntervalもクリア
+            clearInterval(gcCheckInterval);
         }
     });
     if (textarea.parentNode) {

@@ -47,17 +47,28 @@ export function updateCsrfFromResponse(res: Response): void {
 }
 
 // Ver.2.9 TS#73: エラーメッセージ取得ヘルパー（DRY化）
+// R5-18: extractApiError — エラーメッセージからHTMLタグ除去（XSS防止）
 async function extractApiError(res: Response, fallbackStatus: number): Promise<string> {
     let msg = `API error: ${fallbackStatus}`;
-    try { const json = await res.json(); msg = json.error || msg; } catch { /* non-JSON response */ }
+    try {
+        const json = await res.json();
+        if (json.error && typeof json.error === 'string') {
+            // R5-19: サーバーエラーメッセージのサニタイズ
+            msg = json.error.replace(/<[^>]*>/g, '');
+        }
+    } catch { /* non-JSON response */ }
     return msg;
 }
 
 // Ver.2.9 TS#82: GenerateReport型定義 → globals.d.ts に配置
 
 // #96: URL構築のbuilder helper — URLSearchParams統一
+// R5-17: endpoint入力バリデーション — 英数字とハイフンのみ許可
 function buildApiUrl(endpoint: string, params?: Record<string, string>): string {
-    let url = `index.php?api=${endpoint}`;
+    if (!endpoint || !/^[a-zA-Z0-9_-]+$/.test(endpoint)) {
+        throw new Error('buildApiUrl: invalid endpoint');
+    }
+    let url = `index.php?api=${encodeURIComponent(endpoint)}`;
     if (params) {
         const search = new URLSearchParams(params);
         url += `&${search.toString()}`;

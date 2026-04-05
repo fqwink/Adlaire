@@ -13,7 +13,7 @@ declare(strict_types=1);
 $c = $app->config;
 $adminActionRaw = $_GET['admin'] ?? null;
 $adminAction = is_string($adminActionRaw) ? $adminActionRaw : 'dashboard';
-$allowedActions = ['dashboard', '', 'edit', 'new', 'users'];
+$allowedActions = ['dashboard', '', 'edit', 'new', 'users', 'license'];
 if (!in_array($adminAction, $allowedActions, true)) {
     $adminAction = 'dashboard';
 }
@@ -57,6 +57,7 @@ $n = $app->nonce !== '' ? " nonce=\"" . esc($app->nonce) . "\"" : '';
         <?php if ($app->isMainMaster()): ?>
         <a href="?admin=users" class="<?= $adminAction === 'users' ? 'active' : '' ?>"><?= esc($app->t('admin_users')) ?></a>
         <?php endif; ?>
+        <a href="?admin=license" class="<?= $adminAction === 'license' ? 'active' : '' ?>">License</a>
     </nav>
 
 <?php
@@ -64,6 +65,7 @@ match ($adminAction) {
     'edit'      => renderAdminEditor($app, $n),
     'new'       => renderAdminNewPage($app, $n),
     'users'     => renderAdminUsers($app, $n),
+    'license'   => renderAdminLicense($app, $n),
     default     => renderAdminDashboard($app, $n),
 };
 ?>
@@ -605,5 +607,82 @@ function renderAdminNewPage(App $app, string $n): void
     echo "}).catch(function(err){alert('Error: '+err.message);});";
     echo "});";
     echo "</script>";
+    echo "</section>";
+}
+
+function renderAdminLicense(App $app, string $n): void
+{
+    $info = LicenseManager::getInfo();
+    $csrfToken = csrf_token();
+
+    echo "<section class='admin-section'>";
+    echo "<h2>License Settings</h2>";
+
+    if (!$info['initialized']) {
+        echo "<p>License not initialized. Please log out and log in again to initialize.</p>";
+        echo "</section>";
+        return;
+    }
+
+    echo "<table class='admin-table'>";
+    echo "<tr><th>Status</th><td>";
+    if ($info['registered']) {
+        echo "<span style='color:#2a7;font-weight:bold'>Registered</span>";
+        if ($info['commercial']) {
+            echo " + <span style='color:#1ab;font-weight:bold'>Commercial</span>";
+        }
+    } else {
+        $remaining = (int) $info['grace_remaining'];
+        $hours = max(0, (int) floor($remaining / 3600));
+        echo "<span style='color:#c33;font-weight:bold'>Not Registered</span>";
+        echo " &mdash; Grace period: {$hours}h remaining";
+    }
+    echo "</td></tr>";
+    echo "<tr><th>System Key</th><td><code>" . esc((string) $info['system_key']) . "</code></td></tr>";
+    if ($info['registered']) {
+        echo "<tr><th>Registered At</th><td>" . esc((string) $info['registered_at']) . "</td></tr>";
+    }
+    echo "</table>";
+
+    if (!$info['registered']) {
+        echo "<h3>Register with License Server</h3>";
+        echo "<div style='margin:12px 0'>";
+        echo "<label>License Server URL</label><br>";
+        echo "<input type='text' id='license-server-url' placeholder='https://license.example.com' style='width:400px;margin:6px 0'><br>";
+        echo "<button class='admin-btn' id='btn-register'>Register</button>";
+        echo "</div>";
+        echo "<script{$n}>";
+        echo "document.getElementById('btn-register').addEventListener('click',function(){";
+        echo "var url=document.getElementById('license-server-url').value.trim();";
+        echo "if(!url){alert('License server URL is required');return;}";
+        echo "var body=new URLSearchParams();body.append('action','register');body.append('server_url',url);body.append('csrf','" . esc($csrfToken) . "');";
+        echo "fetch('?api=license',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
+        echo ".then(function(r){var t=r.headers.get('X-CSRF-Token');if(t)csrfToken=t;return r.json();})";
+        echo ".then(function(d){if(d.registered){alert('Registration successful!');location.reload();}else{alert('Error: '+(d.error||d.message||'Unknown error'));}})";
+        echo ".catch(function(e){alert('Error: '+e.message);});";
+        echo "});";
+        echo "</script>";
+    }
+
+    if ($info['registered'] && !$info['commercial']) {
+        echo "<h3>Commercial License</h3>";
+        echo "<div style='margin:12px 0'>";
+        echo "<label>Third-Party API Key</label><br>";
+        echo "<input type='text' id='third-party-key' placeholder='ASCMS-TPK-...' style='width:400px;margin:6px 0'><br>";
+        echo "<button class='admin-btn' id='btn-third-party'>Register Commercial Key</button>";
+        echo "</div>";
+        echo "<script{$n}>";
+        echo "document.getElementById('btn-third-party').addEventListener('click',function(){";
+        echo "var key=document.getElementById('third-party-key').value.trim();";
+        echo "if(!key){alert('Third-party key is required');return;}";
+        echo "var body=new URLSearchParams();body.append('action','third-party');body.append('third_party_key',key);body.append('csrf','" . esc($csrfToken) . "');";
+        echo "fetch('?api=license',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})";
+        echo ".then(function(r){var t=r.headers.get('X-CSRF-Token');if(t)csrfToken=t;return r.json();})";
+        echo ".then(function(d){if(d.commercial){alert('Commercial license activated!');location.reload();}else{alert('Error: '+(d.error||d.message||'Unknown error'));}})";
+        echo ".catch(function(e){alert('Error: '+e.message);});";
+        echo "});";
+        echo "</script>";
+    }
+
     echo "</section>";
 }

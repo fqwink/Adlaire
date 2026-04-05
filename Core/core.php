@@ -122,7 +122,7 @@ final class FileStorage
      */
     public static function validateSlug(string $slug): bool
     {
-        if ($slug === '') {
+        if ($slug === '' || strlen($slug) > 128) {
             return false;
         }
         return (bool) preg_match(self::SLUG_PATTERN, $slug);
@@ -151,7 +151,8 @@ final class FileStorage
         foreach ($legacyConfigKeys as $key) {
             $legacyFile = $realBase . '/' . $key;
             if (file_exists($legacyFile) && !is_link($legacyFile)) {
-                $config[$key] = file_get_contents($legacyFile);
+                $raw = file_get_contents($legacyFile);
+                $config[$key] = ($raw !== false) ? $raw : '';
             }
         }
 
@@ -210,7 +211,7 @@ final class FileStorage
      */
     public function readConfig(): array
     {
-        if (!file_exists($this->configFile)) {
+        if (!file_exists($this->configFile) || is_link($this->configFile)) {
             return [];
         }
 
@@ -647,6 +648,11 @@ final class FileStorage
         if ($files === false || count($files) <= self::MAX_BACKUPS) {
             return;
         }
+        // Filter out symlinks
+        $files = array_filter($files, static fn(string $f): bool => !is_link($f) && is_file($f));
+        if (count($files) <= self::MAX_BACKUPS) {
+            return;
+        }
         usort($files, static function (string $a, string $b): int {
             $mtimeA = filemtime($a);
             $mtimeB = filemtime($b);
@@ -667,6 +673,9 @@ final class FileStorage
      */
     private function saveRevision(string $slug, array $pageData): void
     {
+        if (!self::validateSlug($slug)) {
+            return;
+        }
         $dir = $this->revisionsDir . '/' . $slug;
         if (!is_dir($dir)) {
             if (!mkdir($dir, self::DIR_PERMISSION, true) && !is_dir($dir)) {
@@ -709,7 +718,14 @@ final class FileStorage
             return [];
         }
 
-        $files = glob($dir . '/*.json');
+        // Path traversal check
+        $realDir = realpath($dir);
+        $realRevisionsDir = realpath($this->revisionsDir);
+        if ($realDir === false || $realRevisionsDir === false || !str_starts_with($realDir, $realRevisionsDir . DIRECTORY_SEPARATOR)) {
+            return [];
+        }
+
+        $files = glob($realDir . '/*.json');
         if (!is_array($files)) {
             return [];
         }
@@ -717,9 +733,12 @@ final class FileStorage
         rsort($files);
         $revisions = [];
         foreach ($files as $file) {
-            $revisions[] = [
-                'timestamp' => basename($file, '.json'),
-            ];
+            $ts = basename($file, '.json');
+            if (preg_match(self::TIMESTAMP_PATTERN, $ts)) {
+                $revisions[] = [
+                    'timestamp' => $ts,
+                ];
+            }
         }
         return $revisions;
     }
@@ -738,6 +757,13 @@ final class FileStorage
 
         $revFile = $this->revisionsDir . '/' . $slug . '/' . $timestamp . '.json';
         if (!file_exists($revFile) || is_link($revFile)) {
+            return false;
+        }
+
+        // Path traversal check
+        $realRevFile = realpath($revFile);
+        $realRevisionsDir = realpath($this->revisionsDir);
+        if ($realRevFile === false || $realRevisionsDir === false || !str_starts_with($realRevFile, $realRevisionsDir . DIRECTORY_SEPARATOR)) {
             return false;
         }
 
@@ -834,7 +860,13 @@ final class FileStorage
         if (!file_exists($revFile) || is_link($revFile)) {
             return false;
         }
-        $json = $this->lockedRead($revFile);
+        // Path traversal check
+        $realRevFile = realpath($revFile);
+        $realRevisionsDir = realpath($this->revisionsDir);
+        if ($realRevFile === false || $realRevisionsDir === false || !str_starts_with($realRevFile, $realRevisionsDir . DIRECTORY_SEPARATOR)) {
+            return false;
+        }
+        $json = $this->lockedRead($realRevFile);
         if ($json === false || $json === '') {
             return false;
         }
@@ -888,7 +920,7 @@ final class FileStorage
 
     public function deleteUser(string $username): bool
     {
-        if ($username === '') {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
             return false;
         }
         $users = $this->readUsers();
@@ -943,8 +975,11 @@ final class FileStorage
     /** @return array<string, mixed>|false */
     public function getUser(string $username): array|false
     {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
+            return false;
+        }
         $users = $this->readUsers();
-        if (!isset($users[$username])) {
+        if (!isset($users[$username]) || !is_array($users[$username])) {
             return false;
         }
         return $users[$username];
@@ -953,18 +988,27 @@ final class FileStorage
     /** @return array{login_id: string, password: string, token: string} */
     public function generateSubMasterCredentials(): array
     {
-        $loginId = bin2hex(random_bytes(8));
-        $password = bin2hex(random_bytes(12));
-        $token = bin2hex(random_bytes(16));
+        $loginId = bin2hex(random_bytes(8));   // 16 hex chars
+        $password = bin2hex(random_bytes(12)); // 24 hex chars
+        $token = bin2hex(random_bytes(16));    // 32 hex chars
+        // Total: 16 + 24 + 32 = 72. Ensure >= 73 total chars.
         $totalLen = strlen($loginId) + strlen($password) + strlen($token);
         if ($totalLen < 73) {
             $extra = 73 - $totalLen;
-            $token .= bin2hex(random_bytes(max(1, (int) ceil($extra / 2))));
+            $extraBytes = max(1, (int) ceil($extra / 2));
+            $token .= bin2hex(random_bytes($extraBytes));
             $targetTokenLen = 73 - strlen($loginId) - strlen($password);
-            if ($targetTokenLen > 0) {
+            if ($targetTokenLen > 0 && strlen($token) > $targetTokenLen) {
                 $token = substr($token, 0, $targetTokenLen);
             }
         }
+
+        // Validate generated login_id matches username pattern
+        if (!preg_match(self::USERNAME_PATTERN, $loginId)) {
+            // Extremely unlikely but defensive
+            $loginId = 'sub' . bin2hex(random_bytes(6));
+        }
+
         return [
             'login_id' => $loginId,
             'password' => $password,
@@ -974,6 +1018,9 @@ final class FileStorage
 
     public function disableUser(string $username): bool
     {
+        if ($username === '' || !preg_match(self::USERNAME_PATTERN, $username)) {
+            return false;
+        }
         $users = $this->readUsers();
         if (!isset($users[$username])) {
             error_log('Adlaire: Cannot disable non-existent user: ' . $username);
@@ -982,6 +1029,9 @@ final class FileStorage
         if (!empty($users[$username]['is_main'])) {
             error_log('Adlaire: Cannot disable main master user');
             return false;
+        }
+        if (isset($users[$username]['enabled']) && $users[$username]['enabled'] === false) {
+            return true; // Already disabled
         }
         $users[$username]['enabled'] = false;
         return $this->writeUsersFile($users);

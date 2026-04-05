@@ -269,7 +269,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
 {
     $c = $app->config;
     $title = esc((string) ($c['title'] ?? ''));
-    $pageTitle = esc($slug);
+    $pageTitle = esc(str_replace('-', ' ', $slug));
     $desc = esc((string) ($c['description'] ?? ''));
     $keywords = esc((string) ($c['keywords'] ?? ''));
     $lang = esc($app->language);
@@ -289,7 +289,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         $itemSlug = App::getSlug($item);
         $active = ($slug === $itemSlug) ? ' id="active"' : '';
         $safeItemSlug = esc($itemSlug);
-        $menuHtml .= "<li{$active}><a href='{$safeItemSlug}/'>" . esc($item) . "</a></li>";
+        $menuHtml .= "<li{$active}><a href=\"{$safeItemSlug}/\">" . esc($item) . "</a></li>";
     }
     $menuHtml .= '</ul>';
 

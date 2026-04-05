@@ -178,9 +178,117 @@ function handleApi(): void
         'import'    => handleApiImport($storage),
         'generate'  => handleApiGenerate($storage),
         'users'     => handleApiUsers($storage, $method),
+        'license'   => handleApiLicense($method),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
+}
+
+// --- License API ---
+
+function handleApiLicense(string $method): void
+{
+    if ($method === 'GET') {
+        apiResponse(LicenseManager::getInfo());
+        return;
+    }
+
+    if ($method !== 'POST') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
+        return;
+    }
+
+    $action = is_string($_POST['action'] ?? null) ? ($_POST['action'] ?? '') : '';
+
+    if ($action === 'register') {
+        $systemKey = LicenseManager::getSystemKey();
+        if ($systemKey === '') {
+            apiError(400, 'System key not initialized');
+            return;
+        }
+
+        $licenseServerUrl = is_string($_POST['server_url'] ?? null) ? trim($_POST['server_url'] ?? '') : '';
+        if ($licenseServerUrl === '') {
+            apiError(400, 'License server URL is required');
+            return;
+        }
+
+        $domain = $_SERVER['HTTP_HOST'] ?? '';
+        $version = defined('App::VERSION') ? App::VERSION : '';
+
+        $payload = json_encode([
+            'system_key' => $systemKey,
+            'domain' => $domain,
+            'product_version' => $version,
+            'timestamp' => gmdate('c'),
+        ], JSON_THROW_ON_ERROR);
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/json\r\n",
+                'content' => $payload,
+                'timeout' => 10,
+                'ignore_errors' => true,
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+            ],
+        ]);
+
+        $url = rtrim($licenseServerUrl, '/') . '/api/license/register';
+        $response = @file_get_contents($url, false, $context);
+
+        if ($response === false) {
+            apiError(502, 'Failed to connect to license server');
+            return;
+        }
+
+        $data = json_decode($response, true);
+        if (!is_array($data) || ($data['status'] ?? '') !== 'ok') {
+            apiError(502, 'License server error: ' . ($data['message'] ?? 'unknown'));
+            return;
+        }
+
+        $primaryKey = is_string($data['primary_key'] ?? null) ? $data['primary_key'] : '';
+        $secondKey = is_string($data['second_key'] ?? null) ? $data['second_key'] : '';
+
+        if ($primaryKey === '' || $secondKey === '') {
+            apiError(502, 'Invalid keys received from license server');
+            return;
+        }
+
+        if (!LicenseManager::registerKeys($primaryKey, $secondKey)) {
+            apiError(500, 'Failed to save license keys');
+            return;
+        }
+
+        apiResponse(['registered' => true]);
+        return;
+    }
+
+    if ($action === 'third-party') {
+        $thirdPartyKey = is_string($_POST['third_party_key'] ?? null) ? trim($_POST['third_party_key'] ?? '') : '';
+        if ($thirdPartyKey === '') {
+            apiError(400, 'Third-party key is required');
+            return;
+        }
+
+        if (!LicenseManager::registerThirdPartyKey($thirdPartyKey)) {
+            apiError(500, 'Failed to save third-party key');
+            return;
+        }
+
+        apiResponse(['commercial' => true]);
+        return;
+    }
+
+    apiError(400, 'Unknown license action');
 }
 
 function handleApiPages(FileStorage $storage, string $method): void
@@ -449,6 +557,10 @@ const API_SEARCH_SNIPPET_CONTEXT = 40;
 
 function handleApiSearch(FileStorage $storage): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
     $rawQuery = is_string($_GET['q'] ?? null) ? trim($_GET['q'] ?? '') : '';
     if ($rawQuery === '' || mb_strlen($rawQuery, 'UTF-8') > API_SEARCH_MAX_QUERY_LENGTH) {
         apiResponse(['results' => []]);
@@ -540,6 +652,11 @@ function handleApiExport(FileStorage $storage): void
         return;
     }
 
+    if (!isMainMasterSession($storage)) {
+        apiError(403, 'Main master access required');
+        return;
+    }
+
     $config = $storage->readConfig();
     unset($config['password'], $config['session'], $config['csrf'], $config['loggedin']);
 
@@ -596,6 +713,11 @@ function handleApiImport(FileStorage $storage): void
         return;
     }
 
+    if (!isMainMasterSession($storage)) {
+        apiError(403, 'Main master access required');
+        return;
+    }
+
     $maxImportSize = API_MAX_IMPORT_SIZE;
     $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
     if ($contentLength > $maxImportSize) {
@@ -620,7 +742,7 @@ function handleApiImport(FileStorage $storage): void
     }
 
     $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
-    if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+    if (is_string($contentType) && $contentType !== '' && !str_contains($contentType, 'application/json') && !str_contains($contentType, 'text/plain')) {
         apiError(400, 'Unsupported Content-Type');
         return;
     }
@@ -726,9 +848,13 @@ function handleApiImport(FileStorage $storage): void
 
 function handleApiVersion(): void
 {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
     header('Cache-Control: public, max-age=60');
     $versionFile = dirname(__DIR__) . '/VERSION';
-    $version = file_exists($versionFile) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
+    $version = (file_exists($versionFile) && !is_link($versionFile)) ? trim((string) file_get_contents($versionFile)) : App::VERSION;
 
     apiResponse([
         'product' => 'Adlaire',
@@ -762,6 +888,11 @@ function handleApiUsers(FileStorage $storage, string $method): void
 
     if ($method === 'GET') {
         $users = $storage->listUsers();
+        // Don't expose password hashes or tokens in user list
+        foreach ($users as $uname => &$udata) {
+            unset($udata['password'], $udata['token']);
+        }
+        unset($udata);
         apiResponse(['users' => $users], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return;
     }
@@ -1007,22 +1138,34 @@ function apiBulkDelete(FileStorage $storage): void
         return;
     }
 
+    if (!isMainMasterSession($storage)) {
+        apiError(403, 'Main master access required');
+        return;
+    }
+
     $slugs = $_POST['slugs'] ?? [];
-    if (!is_array($slugs)) {
+    if (!is_array($slugs) || count($slugs) === 0) {
         apiError(400, 'Invalid parameters');
         return;
     }
 
     $deleted = 0;
+    $failed = [];
     foreach ($slugs as $slug) {
         if (is_string($slug) && FileStorage::validateSlug($slug)) {
             if ($storage->deletePage($slug)) {
                 $deleted++;
+            } else {
+                $failed[] = $slug;
             }
         }
     }
 
-    apiResponse(['status' => 'ok', 'deleted' => $deleted]);
+    $response = ['status' => 'ok', 'deleted' => $deleted];
+    if ($failed !== []) {
+        $response['failed'] = $failed;
+    }
+    apiResponse($response);
 }
 
 function apiRevisionDiff(FileStorage $storage, string $slug): void
@@ -1031,6 +1174,10 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     $t2 = is_string($_GET['t2'] ?? '') ? ($_GET['t2'] ?? '') : '';
     if ($t1 === '' || $t2 === '') {
         apiError(400, 'Missing t1 or t2');
+        return;
+    }
+    if ($t1 === $t2) {
+        apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => [], 'removed' => [], 'changed' => []], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return;
     }
 

@@ -96,6 +96,9 @@ final class LicenseManager
      */
     public static function registerKeys(string $primaryKey, string $secondKey): bool
     {
+        if ($primaryKey === '' || $secondKey === '') {
+            return false;
+        }
         $data = self::read();
         if ($data === null || !isset($data['system_key']) || $data['system_key'] === '') {
             return false;
@@ -114,6 +117,9 @@ final class LicenseManager
      */
     public static function registerThirdPartyKey(string $thirdPartyKey): bool
     {
+        if ($thirdPartyKey === '') {
+            return false;
+        }
         $data = self::read();
         if ($data === null || !isset($data['primary_key']) || $data['primary_key'] === '') {
             return false;

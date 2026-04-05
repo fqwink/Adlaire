@@ -148,12 +148,15 @@ export function markdownToHtml(md: string): string {
     // --- Tables ---
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
         const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
-        if (rows.length < 2) return tableBlock;
+        // R5-3: テーブル最大行数制限 — DoS防止（1000行超はスキップ）
+        if (rows.length < 2 || rows.length > 1000) return tableBlock;
 
         const parseRow = (row: string): string[] =>
             row.split('|').slice(1, -1).map(cell => cell.trim());
 
         const headerCells = parseRow(rows[0]);
+        // R5-29: テーブル列数最大制限 — DoS防止（50列超はスキップ）
+        if (headerCells.length === 0 || headerCells.length > 50) return tableBlock;
 
         // Check if row 2 is separator (|---|---|) — #23: alignment情報保持
         const sep = rows[1];
@@ -259,7 +262,11 @@ export function markdownToHtml(md: string): string {
             // #8: footnote IDは既にescAttr済み、テキストもエスケープ
             // #121: back-linkは最初の参照IDを使用
             const firstRef = fnRefFirstById[id] ?? 1;
-            html += `<li id="fn-${id}">${footnotes[id]} <a href="#fnref-${id}-${firstRef}">\u21A9</a></li>`;
+            // R5-4: footnote参照のないfootnote定義はback-linkを省略
+            const backLink = id in fnRefFirstById
+                ? ` <a href="#fnref-${id}-${firstRef}">\u21A9</a>`
+                : '';
+            html += `<li id="fn-${id}">${footnotes[id]}${backLink}</li>`;
         });
         html += '</ol></section>';
     }
@@ -275,6 +282,8 @@ export function markdownToHtml(md: string): string {
 
     // Clean up excessive newlines
     html = html.replace(/\n{2,}/g, '\n');
+    // R5-30: 末尾の空<p></p>タグ除去
+    html = html.replace(/<p>\s*<\/p>/g, '');
 
     return html.trim();
 }
