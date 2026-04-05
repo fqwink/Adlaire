@@ -41,7 +41,7 @@ interface SearchResult {
 }
 
 // #33: グローバル変数を直接更新
-function updateCsrfFromResponse(res: Response): void {
+export function updateCsrfFromResponse(res: Response): void {
     const newToken = res.headers.get('X-CSRF-Token');
     if (newToken) { csrfToken = newToken; }
 }
@@ -65,7 +65,7 @@ function buildApiUrl(endpoint: string, params?: Record<string, string>): string 
     return url;
 }
 
-const api = {
+export const api = {
     /**
      * List all pages (metadata only, no content).
      */

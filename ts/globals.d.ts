@@ -1,17 +1,13 @@
 /**
  * @license Adlaire License Ver.2.0 (Frontend Source - Closed)
  * @copyright Copyright (c) 2014 - 2026 Adlaire Group & 倉田和宏
+ *
+ * Global type declarations for PHP-injected variables and shared interfaces.
+ * Module-level function declarations are handled by ES module imports.
  */
 
 /** Global variables injected by PHP */
 declare let csrfToken: string;
-
-/** Global functions from other TS modules */
-declare function autosize(textarea: HTMLTextAreaElement): void;
-declare function markdownToHtml(md: string): string;
-declare function renderBlocks(blocks: { type: string; data: Record<string, unknown> }[]): string;
-declare function sanitizeHtml(html: string): string;
-declare function escHtml(s: string): string;
 
 /** User information for master management */
 interface UserInfo {
@@ -29,9 +25,4 @@ interface GenerateReport {
     failed: number;
     skipped: number;
     time: number;
-}
-
-/** Editor instance attached to container element */
-interface HTMLElement {
-    __editor?: Editor | undefined;
 }

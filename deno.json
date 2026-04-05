@@ -1,8 +1,8 @@
 {
   "tasks": {
-    "build": "deno run --allow-read --allow-write scripts/build.ts",
-    "check": "deno check ts/editInplace.ts ts/markdown.ts",
-    "watch": "deno run --allow-read --allow-write --watch=ts/ scripts/build.ts"
+    "build": "deno run --allow-read --allow-write --allow-env --allow-run scripts/build.ts",
+    "check": "deno check ts/editInplace.ts ts/public.ts",
+    "watch": "deno run --allow-read --allow-write --allow-env --allow-run --watch=ts/ scripts/build.ts"
   },
   "compilerOptions": {
     "target": "ES2021",
@@ -12,8 +12,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
-  },
-  "imports": {
-    "@deno/emit": "jsr:@deno/emit@^0.46.0"
   }
 }

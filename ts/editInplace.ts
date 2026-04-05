@@ -10,12 +10,23 @@
  *
  * Also handles format switching via the format toolbar.
  *
- * Requires: autosize.ts, markdown.ts, editor.ts, i18n.ts, api.ts
  * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
  */
 
+import { autosize } from './autosize.ts';
+import { markdownToHtml } from './markdown.ts';
+import { Editor, renderBlocks, sanitizeHtml, escHtml, type BlockData } from './editor.ts';
+import { api, updateCsrfFromResponse } from './api.ts';
+import { i18n } from './i18n.ts';
+
 declare const pageLang: string | undefined;
 declare const pageFormat: string | undefined;
+
+// Expose globals for PHP templates
+(window as Record<string, unknown>).markdownToHtml = markdownToHtml;
+(window as Record<string, unknown>).renderBlocks = renderBlocks;
+(window as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
+(window as Record<string, unknown>).escHtml = escHtml;
 
 let changing = false;
 let activeEditor: InstanceType<typeof Editor> | null = null;

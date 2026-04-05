@@ -10,12 +10,12 @@
 
 // --- Types ---
 
-interface BlockData {
+export interface BlockData {
     type: string;
     data: Record<string, unknown>;
 }
 
-interface EditorData {
+export interface EditorData {
     time: number;
     version: string;
     blocks: BlockData[];
@@ -46,7 +46,7 @@ const _editorInlineToolbarMap = new WeakMap<HTMLElement, InlineToolbar>();
 
 // --- Helper: get Editor from element ---
 
-function getEditorFromElement(el: HTMLElement): Editor | null {
+export function getEditorFromElement(el: HTMLElement): Editor | null {
     const editorEl = el.closest('.ce-editor') as HTMLElement | null;
     if (!editorEl) return null;
     const record = editorEl as unknown as Record<string, unknown>;
@@ -164,7 +164,7 @@ const _sanDangerousProto = /(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:
 const _sanDataJs = /\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
 
 // #47: replace chain順序保証 — 1) 危険タグ除去 → 2) Unicode decode → 3) on*属性除去 → 4) プロトコル除去
-function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string): string {
     // Phase 1: 危険タグの除去（最初に実行）— Ver.2.9 TS#67: 事前コンパイル済み正規表現使用
     _sanScript.lastIndex = 0; let s = html.replace(_sanScript, '');
     _sanIframe.lastIndex = 0; s = s.replace(_sanIframe, '');
@@ -204,7 +204,7 @@ function sanitizeHtml(html: string): string {
 
 // --- Undo Manager (#25) ---
 
-class UndoManager {
+export class UndoManager {
     private stack: string[] = [];
     private pointer: number = -1;
     // #97: maxSize設定可能化 — コンストラクタで指定可能
@@ -719,7 +719,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
 
 // --- Inline Toolbar (#46: Selection API replaces document.execCommand) ---
 
-class InlineToolbar {
+export class InlineToolbar {
     private el: HTMLElement;
     private selectionHandler: () => void;
     // #32: selectionchange多重登録防止用AbortController
@@ -922,7 +922,7 @@ class InlineToolbar {
 
 // --- Editor Class ---
 
-class Editor {
+export class Editor {
     private container: HTMLElement;
     private tools: Record<string, BlockToolFactory>;
     private blockElements: HTMLElement[] = [];
@@ -1515,12 +1515,12 @@ class Editor {
 
 // --- Render blocks to HTML (for visitor view) ---
 
-function escHtml(s: string): string {
+export function escHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Ver.2.9 #35: 空コンテンツ — 空paragraphはスキップ、data未定義時の安全処理
-function renderBlocks(blocks: BlockData[]): string {
+export function renderBlocks(blocks: BlockData[]): string {
     if (!Array.isArray(blocks)) return '';
     return blocks.map(block => {
         if (!block || !block.type) return '';

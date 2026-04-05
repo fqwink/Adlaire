@@ -35,7 +35,7 @@ const _mdParagraph = /^(?!<[a-z\/])(?!%%CODEBLOCK_)(.*\S.*)$/gm;
 const _mdEscAttr = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-function markdownToHtml(md: string): string {
+export function markdownToHtml(md: string): string {
     let html = md;
 
     // --- Extract fenced code blocks BEFORE escaping (preserve raw content) ---

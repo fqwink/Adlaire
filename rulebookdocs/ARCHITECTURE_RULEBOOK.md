@@ -141,7 +141,7 @@ deno task watch   # ウォッチモード（開発時）
 - ビルド済みリリース物が配置済みであることを前提とする。
 - `deno.json` をプロジェクト設定ファイルとして使用する（`package.json` / `tsconfig.json` は廃止）。
 - コンパイラオプションは `deno.json` の `compilerOptions` セクションに定義する。
-- ビルドスクリプト（`scripts/build.ts`）は `jsr:@deno/emit` を使用して TypeScript をトランスパイルする。
+- ビルドスクリプト（`scripts/build.ts`）は `npm:esbuild`（Deno npm 互換経由）を使用してバンドル・トランスパイルする。
 
 ## 4.4 ES モジュール移行（Ver.3.0）
 
