@@ -442,9 +442,14 @@ final class FileStorage
 
         $pages = [];
         $memoryLimitRaw = ini_get('memory_limit');
-        $memoryLimit = is_string($memoryLimitRaw) ? (int) $memoryLimitRaw : 0;
-        if ($memoryLimit > 0) {
-            $memoryLimitBytes = $memoryLimit * 1024 * 1024;
+        $val = is_string($memoryLimitRaw) ? (int) $memoryLimitRaw : 0;
+        if ($val > 0) {
+            $unit = strtolower(substr(trim($memoryLimitRaw), -1));
+            $memoryLimitBytes = match ($unit) {
+                'g' => $val * 1024 * 1024 * 1024,
+                'k' => $val * 1024,
+                default => $val * 1024 * 1024,
+            };
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {
                 error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
                 if ($cachedIndex !== null) {
@@ -980,6 +985,18 @@ final class FileStorage
             return true;
         }
         unset($config[$key]);
+
+        if (file_exists($this->configFile)) {
+            $backupName = date('Ymd_His') . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
+            $backupDest = $this->backupsDir . '/config.' . $backupName . '.json';
+            if (!copy($this->configFile, $backupDest)) {
+                error_log('Adlaire: Failed to copy config backup in removeConfigKey: ' . $backupName);
+                return false;
+            }
+            @chmod($backupDest, self::FILE_PERMISSION);
+            $this->rotateBackups();
+        }
+
         $json = json_encode($config, self::JSON_FLAGS);
         if ($json === false) {
             error_log('Adlaire: Failed to encode config JSON in removeConfigKey');

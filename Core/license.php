@@ -194,7 +194,7 @@ final class LicenseManager
             'initialized' => isset($data['system_key']) && $data['system_key'] !== '',
             'registered' => isset($data['primary_key']) && $data['primary_key'] !== '',
             'commercial' => isset($data['third_party_key']) && $data['third_party_key'] !== '',
-            'system_key' => $data['system_key'] ?? '',
+            'system_key' => isset($data['system_key']) && strlen($data['system_key']) > 8 ? substr($data['system_key'], 0, 8) . '...' : ($data['system_key'] ?? ''),
             'registered_at' => $data['registered_at'] ?? '',
             'first_login_at' => $data['first_login_at'] ?? '',
             'grace_remaining' => self::getGraceRemaining(),
@@ -257,6 +257,7 @@ final class LicenseManager
             if (file_exists($tmpFile)) {
                 unlink($tmpFile);
             }
+            self::$cache = null;
             throw new \RuntimeException('Failed to write license file.');
         }
 
@@ -266,6 +267,7 @@ final class LicenseManager
             if (file_exists($tmpFile)) {
                 unlink($tmpFile);
             }
+            self::$cache = null;
             throw new \RuntimeException('Failed to finalize license file.');
         }
 

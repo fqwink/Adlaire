@@ -163,10 +163,15 @@ const _sanJsSimple = /(href|src)\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
 const _sanDangerousProto = /(href|src)\s*=\s*["']?\s*(?:about|data|vbscript)\s*:[^"'>]*/gi;
 const _sanDataJs = /\s+data-\w+\s*=\s*["']?\s*javascript\s*:[^"'>]*/gi;
 
-// #47: replace chain順序保証 — 1) 危険タグ除去 → 2) Unicode decode → 3) on*属性除去 → 4) プロトコル除去
+// #47: replace chain順序保証 — 1) Unicode decode → 2) 危険タグ除去 → 3) on*属性除去 → 4) プロトコル除去
 export function sanitizeHtml(html: string): string {
-    // Phase 1: 危険タグの除去（最初に実行）— Ver.2.9 TS#67: 事前コンパイル済み正規表現使用
-    _sanScript.lastIndex = 0; let s = html.replace(_sanScript, '');
+    // Phase 1: Unicode escape sequences decode（最初に実行 — TS#4: エスケープによるバイパス防止）
+    _sanUnicodeEscape.lastIndex = 0;
+    let s = html.replace(_sanUnicodeEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    _sanHexEscape.lastIndex = 0;
+    s = s.replace(_sanHexEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // Phase 2: 危険タグの除去 — Ver.2.9 TS#67: 事前コンパイル済み正規表現使用
+    _sanScript.lastIndex = 0; s = s.replace(_sanScript, '');
     _sanIframe.lastIndex = 0; s = s.replace(_sanIframe, '');
     _sanObject.lastIndex = 0; s = s.replace(_sanObject, '');
     _sanEmbed.lastIndex = 0; s = s.replace(_sanEmbed, '');
@@ -182,11 +187,6 @@ export function sanitizeHtml(html: string): string {
     _sanStyle.lastIndex = 0; s = s.replace(_sanStyle, '');
     // #115: <textarea>タグ除去（コンテンツインジェクション対策）
     _sanTextarea.lastIndex = 0; s = s.replace(_sanTextarea, '');
-    // Phase 2: Unicode escape sequences decode before sanitization (e.g. \u003c → <)
-    _sanUnicodeEscape.lastIndex = 0;
-    s = s.replace(_sanUnicodeEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
-    _sanHexEscape.lastIndex = 0;
-    s = s.replace(_sanHexEscape, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     // Phase 3: 属性値内の改行/タブを除去してからイベントハンドラを検出（再チェック含む）
     _sanNewlineInTag.lastIndex = 0; s = s.replace(_sanNewlineInTag, '$1 ');
     // #7: on\w+ 正規表現をケース非感度+属性値内特殊文字対応に強化
@@ -711,6 +711,7 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 return {
                     url: urlInput?.value ?? img?.src ?? '',
                     caption: cap?.textContent ?? '',
+                    alt: img?.alt ?? '',
                 };
             },
         };

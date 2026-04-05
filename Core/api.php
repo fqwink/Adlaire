@@ -108,7 +108,7 @@ function handleEdit(): void
 
 function handleApi(): void
 {
-    $endpoint = $_REQUEST['api'] ?? null;
+    $endpoint = $_GET['api'] ?? $_POST['api'] ?? null;
     if ($endpoint === null || !is_string($endpoint)) {
         return;
     }
@@ -521,8 +521,13 @@ function handleApiSitemap(FileStorage $storage): void
 
 function handleApiExport(FileStorage $storage): void
 {
-    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         apiError(405, 'Method not allowed');
+        return;
+    }
+
+    if (!csrf_verify()) {
+        apiError(403, 'CSRF verification failed');
         return;
     }
 
@@ -609,7 +614,7 @@ function handleApiImport(FileStorage $storage): void
     }
 
     $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
-    if ($contentType !== '' && !str_contains($contentType, 'application/json') && !str_contains($contentType, 'application/x-www-form-urlencoded')) {
+    if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
         apiError(400, 'Unsupported Content-Type');
         return;
     }
@@ -867,10 +872,6 @@ function handleApiUsers(FileStorage $storage, string $method): void
     }
 
     if ($method === 'DELETE') {
-        $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-        if (is_string($csrfHeader) && $csrfHeader !== '') {
-            $_POST['csrf'] = $csrfHeader;
-        }
         if (!csrf_verify()) {
             apiError(403, 'CSRF verification failed');
             return;
@@ -945,6 +946,10 @@ function apiSidebar(FileStorage $storage, string $method): void
             return;
         }
         $raw = $_POST['blocks'] ?? '';
+        if (!is_string($raw)) {
+            apiError(400, 'Invalid blocks parameter');
+            return;
+        }
         $blocks = json_decode($raw, true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
             apiError(400, 'Invalid blocks JSON');

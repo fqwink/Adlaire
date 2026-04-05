@@ -141,6 +141,7 @@ export const api = {
     // #44: listRevisions エラーログ追加
     async listRevisions(slug: string): Promise<Revision[]> {
         const res = await fetch(buildApiUrl('revisions', { slug }));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             console.warn('listRevisions failed:', res.status, slug);
             return [];
@@ -175,6 +176,7 @@ export const api = {
     // #44: search エラーログ追加
     async search(query: string): Promise<SearchResult[]> {
         const res = await fetch(buildApiUrl('search', { q: query }));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             console.warn('search failed:', res.status, query);
             return [];
@@ -251,6 +253,7 @@ export const api = {
     // #103: getRevisionDiff — 戻り値の型安全性チェック追加
     async getRevisionDiff(slug: string, t1: string, t2: string): Promise<{ added: unknown[]; removed: unknown[]; changed: unknown[] }> {
         const res = await fetch(buildApiUrl('revisiondiff', { slug, t1, t2 }));
+        updateCsrfFromResponse(res);
         if (!res.ok) {
             throw new Error(await extractApiError(res, res.status));
         }
