@@ -15,7 +15,8 @@
 
 import { autosize } from './autosize.ts';
 import { markdownToHtml } from './markdown.ts';
-import { Editor, renderBlocks, sanitizeHtml, escHtml, type BlockData } from './editor.ts';
+// R5-28: EditorData型のインポート漏れ修正
+import { Editor, renderBlocks, sanitizeHtml, escHtml, type BlockData, type EditorData } from './editor.ts';
 import { api, updateCsrfFromResponse } from './api.ts';
 import { i18n } from './i18n.ts';
 
@@ -148,9 +149,8 @@ function plainTextEdit(span: HTMLElement): void {
     const titleAttr = title ? `"${title.replace(/"/g, '&quot;')}" ` : '';
     const isMarkdown = span.dataset.format === 'markdown';
 
-    const content = isMarkdown
-        ? (span.textContent || '')
-        : (span.textContent || '');
+    // R5-26: markdown/非markdown分岐が同一ロジック — 意図を明確化
+    const content = span.textContent || '';
 
     const textarea = document.createElement('textarea');
     textarea.name = 'textarea';
@@ -514,6 +514,8 @@ function initFormatSwitcher(): void {
                     changing = false;
                     return;
                 }
+                // R5-27: switchFormat前にchangingフラグセット
+                changing = true;
                 switchFormat(slug, newFormat);
             });
         });

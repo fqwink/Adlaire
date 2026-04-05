@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 // --- Security: prevent re-execution ---
 $lockFile = __DIR__ . '/data/system/install.lock';
-if (file_exists($lockFile)) {
+if (file_exists($lockFile) || is_link($lockFile)) {
     echo '<!doctype html><html><head><meta charset="utf-8"><title>Adlaire Setup</title></head><body>';
     echo '<h1>Already Installed</h1><p>Adlaire is already installed. Delete <code>install.lock</code> to re-run setup.</p>';
     echo '<p><a href="?login">Login</a> | <a href="?admin">Admin</a></p>';

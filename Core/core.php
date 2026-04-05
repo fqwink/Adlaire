@@ -151,7 +151,8 @@ final class FileStorage
         foreach ($legacyConfigKeys as $key) {
             $legacyFile = $realBase . '/' . $key;
             if (file_exists($legacyFile) && !is_link($legacyFile)) {
-                $config[$key] = file_get_contents($legacyFile);
+                $raw = file_get_contents($legacyFile);
+                $config[$key] = ($raw !== false) ? $raw : '';
             }
         }
 
@@ -210,7 +211,7 @@ final class FileStorage
      */
     public function readConfig(): array
     {
-        if (!file_exists($this->configFile)) {
+        if (!file_exists($this->configFile) || is_link($this->configFile)) {
             return [];
         }
 

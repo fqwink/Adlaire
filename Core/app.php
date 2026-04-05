@@ -335,7 +335,7 @@ final class App
         }
         $config = $this->storage->readConfig();
         $passwordHash = $config['password'] ?? '';
-        if ($passwordHash === '') {
+        if (!is_string($passwordHash) || $passwordHash === '') {
             return;
         }
         $userData = [
@@ -581,13 +581,22 @@ final class App
     /** @return array{name: string, description: string, version: string, author: string} */
     public function loadThemeJson(string $themeName): array
     {
-        $path = dirname(__DIR__) . '/themes/' . basename($themeName) . '/theme.json';
-        if (is_file($path)) {
+        $safeTheme = basename($themeName);
+        if ($safeTheme === '' || $safeTheme === '.' || $safeTheme === '..') {
+            return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
+        }
+        $path = dirname(__DIR__) . '/themes/' . $safeTheme . '/theme.json';
+        if (is_file($path) && !is_link($path)) {
             $json = file_get_contents($path);
             if ($json !== false) {
                 $data = json_decode($json, true);
                 if (is_array($data)) {
-                    return $data;
+                    return [
+                        'name' => is_string($data['name'] ?? null) ? $data['name'] : $safeTheme,
+                        'description' => is_string($data['description'] ?? null) ? $data['description'] : '',
+                        'version' => is_string($data['version'] ?? null) ? $data['version'] : '',
+                        'author' => is_string($data['author'] ?? null) ? $data['author'] : '',
+                    ];
                 }
             }
         }

@@ -688,6 +688,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
     },
 
     image(data) {
+        // R5-22 fix: isDangerousUrlをimage()スコープに移動（save()からもアクセス可能に）
+        const isDangerousUrl = (url: string): boolean =>
+            /^\s*(javascript|data|vbscript)\s*:/i.test(url) || /^\s*\/\//.test(url.trim());
         return {
             render() {
                 const wrap = document.createElement('figure');
@@ -698,8 +701,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 const img = document.createElement('img');
                 const initialUrl = (data.url as string) || '';
                 // #18: javascript:, data:, vbscript: プロトコル + protocol-relative URL対策
-                const isDangerousUrl = (url: string): boolean =>
-                    /^\s*(javascript|data|vbscript)\s*:/i.test(url) || /^\s*\/\//.test(url.trim());
                 img.src = isDangerousUrl(initialUrl) ? '' : initialUrl;
                 // #60: alt属性にtextContentで安全に設定
                 img.alt = (data.alt as string) || '';
