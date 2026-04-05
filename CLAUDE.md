@@ -38,7 +38,7 @@
   - 仕様は `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` に従う。
 - `Adlaire_BaaS/` — Adlaire BaaS（プロジェクトルート）
   - Adlaire 統合リポジトリ内で管理。
-  - 仕様は `Adlaire_BaaS/rulebookdocs/BAAS_SPEC.md` に従う。
+  - 仕様は `Adlaire_BaaS/rulebookdocs/Adlaire_BaaS.md` に従う。
 
 ## ドキュメント命名規則
 

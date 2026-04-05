@@ -28,7 +28,7 @@ Adlaire Static CMS に対する標準 BaaS 連携基盤。
 
 ## 仕様
 
-詳細は `rulebookdocs/BAAS_SPEC.md` を参照。
+詳細は `rulebookdocs/Adlaire_BaaS.md` を参照。
 
 ## Copyright
 

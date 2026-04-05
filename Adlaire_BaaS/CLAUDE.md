@@ -22,7 +22,7 @@
 - `CLAUDE.md` — 開発規約（本ファイル）
 - `README.md` — プロジェクト説明
 - `rulebookdocs/` — ルールブックドキュメントフォルダ
-  - `rulebookdocs/BAAS_SPEC.md` — Adlaire BaaS 仕様書（仕様の正）
+  - `rulebookdocs/Adlaire_BaaS.md` — Adlaire BaaS 仕様書（仕様の正）
   - `rulebookdocs/REVISION_HISTORY.md` — 改訂履歴
   - ※ `rulebookdocs/` 内に README.md は作成しない
 - `docs/` — ドキュメントフォルダ
