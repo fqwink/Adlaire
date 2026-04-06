@@ -23,6 +23,7 @@
 | **Adlaire Deploy** | 未リリース | — | Phase 0 完了・初版リリース待ち |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
+| **Adlaire Portal System** | Ver.1.1 | 2026-02-27 | 稼働中 |
 
 ---
 
@@ -1106,6 +1107,32 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 ### IV-3. リリース履歴
 
 （リリース実績なし）
+
+---
+
+## Part V — Adlaire Portal System
+
+> 詳細な変更履歴: `Adlaire Portal System/docs/CHANGES.md`
+
+### 現行バージョン
+
+**Ver.1.1**（2026-02-27）
+
+### リリース履歴
+
+| バージョン | リリース日 | 概要 |
+|---|---|---|
+| **Ver.1.1** | 2026-02-27 | LocalStorage 自動保存・インポート/エクスポート・デフォルト復元機能を追加 |
+| **Ver.1.0** | 2026-02-14 | 初版リリース（portal.html / edit.html / data.js） |
+
+### リリース計画
+
+> 統合リポジトリ移行後のリリース計画は未策定。
+> 計画策定時は `Adlaire Portal System/rulebookdocs/PORTAL_SYSTEM_RULEBOOK.md` に仕様を先行策定すること。
+
+| バージョン | 種別 | 概要 | 状態 |
+|---|---|---|---|
+| **Ver.1.2-（未定）** | — | 計画未策定 | 計画未策定 |
 
 ---
 
