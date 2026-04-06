@@ -187,7 +187,7 @@ function handleApiGenerate(FileStorage $storage): void
             }
         }
         $pageDir = $distDir . '/' . $slug;
-        if (!is_dir($pageDir) && !mkdir($pageDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($pageDir)) {
+        if (!is_dir($pageDir) && !@mkdir($pageDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($pageDir)) {
             error_log('Adlaire: Failed to create page directory: ' . $pageDir);
             $failed++;
             $details[] = ['slug' => $slug, 'result' => 'failed'];

@@ -178,7 +178,7 @@ export function markdownToHtml(md: string): string {
         let tableHtml = '<table><thead><tr>';
         // #10: Table内セル内容のHTMLエスケープ（二重エスケープ防止のため&amp;は除外）
         const escCell = (s: string): string =>
-            s.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         headerCells.forEach((cell, ci) => {
             // Ver.2.9 TS#20: テーブルalignment配列超過防止 — ci範囲チェック
             const align = (ci < alignments.length && alignments[ci]) ? ` style="text-align:${alignments[ci]}"` : '';

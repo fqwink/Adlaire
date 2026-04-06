@@ -387,7 +387,7 @@ function apiPageSave(FileStorage $storage): void
 
     $blocks = null;
     if ($format === 'blocks' && isset($_POST['blocks'])) {
-        $blocks = json_decode($_POST['blocks'], true);
+        $blocks = json_decode($_POST['blocks'], true, 512);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
             apiError(400, 'Invalid blocks JSON');
             return;

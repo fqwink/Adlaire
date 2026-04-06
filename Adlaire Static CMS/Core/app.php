@@ -524,7 +524,7 @@ final class App
                 return $this->t('password_too_short');
             }
             if (strlen($newPass) > self::MAX_PASSWORD_LENGTH) {
-                return $this->t('password_too_short');
+                return $this->t('password_too_long');
             }
             if (in_array(strtolower($newPass), self::WEAK_PASSWORDS, true)) {
                 return $this->t('password_too_weak');
