@@ -1,5 +1,19 @@
 # CHANGES - 変更履歴
 
+## Ver.1.4-5 (2026-04-06)
+
+### Phase 5: 複数サーバー / エッジ
+
+* DEPLOY_PLATFORM_RULEBOOK.md に Phase 5 詳細仕様を追記（P5.1〜P5.11）
+* RELEASE_PLAN_RULEBOOK.md に Ver.1.4-5 計画を追加
+* `src/types.ts` — EdgeNode, ClusterConfig, NodeHealth, NodeStatus, EdgeDeployResult 型追加、DeployConfig に cluster 追加、DeployRecord に edge_results 追加
+* `src/cluster.ts` — クラスタ管理モジュール（ヘルスチェック 30 秒間隔・HMAC-SHA256 ノード間認証・設定同期・デプロイ伝播）
+* `src/deployer.ts` — origin デプロイ成功時に edge 伝播を実行、ClusterManager 連携
+* `src/proxy.ts` — 管理 API に /api/health・cluster/nodes・cluster/sync・cluster/sync-config・cluster/deploy エンドポイント追加
+* `src/main.ts` — ClusterManager 初期化・ヘルスチェック開始・シャットダウン停止
+* `src/config.ts` — デフォルト cluster: null、マイグレーション対応
+* `src/cli.ts` — nodes / sync コマンド追加
+
 ## Ver.1.3-4 (2026-04-06)
 
 ### Phase 4: 環境変数・ログ

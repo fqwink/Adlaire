@@ -4,6 +4,7 @@
  * serve コマンド: リバースプロキシ + 管理 API + Worker 自動起動
  */
 
+import { ClusterManager } from "./cluster.ts";
 import { loadConfig } from "./config.ts";
 import { Deployer } from "./deployer.ts";
 import { closePlatformKv, openPlatformKv } from "./kv.ts";
@@ -42,20 +43,34 @@ async function serve(args: string[]): Promise<void> {
   const manager = new ProcessManager(config);
   const deployer = new Deployer(manager);
 
+  // クラスタマネージャ初期化
+  let cluster: ClusterManager | null = null;
+  if (config.cluster) {
+    cluster = new ClusterManager(config);
+    deployer.setClusterManager(cluster);
+    console.log(`[deploy] Cluster mode: ${config.cluster.role} (${config.cluster.node_id})`);
+  }
+
   // リバースプロキシ起動
   const proxyServer = startProxy(manager, host, port);
 
   // 管理 API 起動
-  const adminServer = startAdminApi(manager, deployer, adminPort);
+  const adminServer = startAdminApi(manager, deployer, adminPort, cluster);
 
   // auto_start プロジェクトを起動
   await manager.startAutoStartProjects();
+
+  // クラスタヘルスチェック開始
+  if (cluster) {
+    cluster.startHealthChecks();
+  }
 
   console.log("[deploy] Platform ready");
 
   // シャットダウンハンドラ
   const shutdown = async () => {
     console.log("\n[deploy] Shutting down...");
+    if (cluster) cluster.stopHealthChecks();
     await manager.stopAll();
     proxyServer.shutdown();
     adminServer.shutdown();

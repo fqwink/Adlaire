@@ -5,9 +5,10 @@
  * デプロイ履歴はプラットフォーム KV に永続化
  */
 
+import type { ClusterManager } from "./cluster.ts";
 import { getPlatformKv } from "./kv.ts";
 import type { ProcessManager } from "./process_manager.ts";
-import type { DeployRecord, DeployState } from "./types.ts";
+import type { DeployRecord, DeployState, EdgeDeployResult } from "./types.ts";
 
 /** デプロイ履歴の最大保持件数 */
 const MAX_DEPLOY_HISTORY = 50;
@@ -24,6 +25,7 @@ async function nextDeployId(): Promise<string> {
 
 export class Deployer {
   private manager: ProcessManager;
+  private cluster: ClusterManager | null = null;
   /** プロジェクト別デプロイ状態 */
   private states: Map<string, DeployState> = new Map();
   /** プロジェクト別キューフラグ（デプロイ中に次のリクエストが来た場合） */
@@ -33,6 +35,11 @@ export class Deployer {
 
   constructor(manager: ProcessManager) {
     this.manager = manager;
+  }
+
+  /** クラスタマネージャを設定する */
+  setClusterManager(cluster: ClusterManager): void {
+    this.cluster = cluster;
   }
 
   /** デプロイ状態を取得する */
@@ -114,6 +121,16 @@ export class Deployer {
         await this.manager.start(projectId);
       }
 
+      // Edge 伝播（origin のみ）
+      let edgeResults: EdgeDeployResult[] | undefined;
+      if (this.cluster && this.cluster.getClusterConfig().role === "origin") {
+        console.log(`[deploy] Propagating deploy "${projectId}" to edge nodes...`);
+        edgeResults = await this.cluster.propagateDeploy(projectId, commit, branch);
+        for (const r of edgeResults) {
+          console.log(`[deploy]   ${r.node_id}: ${r.status}${r.error ? ` (${r.error})` : ""}`);
+        }
+      }
+
       this.states.set(projectId, "deployed");
       await this.saveRecord({
         id: deployId,
@@ -125,6 +142,7 @@ export class Deployer {
         started_at: startedAt,
         finished_at: new Date().toISOString(),
         error: null,
+        edge_results: edgeResults,
       });
 
       console.log(`[deploy] Deploy "${projectId}" succeeded`);

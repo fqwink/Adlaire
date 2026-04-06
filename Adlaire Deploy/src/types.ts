@@ -82,6 +82,8 @@ export interface DeployRecord {
   finished_at: string;
   /** エラーメッセージ（成功時 null） */
   error: string | null;
+  /** Edge デプロイ結果（origin のみ） */
+  edge_results?: EdgeDeployResult[];
 }
 
 /** プラットフォーム設定（deploy.json） */
@@ -96,8 +98,43 @@ export interface DeployConfig {
   projects_dir: string;
   /** データディレクトリパス（KV ファイル格納先） */
   data_dir: string;
+  /** クラスタ設定（null はスタンドアロンモード） */
+  cluster: ClusterConfig | null;
   /** プロジェクト定義マップ（キー = プロジェクト ID） */
   projects: Record<string, ProjectConfig>;
+}
+
+/** Edge ノード定義 */
+export interface EdgeNode {
+  node_id: string;
+  url: string;
+}
+
+/** クラスタ設定 */
+export interface ClusterConfig {
+  role: "origin" | "edge";
+  node_id: string;
+  secret: string;
+  edges: EdgeNode[];
+  origin_url?: string;
+}
+
+/** Edge ノード状態 */
+export type NodeHealth = "healthy" | "unhealthy" | "unknown";
+
+/** Edge ノードステータス */
+export interface NodeStatus {
+  node_id: string;
+  url: string;
+  health: NodeHealth;
+  last_check: string | null;
+}
+
+/** Edge デプロイ結果 */
+export interface EdgeDeployResult {
+  node_id: string;
+  status: "success" | "failed" | "unreachable";
+  error?: string;
 }
 
 /** KV 統計情報 */

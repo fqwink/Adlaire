@@ -10,7 +10,7 @@ import {
   removeProject,
   validateProjectId,
 } from "./config.ts";
-import type { ApiResponse, DeployRecord, KvStats, LogEntry, ProjectStatus } from "./types.ts";
+import type { ApiResponse, DeployRecord, KvStats, LogEntry, NodeStatus, ProjectStatus } from "./types.ts";
 
 /** 管理 API のベース URL を取得する */
 async function getAdminBaseUrl(): Promise<string> {
@@ -516,6 +516,65 @@ async function cmdKvReset(args: string[]): Promise<void> {
   }
 }
 
+/** nodes コマンド — クラスタノード一覧 */
+async function cmdNodes(): Promise<void> {
+  try {
+    const result = await callAdminApi<NodeStatus[]>("/api/cluster/nodes");
+
+    if (result.ok) {
+      if (result.data.length === 0) {
+        console.log("No edge nodes configured");
+        return;
+      }
+
+      console.log(
+        "NODE_ID".padEnd(20) +
+        "URL".padEnd(35) +
+        "HEALTH".padEnd(12) +
+        "LAST_CHECK",
+      );
+
+      for (const n of result.data) {
+        console.log(
+          n.node_id.padEnd(20) +
+          n.url.padEnd(35) +
+          n.health.padEnd(12) +
+          (n.last_check ?? "never"),
+        );
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** sync コマンド — 全 edge に設定を手動同期 */
+async function cmdSync(): Promise<void> {
+  try {
+    const result = await callAdminApi<{ node_id: string; ok: boolean; error?: string }[]>(
+      "/api/cluster/sync",
+      "POST",
+    );
+
+    if (result.ok) {
+      for (const r of result.data) {
+        const status = r.ok ? "OK" : `FAILED: ${r.error}`;
+        console.log(`${r.node_id}: ${status}`);
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -538,6 +597,8 @@ Commands:
   logs <id> [--tail n] Show worker logs (default 100 lines)
   kv-stats <id>        Show KV database info
   kv-reset <id>        Delete KV database (worker must be stopped)
+  nodes                Show cluster node statuses (origin only)
+  sync                 Sync config to all edge nodes (origin only)
   help                 Show this help message
 
 Options for 'serve':
@@ -599,6 +660,12 @@ switch (command) {
     break;
   case "kv-reset":
     await cmdKvReset(commandArgs);
+    break;
+  case "nodes":
+    await cmdNodes();
+    break;
+  case "sync":
+    await cmdSync();
     break;
   case "help":
   case "--help":

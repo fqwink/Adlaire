@@ -19,6 +19,7 @@ function createDefaultConfig(): DeployConfig {
     port: 8000,
     projects_dir: "./projects",
     data_dir: "./data",
+    cluster: null,
     projects: {},
   };
 }
@@ -34,6 +35,10 @@ export async function loadConfig(): Promise<DeployConfig> {
     // Phase 3 マイグレーション: data_dir がない場合はデフォルト値を設定
     if (!config.data_dir) {
       config.data_dir = "./data";
+    }
+    // Phase 5 マイグレーション: cluster がない場合は null を設定
+    if (config.cluster === undefined) {
+      config.cluster = null;
     }
     // Phase 4 マイグレーション: env と permissions がないプロジェクトにデフォルト値を設定
     for (const project of Object.values(config.projects)) {

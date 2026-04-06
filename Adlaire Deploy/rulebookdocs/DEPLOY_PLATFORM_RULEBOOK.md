@@ -1052,6 +1052,303 @@ adlaire-deploy env-set my-app DATABASE_URL=postgres://localhost/mydb API_KEY=sec
 
 ---
 
+# Phase 5 詳細仕様 — 複数サーバー / エッジ
+
+## P5.1 スコープ
+
+Phase 5 は以下の機能を提供する。
+
+1. **ノード管理** — origin / edge ノードの登録・ヘルスチェック・状態管理
+2. **設定同期** — origin → edge への `deploy.json` 設定の自動同期
+3. **デプロイ伝播** — origin でのデプロイ成功時に edge ノードへ自動伝播
+4. **リクエスト分散** — origin がエッジノードの存在を認識し、クライアントを誘導可能にする
+
+Phase 5 では以下を**対象外**とする。
+
+- ロードバランサー機能（外部 LB に委譲）
+- ノード間 KV レプリケーション
+- ノード自動スケーリング
+- 地理ベースルーティング
+
+## P5.2 アーキテクチャ
+
+### P5.2.1 ノードロール
+
+| ロール | 説明 |
+|--------|------|
+| `origin` | 設定の正。deploy.json の管理、Webhook 受信、CLI 操作のすべてを受け付ける |
+| `edge` | origin から設定・コードを受信し、Worker を実行する。読み取り専用 |
+
+### P5.2.2 トポロジ
+
+```
+                ┌──────────┐
+                │  origin  │
+                │ (master) │
+                └────┬─────┘
+              ┌──────┼──────┐
+              ▼      ▼      ▼
+         ┌────────┐┌────────┐┌────────┐
+         │ edge-1 ││ edge-2 ││ edge-3 │
+         └────────┘└────────┘└────────┘
+```
+
+- origin は 1 台のみ。
+- edge は 0 台以上（Phase 5 では最大 10 台）。
+- origin がダウンした場合、edge は最後に同期された設定で稼働を継続する。
+
+### P5.2.3 通信プロトコル
+
+ノード間通信は **HTTP(S) の管理 API** を使用する。
+origin の管理 API が edge からのリクエストを受け付け、edge の管理 API が origin からの指示を受け付ける。
+
+## P5.3 プラットフォーム設定の拡張
+
+### P5.3.1 `DeployConfig` への追加フィールド
+
+```json
+{
+  "version": 1,
+  "host": "0.0.0.0",
+  "port": 8000,
+  "projects_dir": "./projects",
+  "data_dir": "./data",
+  "cluster": {
+    "role": "origin",
+    "node_id": "origin-01",
+    "secret": "cluster-shared-secret",
+    "edges": [
+      {
+        "node_id": "edge-01",
+        "url": "http://192.168.1.10:8001"
+      },
+      {
+        "node_id": "edge-02",
+        "url": "http://192.168.1.11:8001"
+      }
+    ]
+  },
+  "projects": {}
+}
+```
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|------|:----:|------|
+| `cluster` | `ClusterConfig \| null` | — | クラスタ設定。`null` の場合はスタンドアロンモード（Phase 1〜4 の動作） |
+
+### P5.3.2 `ClusterConfig` 型
+
+```typescript
+interface ClusterConfig {
+  role: "origin" | "edge";
+  node_id: string;
+  secret: string;
+  edges: EdgeNode[];         // origin のみ使用
+  origin_url?: string;       // edge のみ使用
+}
+
+interface EdgeNode {
+  node_id: string;
+  url: string;               // edge の管理 API URL
+}
+```
+
+| フィールド | ロール | 説明 |
+|-----------|:------:|------|
+| `role` | 両方 | ノードロール |
+| `node_id` | 両方 | ノード識別子（クラスタ内で一意） |
+| `secret` | 両方 | ノード間認証用共有シークレット |
+| `edges` | origin | edge ノード一覧 |
+| `origin_url` | edge | origin の管理 API URL |
+
+### P5.3.3 ノード ID 規則
+
+- プロジェクト ID と同一規則（P1.3.3 準拠）。
+
+## P5.4 ノード間認証
+
+### P5.4.1 HMAC 認証
+
+ノード間通信はリクエストごとに HMAC-SHA256 で署名検証する。
+
+| ヘッダー | 値 |
+|---------|-----|
+| `X-Deploy-Node-Id` | 送信元ノード ID |
+| `X-Deploy-Timestamp` | UNIX タイムスタンプ（秒） |
+| `X-Deploy-Signature` | `sha256=` + HMAC-SHA256(`{node_id}:{timestamp}:{path}:{body}`, secret) |
+
+### P5.4.2 タイムスタンプ検証
+
+- リクエストのタイムスタンプが ±60 秒以内であることを検証する。
+- 範囲外の場合は `403` を返す。
+
+## P5.5 ヘルスチェック
+
+### P5.5.1 origin → edge ヘルスチェック
+
+origin は登録された edge ノードに対して定期的にヘルスチェックを行う。
+
+- **間隔**: 30 秒
+- **エンドポイント**: `GET /api/health`（edge の管理 API）
+- **タイムアウト**: 5 秒
+
+### P5.5.2 ノード状態
+
+| 状態 | 説明 |
+|------|------|
+| `healthy` | 直近のヘルスチェック成功 |
+| `unhealthy` | 直近 3 回連続でヘルスチェック失敗 |
+| `unknown` | ヘルスチェック未実行（初期状態） |
+
+### P5.5.3 ヘルスエンドポイント
+
+管理 API に以下を追加する。
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `GET` | `/api/health` | ノード自身のヘルス情報を返す |
+
+レスポンス:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "node_id": "edge-01",
+    "role": "origin",
+    "uptime_seconds": 3600,
+    "projects_count": 3,
+    "running_workers": 2
+  }
+}
+```
+
+## P5.6 設定同期
+
+### P5.6.1 同期タイミング
+
+origin は以下のタイミングで edge に設定を同期する。
+
+- プロジェクトの追加・削除時
+- 環境変数の変更時
+- `deploy.json` の手動変更後
+
+### P5.6.2 同期エンドポイント
+
+origin → edge への設定プッシュ:
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `PUT` | `/api/cluster/sync-config` | 設定全体を同期する |
+
+リクエストボディ: `deploy.json` の `projects` セクション全体（cluster 設定を除く）。
+
+edge は受信した設定で自身の `deploy.json` を更新し、Worker 状態を調整する。
+
+### P5.6.3 同期の冪等性
+
+- 同一設定の再送信は副作用を持たない。
+- edge は受信した設定が既存と同一の場合、Worker の再起動は行わない。
+
+## P5.7 デプロイ伝播
+
+### P5.7.1 伝播フロー
+
+```
+Webhook → origin デプロイ成功 → 各 edge に伝播指示
+                                   ├→ edge-01: git pull + restart
+                                   └→ edge-02: git pull + restart
+```
+
+### P5.7.2 伝播エンドポイント
+
+origin → edge:
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `POST` | `/api/cluster/deploy/{id}` | プロジェクトのデプロイを実行する |
+
+リクエストボディ:
+
+```json
+{
+  "commit": "abc1234",
+  "branch": "main"
+}
+```
+
+edge は受信後、自身の deployer で git pull + Worker 再起動を実行する。
+
+### P5.7.3 伝播の非同期性
+
+- origin は各 edge に並列でデプロイ指示を送信する。
+- 各 edge の結果は非同期で収集する。
+- 一部の edge が失敗しても、他の edge へのデプロイは継続する。
+
+### P5.7.4 伝播結果の記録
+
+origin のデプロイレコードに edge 伝播結果を含める。
+
+```typescript
+interface DeployRecord {
+  // ... (既存フィールド)
+  edge_results?: EdgeDeployResult[];
+}
+
+interface EdgeDeployResult {
+  node_id: string;
+  status: "success" | "failed" | "unreachable";
+  error?: string;
+}
+```
+
+## P5.8 管理 API の拡張
+
+### P5.8.1 クラスタエンドポイント（origin 用）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `GET` | `/api/cluster/nodes` | ノード一覧 + ヘルス状態 |
+| `POST` | `/api/cluster/sync` | 全 edge に設定を手動同期 |
+
+### P5.8.2 クラスタエンドポイント（edge 受信用）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `PUT` | `/api/cluster/sync-config` | 設定同期受信 |
+| `POST` | `/api/cluster/deploy/{id}` | デプロイ伝播受信 |
+
+## P5.9 CLI の拡張
+
+### P5.9.1 追加コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `nodes` | クラスタノード一覧 + ヘルス状態を表示する |
+| `sync` | 全 edge に設定を手動同期する |
+
+## P5.10 追加ファイル
+
+```
+Adlaire Deploy/
+├── src/
+│   ├── ... (既存ファイル)
+│   └── cluster.ts          # クラスタ管理（ヘルスチェック・同期・伝播）
+```
+
+## P5.11 制約事項
+
+- origin は 1 台のみ。マルチマスターは対象外。
+- edge ノードは最大 10 台。
+- ノード間通信は HTTP(S) のみ。専用プロトコル（WebSocket 等）は対象外。
+- KV データはノード間で共有しない。各ノードのプロジェクト KV は独立。
+- edge がダウンした場合、origin は unhealthy とマークするのみ。自動回復は行わない。
+- SSH URL の Git リポジトリは Phase 5 でも対象外（HTTPS のみ）。
+- edge ノードには git がインストールされている前提。
+- TLS はノード間通信に必須ではない（プライベートネットワーク前提）。本番環境では TLS の使用を推奨する。
+
+---
+
 # 9. 最終規則
 
 ## 9.1 上位規範性

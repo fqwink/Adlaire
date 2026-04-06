@@ -4,13 +4,15 @@
  * Host ヘッダーベースのリクエストルーティング
  */
 
+import type { ClusterManager } from "./cluster.ts";
+import { handleSyncConfig, verifyClusterAuth } from "./cluster.ts";
 import { loadConfig, saveConfig } from "./config.ts";
 import type { Deployer } from "./deployer.ts";
 import { deleteProjectKv, getKvStats } from "./kv.ts";
 import { getLogTail } from "./logger.ts";
 import { validateEnv } from "./process_manager.ts";
 import type { ProcessManager } from "./process_manager.ts";
-import type { ProjectStatus } from "./types.ts";
+import type { ProjectConfig, ProjectStatus } from "./types.ts";
 import { handleWebhook } from "./webhook.ts";
 
 /** エラーレスポンスを生成する */
@@ -116,6 +118,7 @@ export function startAdminApi(
   manager: ProcessManager,
   deployer: Deployer,
   port: number,
+  cluster?: ClusterManager | null,
 ): Deno.HttpServer {
   const ID_PATTERN = "([a-z0-9][a-z0-9-]*[a-z0-9])";
 
@@ -321,6 +324,77 @@ export function startAdminApi(
         const tailParam = url.searchParams.get("tail");
         const tail = tailParam ? parseInt(tailParam, 10) : 100;
         return json({ ok: true, data: getLogTail(id, isNaN(tail) ? 100 : tail) });
+      }
+
+      // GET /api/health — ノードヘルス
+      if (method === "GET" && path === "/api/health") {
+        const config = manager.getConfig();
+        const statuses = manager.listStatus();
+        const running = statuses.filter((s) => s.state === "running").length;
+        const startTime = performance.now();
+        return json({
+          ok: true,
+          data: {
+            node_id: config.cluster?.node_id ?? "standalone",
+            role: config.cluster?.role ?? "standalone",
+            uptime_seconds: Math.floor(startTime / 1000),
+            projects_count: statuses.length,
+            running_workers: running,
+          },
+        });
+      }
+
+      // GET /api/cluster/nodes — ノード一覧（origin のみ）
+      if (method === "GET" && path === "/api/cluster/nodes") {
+        if (!cluster) {
+          return json({ ok: false, error: "not_configured", message: "Cluster not configured" }, 400);
+        }
+        return json({ ok: true, data: cluster.getNodeStatuses() });
+      }
+
+      // POST /api/cluster/sync — 全 edge に設定を手動同期（origin のみ）
+      if (method === "POST" && path === "/api/cluster/sync") {
+        if (!cluster) {
+          return json({ ok: false, error: "not_configured", message: "Cluster not configured" }, 400);
+        }
+        const results = await cluster.syncConfigToEdges();
+        return json({ ok: true, data: results });
+      }
+
+      // PUT /api/cluster/sync-config — 設定同期受信（edge のみ）
+      if (method === "PUT" && path === "/api/cluster/sync-config") {
+        const config = manager.getConfig();
+        if (!config.cluster || config.cluster.role !== "edge") {
+          return json({ ok: false, error: "forbidden", message: "Not an edge node" }, 403);
+        }
+        const body = await request.text();
+        const valid = await verifyClusterAuth(request, path, body, config.cluster.secret);
+        if (!valid) {
+          return json({ ok: false, error: "forbidden", message: "Invalid cluster auth" }, 403);
+        }
+        const projects = JSON.parse(body) as Record<string, ProjectConfig>;
+        await handleSyncConfig(projects);
+        const newConfig = await loadConfig();
+        manager.updateConfig(newConfig);
+        return json({ ok: true, data: { message: "Config synced" } });
+      }
+
+      // POST /api/cluster/deploy/{id} — デプロイ伝播受信（edge のみ）
+      const clusterDeployMatch = path.match(new RegExp(`^/api/cluster/deploy/${ID_PATTERN}$`));
+      if (method === "POST" && clusterDeployMatch) {
+        const id = clusterDeployMatch[1];
+        const config = manager.getConfig();
+        if (!config.cluster || config.cluster.role !== "edge") {
+          return json({ ok: false, error: "forbidden", message: "Not an edge node" }, 403);
+        }
+        const body = await request.text();
+        const valid = await verifyClusterAuth(request, path, body, config.cluster.secret);
+        if (!valid) {
+          return json({ ok: false, error: "forbidden", message: "Invalid cluster auth" }, 403);
+        }
+        const { commit, branch } = JSON.parse(body) as { commit: string; branch: string };
+        const result = await deployer.requestDeploy(id, commit, branch, "cluster-sync");
+        return json({ ok: true, data: { message: result === "queued" ? "Deploy queued" : "Deploy started" } }, 202);
       }
 
       return json({ ok: false, error: "not_found", message: "Unknown endpoint" }, 404);
