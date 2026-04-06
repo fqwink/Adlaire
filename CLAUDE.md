@@ -224,6 +224,8 @@ Deno / TypeScript。
 
 - `CLAUDE.md` — 統合リポジトリ開発規約（本ファイル）
 - `README.md` — 統合リポジトリ説明
+- `rulebookdocs/` — 統合リポジトリルールブックフォルダ
+  - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — 全プロジェクト横断リリース計画
 - `Licenses/` — 共通ライセンスフォルダ
   - `Licenses/LICENSE_Ver.2.0` — Adlaire License Ver.2.0
 - `Distribution/` — 配布専用ディレクトリ（リリース ZIP 等の配布物を集約）
