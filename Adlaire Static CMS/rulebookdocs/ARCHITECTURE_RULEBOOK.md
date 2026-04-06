@@ -261,7 +261,7 @@ Adlaire/
 │   ├── ARCHITECTURE_RULEBOOK.md     # 本ファイル
 │   ├── API_RULEBOOK.md        #   API・データ
 │   ├── GENERATOR_RULEBOOK.md  #   静的サイト生成
-│   ├── RELEASE_PLAN_RULEBOOK.md     # リリース計画
+│   │   # RELEASE_PLAN_RULEBOOK.md は統合リポジトリルートの rulebookdocs/ で管理
 │   ├── LICENSE_SYSTEM_RULEBOOK.md   # ライセンスシステム
 │   ├── LICENSE_SERVER_RULEBOOK.md   # ライセンスサーバー
 │   └── REVISION_HISTORY.md   #   改訂履歴
