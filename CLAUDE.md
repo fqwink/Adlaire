@@ -24,6 +24,7 @@
 | `Adlaire BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire BaaS/rulebookdocs/` |
 | `Adlaire Deploy/` | **Adlaire Deploy** | Phase 0 完了 | `Adlaire Deploy/rulebookdocs/` |
 | `Adlaire Portal System/` | **Adlaire Portal System** | Ver.1.1 | `Adlaire Portal System/rulebookdocs/` |
+| `Adlaire Style/` | **Adlaire Style** | Phase 0 完了 | `Adlaire Style/rulebookdocs/` |
 
 ### Adlaire Static CMS (`Adlaire Static CMS/`)
 
@@ -64,6 +65,14 @@ HTML5 + JavaScript（バニラ）/ LocalStorage / サーバーレス。
 
 - 仕様の正: `Adlaire Portal System/rulebookdocs/PORTAL_SYSTEM_RULEBOOK.md`
 - 開発規約: `Adlaire Portal System/CLAUDE.md`
+
+### Adlaire Style (`Adlaire Style/`)
+
+Adlaire Group の全プロジェクトに適用する純粋 CSS スタイルフレームワーク。
+純粋 CSS（CSS カスタムプロパティ / CSS Nesting）/ Deno（ビルドスクリプト）。
+
+- 仕様の正: `Adlaire Style/rulebookdocs/STYLE_RULEBOOK.md`
+- 開発規約: `Adlaire Style/CLAUDE.md`
 
 ---
 
