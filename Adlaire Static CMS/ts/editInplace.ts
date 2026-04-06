@@ -166,12 +166,10 @@ function plainTextEdit(span: HTMLElement): void {
         saved = true;
         // #90: textarea参照が無効でないか確認
         if (!textarea.isConnected) { changing = false; return; }
-        if (isMarkdown) {
-            fieldSave(id, textarea.value);
-        } else {
-            // Settings fields (title, description, etc.)
-            fieldSave(id, nl2br(textarea.value));
-        }
+        const savePromise = isMarkdown
+            ? fieldSave(id, textarea.value)
+            : fieldSave(id, nl2br(textarea.value));
+        savePromise.finally(() => { changing = false; });
     }, { once: true });
 
     span.textContent = '';

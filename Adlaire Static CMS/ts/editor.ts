@@ -341,19 +341,16 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     }
                 });
                 // Ver.2.9 #50: paste時にサニタイズ適用（外部HTMLのXSS防止）
+                // TS#15: textContentで挿入しXSS再混入を防止
                 el.addEventListener('paste', (e) => {
-                    const html = e.clipboardData?.getData('text/html');
-                    if (html) {
-                        e.preventDefault();
-                        const cleaned = sanitizeHtml(html);
-                        const sel = window.getSelection();
-                        if (sel && sel.rangeCount) {
-                            const range = sel.getRangeAt(0);
-                            range.deleteContents();
-                            const frag = range.createContextualFragment(cleaned);
-                            range.insertNode(frag);
-                            range.collapse(false);
-                        }
+                    e.preventDefault();
+                    const text = e.clipboardData?.getData('text/plain') || '';
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount) {
+                        const range = sel.getRangeAt(0);
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(text));
+                        range.collapse(false);
                     }
                 });
                 attachBackspaceHandler(el);
@@ -1162,6 +1159,13 @@ export class Editor {
         if (this.containerObserver) {
             this.containerObserver.disconnect();
             this.containerObserver = null;
+        }
+
+        // TS#7: focusinリスナーのクリーンアップ
+        const focusinHandler = (this.container as any).__focusinHandler;
+        if (focusinHandler) {
+            this.container.removeEventListener('focusin', focusinHandler);
+            delete (this.container as any).__focusinHandler;
         }
 
         // Ver.2.9 #6: インスタンス固有のInlineToolbarを破棄
