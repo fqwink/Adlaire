@@ -206,9 +206,11 @@ final class App
                 session_regenerate_id(true);
                 session_destroy();
             }
-            if (session_status() !== PHP_SESSION_ACTIVE) {
-                session_start();
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                // session_destroy() failed; force cleanup
+                session_destroy();
             }
+            session_start();
             return;
         }
         if (isset($_SESSION['l'])) {

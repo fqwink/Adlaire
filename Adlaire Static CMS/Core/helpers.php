@@ -88,7 +88,10 @@ function login_rate_check(): bool
         if (is_file($rateFile)) {
             $fp = fopen($rateFile, 'r+');
             if ($fp !== false) {
-                flock($fp, LOCK_EX);
+                if (!flock($fp, LOCK_EX)) {
+                    fclose($fp);
+                    return false;
+                }
                 ftruncate($fp, 0);
                 rewind($fp);
                 $encoded = json_encode($attempts);
@@ -105,7 +108,7 @@ function login_rate_check(): bool
 
     $attempts[] = $now;
     if (!is_file($rateFile)) {
-        if (file_put_contents($rateFile, '[]', LOCK_EX) === false) {
+        if (@file_put_contents($rateFile, '[]', LOCK_EX) === false) {
             error_log('Adlaire: Failed to create rate limit file: ' . $rateFile);
             return true;
         }
@@ -113,7 +116,10 @@ function login_rate_check(): bool
     }
     $fp = fopen($rateFile, 'r+');
     if ($fp !== false) {
-        flock($fp, LOCK_EX);
+        if (!flock($fp, LOCK_EX)) {
+            fclose($fp);
+            return true;
+        }
         ftruncate($fp, 0);
         rewind($fp);
         $encoded = json_encode($attempts);

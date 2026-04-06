@@ -62,6 +62,8 @@ export function getEditorFromElement(el: HTMLElement): Editor | null {
 
 // R3-19: attachBackspaceHandler blockがnullの場合の安全チェック + R3-20: idx === 0のときの処理漏れ
 function attachBackspaceHandler(el: HTMLElement): void {
+    if (el.dataset.bsHandler) return;
+    el.dataset.bsHandler = '1';
     el.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && (el.textContent?.trim() === '')) {
             e.preventDefault();

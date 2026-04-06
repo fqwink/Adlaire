@@ -269,9 +269,11 @@ function initBlockEditor(): void {
         if (!_lastValidCsrfToken) { _lastValidCsrfToken = csrfToken; }
 
         // Ver.2.9 TS#29: フォーカス管理 — エディタフォーカス時にactiveEditor更新
-        wrapper.addEventListener('focusin', () => {
+        const focusinHandler = (): void => {
             activeEditor = editorInstance;
-        });
+        };
+        wrapper.addEventListener('focusin', focusinHandler);
+        (wrapper as any).__focusinHandler = focusinHandler;
 
         // Auto-save on focusout from the editor
         let saveTimer: ReturnType<typeof setTimeout> | null = null;

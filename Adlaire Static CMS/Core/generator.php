@@ -57,7 +57,8 @@ function handleApiGenerate(FileStorage $storage): void
                 if (basename($path) === '.build_state.json') {
                     continue;
                 }
-                if (is_link($path)) {
+                $lstat = @lstat($path);
+                if ($lstat !== false && ($lstat['mode'] & 0120000) === 0120000) {
                     @unlink($path);
                 } elseif ($file->isDir()) {
                     $realPath = $file->getRealPath();

@@ -258,7 +258,11 @@ final class LicenseManager
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
         // Atomic write
-        $tmpFile = $path . '.tmp.' . bin2hex(random_bytes(4));
+        $tmpFile = tempnam(dirname($path), '.tmp.');
+        if ($tmpFile === false) {
+            self::$cache = null;
+            throw new \RuntimeException('Failed to create temporary file for license write.');
+        }
         if (file_put_contents($tmpFile, $json, LOCK_EX) === false) {
             if (file_exists($tmpFile)) {
                 unlink($tmpFile);
