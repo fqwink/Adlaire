@@ -1,6 +1,6 @@
 # Adlaire Style — スタイルフレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.1.0**
+> **文書バージョン: Ver.1.1**
 > **最終更新: 2026-04-06**
 
 ---
@@ -52,15 +52,20 @@ Adlaire Style/
 │   ├── tokens.css              # デザイントークン（CSS カスタムプロパティ）
 │   ├── reset.css               # リセット・ベース CSS
 │   ├── typography.css          # タイポグラフィ
-│   ├── layout.css              # レイアウトユーティリティ
+│   ├── layout.css              # レイアウト・サイドバー・レスポンシブ
 │   ├── components/
-│   │   ├── button.css
-│   │   ├── form.css
-│   │   ├── card.css
-│   │   ├── badge.css
-│   │   ├── table.css
-│   │   ├── alert.css
-│   │   └── modal.css
+│   │   ├── header.css          # ページヘッダー
+│   │   ├── nav.css             # ナビゲーション
+│   │   ├── breadcrumb.css      # パンくずリスト
+│   │   ├── button.css          # ボタン
+│   │   ├── form.css            # フォーム要素
+│   │   ├── card.css            # カード
+│   │   ├── badge.css           # バッジ・ステータス
+│   │   ├── table.css           # テーブル
+│   │   ├── alert.css           # アラート
+│   │   ├── modal.css           # モーダル・差分表示
+│   │   ├── log-box.css         # ログビューア
+│   │   └── info-row.css        # 情報行（ラベル + 値）
 │   └── utilities.css           # ユーティリティクラス
 ├── dist/
 │   ├── adlaire-style.css       # 結合済みソース
@@ -81,35 +86,53 @@ Adlaire Style/
 
 ### 3.2.1 ブランドカラー
 
-| トークン名 | 説明 |
-|-----------|------|
-| `--color-primary` | プライマリカラー（アクションボタン等） |
-| `--color-primary-hover` | プライマリホバー状態 |
-| `--color-primary-active` | プライマリ押下状態 |
-| `--color-secondary` | セカンダリカラー |
-| `--color-secondary-hover` | セカンダリホバー状態 |
+現行プロジェクト全体で統一されている Adlaire Group ブランドカラーを使用する。
+
+| トークン名 | ライト値 | 説明 |
+|-----------|---------|------|
+| `--color-primary` | `#00a968` | Adlaire エメラルドグリーン（アクション・アクティブ状態） |
+| `--color-primary-hover` | `#008754` | プライマリホバー状態 |
+| `--color-primary-active` | `#006b43` | プライマリ押下状態 |
+| `--color-primary-light` | `#e0f7ed` | プライマリ薄色（バッジ背景・ハイライト等） |
+| `--color-accent` | `#11aabb` | アクセントシアン（トグル・補助アクション） |
 
 ### 3.2.2 セマンティックカラー
 
-| トークン名 | 説明 |
-|-----------|------|
-| `--color-success` | 成功状態（緑系） |
-| `--color-warning` | 警告状態（黄系） |
-| `--color-danger` | 危険・エラー状態（赤系） |
-| `--color-info` | 情報状態（青系） |
+ステータスバッジ・アラート等で使用するセマンティックカラーを定義する。
+各カラーに対して `bg`（背景）・`text`（テキスト）・`border`（ボーダー）の 3 トークンを持つ。
+
+| トークン名 | ライト値 | 説明 |
+|-----------|---------|------|
+| `--color-success-bg` | `#dcfce7` | 成功背景色 |
+| `--color-success-text` | `#166534` | 成功テキスト色 |
+| `--color-success-border` | `#bbf7d0` | 成功ボーダー色 |
+| `--color-warning-bg` | `#fef3c7` | 警告背景色 |
+| `--color-warning-text` | `#92400e` | 警告テキスト色 |
+| `--color-warning-border` | `#fde68a` | 警告ボーダー色 |
+| `--color-danger-bg` | `#fee2e2` | 危険背景色 |
+| `--color-danger-text` | `#991b1b` | 危険テキスト色 |
+| `--color-danger-border` | `#fecaca` | 危険ボーダー色 |
+| `--color-info-bg` | `#dbeafe` | 情報背景色 |
+| `--color-info-text` | `#1e40af` | 情報テキスト色 |
+| `--color-info-border` | `#bfdbfe` | 情報ボーダー色 |
+| `--color-neutral-bg` | `#f3f4f6` | ニュートラル背景色（停止・不明状態等） |
+| `--color-neutral-text` | `#4b5563` | ニュートラルテキスト色 |
+| `--color-neutral-border` | `#e5e7eb` | ニュートラルボーダー色 |
 
 ### 3.2.3 ニュートラルカラー
 
-| トークン名 | 説明 |
-|-----------|------|
-| `--color-bg` | ページ背景色 |
-| `--color-bg-surface` | カード・パネル等のサーフェス背景色 |
-| `--color-bg-muted` | 薄い背景色（コードブロック・非アクティブ等） |
-| `--color-border` | 標準ボーダー色 |
-| `--color-border-strong` | 強調ボーダー色 |
-| `--color-text` | 基本テキスト色 |
-| `--color-text-muted` | 補助テキスト色（説明文・プレースホルダー等） |
-| `--color-text-inverse` | 逆色テキスト（ダーク背景上の白テキスト等） |
+| トークン名 | ライト値 | ダーク値 | 説明 |
+|-----------|---------|---------|------|
+| `--color-bg` | `#f4f8fa` | `#1a1a2e` | ページ背景色 |
+| `--color-bg-surface` | `#ffffff` | `#2a2a3e` | カード・パネル等のサーフェス背景色 |
+| `--color-bg-muted` | `#f1f5f9` | `#0d1117` | 薄い背景色（コードブロック・非アクティブ等） |
+| `--color-bg-dark` | `#1f2b33` | `#0d1117` | ダークパネル（コードエディタ・ターミナル等） |
+| `--color-border` | `#e2e8f0` | `#444` | 標準ボーダー色 |
+| `--color-border-strong` | `#94a3b8` | `#555` | 強調ボーダー色 |
+| `--color-text` | `#444` | `#dfe6e9` | 基本テキスト色 |
+| `--color-text-sub` | `#666` | `#b2bec3` | サブテキスト色 |
+| `--color-text-muted` | `#888` | `#aaa` | 補助テキスト色（説明文・プレースホルダー等） |
+| `--color-text-inverse` | `#ffffff` | `#1a1a2e` | 逆色テキスト（カラー背景上のテキスト） |
 
 ## 3.3 スペーシングトークン
 
@@ -130,10 +153,10 @@ Adlaire Style/
 
 ## 3.4 タイポグラフィトークン
 
-| トークン名 | 説明 |
-|-----------|------|
-| `--font-family-base` | 基本フォントファミリー（日本語 + ラテン文字） |
-| `--font-family-mono` | 等幅フォント（コード表示用） |
+| トークン名 | 値 | 説明 |
+|-----------|-----|------|
+| `--font-family-base` | `"Verdana", "Hiragino Kaku Gothic ProN", "Meiryo", system-ui, sans-serif` | 基本フォントファミリー（日本語 + ラテン文字） |
+| `--font-family-mono` | `"Courier New", "Consolas", monospace` | 等幅フォント（コード・ログ表示用） |
 | `--font-size-xs` | 12px |
 | `--font-size-sm` | 14px |
 | `--font-size-base` | 16px（基本サイズ） |
@@ -216,8 +239,9 @@ Adlaire Style/
 
 ## 5.3 日本語対応
 
-- `--font-family-base` に日本語フォントスタック（`"Hiragino Kaku Gothic ProN"`, `"Noto Sans JP"`, `sans-serif` 等）を含める。
+- `--font-family-base` に日本語フォントスタック（`"Hiragino Kaku Gothic ProN"`, `"Meiryo"` 等）を含める（§3.4 参照）。
 - `word-break: break-all` を使用せず、`overflow-wrap: break-word` を適用する。
+- `line-height` は `--line-height-base`（1.5）を基本とし、日本語の可読性を確保する。
 
 ---
 
@@ -252,7 +276,8 @@ Adlaire Style/
 |--------|------|
 | `.grid` | `display: grid` |
 | `.grid-cols-2`〜`.grid-cols-4` | 等幅 2〜4 カラム |
-| `.grid-cols-auto` | `grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))` |
+| `.grid-cols-auto` | `grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))` — 汎用カード配置 |
+| `.grid-cols-card` | `grid-template-columns: repeat(auto-fill, minmax(190px, 1fr))` — Portal System カード配置 |
 
 ## 6.4 スペーシングユーティリティ
 
@@ -267,13 +292,78 @@ Adlaire Style/
 
 N = `1`〜`8`（スペーシングトークンに対応）
 
+## 6.5 サイドバーレイアウト（`src/layout.css`）
+
+Portal System および管理画面で使用する 2 カラムレイアウト（サイドバー + メインコンテンツ）。
+
+| クラス | 説明 |
+|--------|------|
+| `.layout` | サイドバー + メインの 2 カラム全画面レイアウト（`display: flex; height: 100vh`） |
+| `.sidebar` | 左サイドバー（`width: var(--sidebar-w)`、固定幅） |
+| `.main` | メインコンテンツエリア（`flex: 1; overflow-y: auto`） |
+
+追加トークン:
+
+| トークン名 | 値 | 説明 |
+|-----------|-----|------|
+| `--sidebar-w` | `260px` | サイドバー幅 |
+
+## 6.6 レスポンシブ対応
+
+Adlaire Group プロジェクト共通のブレークポイントは **768px** を使用する。
+
+| ブレークポイント | 対象 | 説明 |
+|---------------|------|------|
+| `max-width: 768px` | スマートフォン | モバイル向けスタイルを適用 |
+| `min-width: 769px` | タブレット・デスクトップ | デスクトップ向けスタイルを適用 |
+
+モバイル時の変化（フレームワークが自動適用）:
+- `.layout`: `flex-direction: column`、サイドバーを水平配置に変更
+- `.grid-cols-card`: `minmax(140px, 1fr)` に縮小
+- `.container`: 水平パディングを `--space-4` に縮小
+- `.sidebar`: 固定幅を解除し横スクロールナビに変更
+
 ---
 
 # 7. コンポーネント
 
-## 7.1 Button（`src/components/button.css`）
+## 7.1 Header（`src/components/header.css`）
 
-### 7.1.1 ベースクラス
+Adlaire Deploy ダッシュボード・Static CMS 管理画面で共通使用するページヘッダー。
+
+| クラス | 説明 |
+|--------|------|
+| `.header` | ページヘッダー全体（`display: flex; align-items: center; justify-content: space-between`） |
+| `.header-title` | ヘッダータイトル・ロゴエリア |
+| `.header-nav` | ヘッダー内ナビゲーションリンクエリア |
+| `.header-actions` | ヘッダー右端アクションエリア（ログアウト等） |
+
+## 7.2 Nav（`src/components/nav.css`）
+
+Portal System で使用するサイドバーナビゲーション。
+
+| クラス | 説明 |
+|--------|------|
+| `.nav-menu` | ナビゲーションリスト（`list-style: none`） |
+| `.nav-item` | ナビゲーション項目 |
+| `.nav-link` | ナビゲーションリンク（`display: flex; align-items: center`） |
+| `.nav-link.is-active` | アクティブ状態（`--color-primary` 背景・`--color-primary-light` テキスト） |
+| `.nav-count` | 項目数バッジ（右端に配置） |
+
+## 7.3 Breadcrumb（`src/components/breadcrumb.css`）
+
+Adlaire Deploy ダッシュボードで使用するパンくずリスト。
+
+| クラス | 説明 |
+|--------|------|
+| `.breadcrumb` | パンくずリスト全体（`display: flex; align-items: center; gap: var(--space-2)`） |
+| `.breadcrumb-item` | パンくず項目 |
+| `.breadcrumb-item:not(:last-child)::after` | 区切り文字（`/`） |
+| `.breadcrumb-item.is-current` | 現在ページ（`--color-text-muted`、リンクなし） |
+
+## 7.4 Button（`src/components/button.css`）
+
+### 7.4.1 ベースクラス
 
 `.btn` をベースクラスとし、修飾クラスと組み合わせて使用する。
 
@@ -281,37 +371,43 @@ N = `1`〜`8`（スペーシングトークンに対応）
 <button class="btn btn-primary">ボタン</button>
 ```
 
-### 7.1.2 バリアント
+### 7.4.2 カラーバリアント
 
 | クラス | 説明 |
 |--------|------|
-| `.btn-primary` | プライマリアクション |
+| `.btn-primary` | プライマリアクション（`--color-primary` 背景） |
 | `.btn-secondary` | セカンダリアクション |
-| `.btn-danger` | 削除・危険操作 |
-| `.btn-ghost` | ゴーストボタン（背景透過・ボーダーのみ） |
-| `.btn-link` | リンク風ボタン |
+| `.btn-danger` | 削除・危険操作（`--color-danger-bg` 系） |
+| `.btn-outline` | アウトラインボタン（背景透過・ボーダーのみ）。`.btn-ghost` は `.btn-outline` の別名とする |
+| `.btn-link` | リンク風ボタン（背景なし・テキストのみ） |
 
-### 7.1.3 サイズ
+### 7.4.3 サイズ
 
 | クラス | 説明 |
 |--------|------|
-| `.btn-sm` | 小サイズ |
-| `.btn-lg` | 大サイズ |
+| `.btn-sm` | 小サイズ（`--font-size-sm`、パディング `--space-1` / `--space-2`） |
+| `.btn-lg` | 大サイズ（`--font-size-lg`、パディング `--space-3` / `--space-6`） |
 
-### 7.1.4 状態
+### 7.4.4 機能バリアント
+
+| クラス | 説明 |
+|--------|------|
+| `.btn-icon` | アイコンのみボタン（正方形・テキストなし想定） |
+
+### 7.4.5 状態
 
 - `:hover`: ホバー色にトランジション（`--transition-fast`）
 - `:active`: 押下色
 - `:disabled`, `[disabled]`: 不透明度 50%・`cursor: not-allowed`
 - `.loading`: ローディングスピナー表示（CSS アニメーション）
 
-## 7.2 Form（`src/components/form.css`）
+## 7.5 Form（`src/components/form.css`）
 
-### 7.2.1 対象要素
+### 7.5.1 対象要素
 
 `input[type="text"]`, `input[type="email"]`, `input[type="password"]`, `input[type="number"]`, `input[type="search"]`, `textarea`, `select`
 
-### 7.2.2 仕様
+### 7.5.2 仕様
 
 - ボーダー: `1px solid var(--color-border)`
 - 角丸: `--radius-base`
@@ -322,7 +418,7 @@ N = `1`〜`8`（スペーシングトークンに対応）
 - ラベル: `.form-label`（`--font-weight-medium`）
 - グループ: `.form-group`（ラベル + 入力 + ヒントのラッパー）
 
-## 7.3 Card（`src/components/card.css`）
+## 7.6 Card（`src/components/card.css`）
 
 | クラス | 説明 |
 |--------|------|
@@ -331,35 +427,121 @@ N = `1`〜`8`（スペーシングトークンに対応）
 | `.card-body` | カードボディ（パディング `--space-4`） |
 | `.card-footer` | カードフッター（ボーダートップ） |
 
-## 7.4 Badge（`src/components/badge.css`）
+## 7.7 Badge（`src/components/badge.css`）
+
+### 7.7.1 セマンティックバリアント
 
 | クラス | 説明 |
 |--------|------|
-| `.badge` | ベースバッジ（ピル型、`--radius-full`） |
-| `.badge-primary` / `.badge-success` / `.badge-warning` / `.badge-danger` / `.badge-info` | セマンティックカラーバリアント |
+| `.badge` | ベースバッジ（ピル型、`--radius-full`、`--font-size-xs`） |
+| `.badge-primary` | プライマリ（`--color-primary` 背景） |
+| `.badge-success` | 成功（`--color-success-bg` / `--color-success-text`） |
+| `.badge-warning` | 警告（`--color-warning-bg` / `--color-warning-text`） |
+| `.badge-danger` | 危険（`--color-danger-bg` / `--color-danger-text`） |
+| `.badge-info` | 情報（`--color-info-bg` / `--color-info-text`） |
+| `.badge-neutral` | ニュートラル（`--color-neutral-bg` / `--color-neutral-text`） |
 
-## 7.5 Table（`src/components/table.css`）
+### 7.7.2 デプロイ・プロセスステータスバリアント
+
+Adlaire Deploy ダッシュボードで使用するプロセス・デプロイ状態のバッジ。
+
+| クラス | 対応状態 | カラー |
+|--------|---------|-------|
+| `.badge-running` | running（起動中） | success 系（`#dcfce7` / `#166534`） |
+| `.badge-stopped` | stopped（停止） | neutral 系（`#f3f4f6` / `#4b5563`） |
+| `.badge-failed` | failed（失敗） | danger 系（`#fee2e2` / `#991b1b`） |
+| `.badge-starting` | starting（起動準備中） | warning 系（`#fef3c7` / `#92400e`） |
+| `.badge-deployed` | deployed（デプロイ完了） | success 系 |
+| `.badge-deploy-failed` | deploy_failed（デプロイ失敗） | danger 系 |
+
+### 7.7.3 クラスタ・ヘルスステータスバリアント
+
+Adlaire Deploy クラスタノードのヘルス状態バッジ。
+
+| クラス | 対応状態 | カラー |
+|--------|---------|-------|
+| `.badge-healthy` | healthy（正常） | success 系 |
+| `.badge-unhealthy` | unhealthy（異常） | danger 系 |
+| `.badge-unknown` | unknown（不明） | neutral 系 |
+
+### 7.7.4 コンテンツステータスバリアント
+
+Adlaire Static CMS のコンテンツ状態表示。
+
+| クラス | 対応状態 | カラー |
+|--------|---------|-------|
+| `.status-published` | published（公開） | success 系 |
+| `.status-draft` | draft（下書き） | neutral 系 |
+
+## 7.8 Table（`src/components/table.css`）
 
 | クラス | 説明 |
 |--------|------|
-| `.table` | ベーステーブル（幅 100%、ボーダーコラプス） |
-| `.table-striped` | 奇数行に背景色 |
+| `.table` | ベーステーブル（幅 100%、`border-collapse: collapse`） |
+| `.table-striped` | 奇数行に `--color-bg-muted` 背景 |
 | `.table-hover` | ホバー行ハイライト |
 | `.table-bordered` | 全セルにボーダー |
 
-## 7.6 Alert（`src/components/alert.css`）
+## 7.9 Alert（`src/components/alert.css`）
 
 | クラス | 説明 |
 |--------|------|
-| `.alert` | ベースアラート |
-| `.alert-success` / `.alert-warning` / `.alert-danger` / `.alert-info` | セマンティックバリアント |
+| `.alert` | ベースアラート（パディング `--space-3`・角丸 `--radius-base`） |
+| `.alert-success` | 成功アラート（`--color-success-bg` / `--color-success-text` / `--color-success-border`） |
+| `.alert-warning` | 警告アラート（warning 系） |
+| `.alert-danger` | 危険アラート（danger 系） |
+| `.alert-info` | 情報アラート（info 系） |
 
-## 7.7 Modal（`src/components/modal.css`）
+## 7.10 Modal（`src/components/modal.css`）
 
-- `.modal-backdrop`: フルスクリーンオーバーレイ（背景 `rgba(0,0,0,0.5)`）
-- `.modal`: モーダルコンテナ（中央配置・`--shadow-lg`）
-- `.modal-header` / `.modal-body` / `.modal-footer`: 内部構成
-- 表示制御: `.modal[open]` または `.modal.is-open` クラスによる切り替え（JavaScript で付与）
+### 7.10.1 基本モーダル
+
+| クラス | 説明 |
+|--------|------|
+| `.modal-backdrop` | フルスクリーンオーバーレイ（`position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000`） |
+| `.modal` | モーダルコンテナ（中央配置・`--shadow-lg`） |
+| `.modal-header` | モーダルヘッダー（タイトル + 閉じるボタン） |
+| `.modal-body` | モーダルボディ |
+| `.modal-footer` | モーダルフッター（アクションボタン） |
+| `.modal-close` | 閉じるボタン（右上配置） |
+
+表示制御: `.modal.is-open` クラスを JavaScript で付与して表示・非表示を切り替える。
+
+### 7.10.2 差分表示モーダル（Diff Viewer）
+
+Static CMS の差分表示機能で使用する専用モーダル。
+
+| クラス | 説明 |
+|--------|------|
+| `.diff-modal` | 差分表示モーダル全体（`position: fixed; z-index: 10000`） |
+| `.diff-modal__backdrop` | 背景オーバーレイ |
+| `.diff-modal__content` | 差分コンテンツエリア（等幅フォント） |
+| `.diff-modal__close` | 閉じるボタン |
+| `.diff-line--added` | 追加行（薄緑背景） |
+| `.diff-line--removed` | 削除行（薄赤背景） |
+| `.diff-line--changed` | 変更行（薄黄背景） |
+
+## 7.11 Log Box（`src/components/log-box.css`）
+
+Adlaire Deploy のデプロイログ・SSE ストリーミングログ表示で使用するログビューア。
+
+| クラス | 説明 |
+|--------|------|
+| `.log-box` | ログ表示エリア全体（`font-family: var(--font-family-mono)`・`--color-bg-dark` 背景・スクロール対応） |
+| `.log-entry` | ログ1行 |
+| `.log-err` | エラーログ行（`--color-danger-text` またはオレンジ系） |
+| `.log-info` | 情報ログ行（`--color-text-muted`） |
+| `.log-warn` | 警告ログ行（`--color-warning-text`） |
+
+## 7.12 Info Row（`src/components/info-row.css`）
+
+Adlaire Deploy プロジェクト詳細画面で使用するラベル + 値の横並び表示。
+
+| クラス | 説明 |
+|--------|------|
+| `.info-row` | 1行全体（`display: flex; gap: var(--space-4)`） |
+| `.info-label` | ラベル部分（`--color-text-muted`・`--font-weight-medium`・最小幅固定） |
+| `.info-value` | 値部分（`--color-text`） |
 
 ---
 
@@ -407,13 +589,23 @@ N = `1`〜`8`（スペーシングトークンに対応）
 
 ## 9.2 ダークモードで上書きするトークン
 
-- `--color-bg`: ダーク背景色
-- `--color-bg-surface`: ダークサーフェス背景色
-- `--color-bg-muted`: ダークミュート背景色
-- `--color-border`: ダークボーダー色
-- `--color-border-strong`: ダーク強調ボーダー色
-- `--color-text`: ダーク基本テキスト色
-- `--color-text-muted`: ダーク補助テキスト色
+現行プロジェクト（Static CMS・Portal System・Admin）のダークモード色を統一して定義する。
+
+| トークン名 | ダーク値 | 出典 |
+|-----------|---------|------|
+| `--color-bg` | `#1a1a2e` | Admin Panel |
+| `--color-bg-surface` | `#2a2a3e` | Admin Panel |
+| `--color-bg-muted` | `#0d1117` | コードブロック |
+| `--color-border` | `#444` | Admin Panel |
+| `--color-border-strong` | `#555` | Admin Panel |
+| `--color-text` | `#dfe6e9` | Portal System |
+| `--color-text-sub` | `#b2bec3` | 補助テキスト |
+| `--color-text-muted` | `#aaa` | Admin Panel |
+| `--color-accent` | `#11aabb` | Admin Panel |
+
+## 9.3 ダークモード非対応プロジェクト
+
+- **Adlaire Deploy ダッシュボード**: 現行実装はライトモードのみ。Adlaire Style 適用時にダークモード対応を追加する。
 
 ---
 
@@ -436,14 +628,19 @@ N = `1`〜`8`（スペーシングトークンに対応）
   2. `reset.css`
   3. `typography.css`
   4. `layout.css`
-  5. `components/button.css`
-  6. `components/form.css`
-  7. `components/card.css`
-  8. `components/badge.css`
-  9. `components/table.css`
-  10. `components/alert.css`
-  11. `components/modal.css`
-  12. `utilities.css`
+  5. `components/header.css`
+  6. `components/nav.css`
+  7. `components/breadcrumb.css`
+  8. `components/button.css`
+  9. `components/form.css`
+  10. `components/card.css`
+  11. `components/badge.css`
+  12. `components/table.css`
+  13. `components/alert.css`
+  14. `components/modal.css`
+  15. `components/log-box.css`
+  16. `components/info-row.css`
+  17. `utilities.css`
 - minify は **コメント除去 + 連続空白・改行の圧縮** をビルドスクリプト内で実装する（外部ライブラリ不使用）。
 - `npm:` プレフィックスの使用を**禁止**する（共通規約）。
 
