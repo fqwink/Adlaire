@@ -45,7 +45,7 @@
 ### 1. 基本宣言
 
 本 RULEBOOK は、Adlaire Static CMS のリリース計画と履歴に関する規範文書である。
-リリースの詳細な変更履歴は `docs/CHANGES.md` を参照。
+リリースの詳細な変更履歴は `Adlaire Static CMS/docs/CHANGES.md` を参照。
 
 ---
 
@@ -133,7 +133,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ##### Ver.2.1 — バグ修正（25件）
 
-セキュリティ10件、データ整合性8件、コード品質7件。詳細は `docs/CHANGES.md` を参照。
+セキュリティ10件、データ整合性8件、コード品質7件。詳細は `Adlaire Static CMS/docs/CHANGES.md` を参照。
 
 ##### Ver.2.0 — セットアップツール・アップデートシステム
 
@@ -147,7 +147,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 ##### Ver.1.9 — 1.0系最終版（バグ修正38件）
 
 バグ修正38件（Ver.1.9-29 で32件 + Ver.1.9-30 で6件）を実施し、1.0系の品質を確定。
-詳細は `docs/CHANGES.md` を参照。
+詳細は `Adlaire Static CMS/docs/CHANGES.md` を参照。
 
 ##### Ver.1.8 — 機能拡張・フロントエンド強化
 
@@ -952,8 +952,8 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | 文書 | 内容 |
 |------|------|
-| `CHARTER.md` | ルールブック憲章（最上位原則） |
-| `docs/CHANGES.md` | 詳細な変更履歴 |
+| `Adlaire Static CMS/rulebookdocs/CHARTER.md` | ルールブック憲章（最上位原則） |
+| `Adlaire Static CMS/docs/CHANGES.md` | 詳細な変更履歴 |
 
 ---
 

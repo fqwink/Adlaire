@@ -346,6 +346,6 @@ API キー認証に関して個別提案、実装都合と本 RULEBOOK が衝突
 | `ARCHITECTURE_RULEBOOK.md` | アーキテクチャ規範（ファイル配置） |
 | `LIFECYCLE_SYSTEM_RULEBOOK.md` | セットアップ・アップデート規範 |
 | `API_RULEBOOK.md` | REST API 規範 |
-| `RELEASE_PLAN_RULEBOOK.md` | リリース計画（実装バージョン配分） |
+| `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（統合リポジトリルート・Part I） | リリース計画（実装バージョン配分） |
 
 > 改訂履歴は `REVISION_HISTORY.md` を参照。
