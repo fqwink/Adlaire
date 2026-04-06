@@ -68,6 +68,46 @@ export interface ProjectConfig {
   webhook_secret?: string | null;
   /** モノレポ: Git リポジトリルートからの相対パス（Phase 10） */
   root_dir?: string | null;
+  /** プロジェクト種別（Phase 11） */
+  type?: "worker" | "static";
+  /** 静的ファイル配信ディレクトリ（Phase 11） */
+  static_dir?: string | null;
+  /** Blue-Green デプロイの有効化（Phase 12） */
+  blue_green?: boolean;
+  /** Green スロット用ポート（Phase 12） */
+  green_port?: number | null;
+  /** カナリア設定（Phase 12） */
+  canary?: CanaryConfig | null;
+}
+
+/** カナリアデプロイ設定（Phase 12） */
+export interface CanaryConfig {
+  canary_port: number;
+  weight: number;
+}
+
+/** スケジュールデプロイ設定（Phase 13） */
+export interface ScheduledDeploy {
+  id: string;
+  project_id: string;
+  cron: string | null;
+  run_at: string | null;
+  branch: string;
+  enabled: boolean;
+  last_run: string | null;
+  next_run: string | null;
+}
+
+/** プレビュー環境（Phase 13） */
+export interface PreviewEnv {
+  id: string;
+  project_id: string;
+  branch: string;
+  hostname: string;
+  port: number;
+  status: "running" | "stopped" | "failed";
+  created_at: string;
+  expires_at: string;
 }
 
 /** ログエントリ */
@@ -132,6 +172,14 @@ export interface DeployConfig {
   sse_token?: string;
   /** 同時デプロイ数の上限（Phase 10） */
   max_parallel_deploys?: number;
+  /** プレビュー URL のベースドメイン（Phase 13） */
+  preview_base_domain?: string | null;
+  /** プレビュー環境の TTL（秒）（Phase 13） */
+  preview_ttl_seconds?: number;
+  /** プレビュー用ポート範囲の開始（Phase 13） */
+  preview_port_range_start?: number;
+  /** プレビュー用ポート範囲の終了（Phase 13） */
+  preview_port_range_end?: number;
 }
 
 /** Edge ノード定義 */
