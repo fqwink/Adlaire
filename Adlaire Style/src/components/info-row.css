@@ -1,0 +1,22 @@
+/* Adlaire Style — Info Row
+ * 仕様: STYLE_RULEBOOK.md §7.12
+ */
+
+.info-row {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+}
+
+.info-label {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.info-value {
+  color: var(--color-text);
+  word-break: break-word;
+}

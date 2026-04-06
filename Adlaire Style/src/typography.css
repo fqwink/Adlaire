@@ -1,0 +1,106 @@
+/* Adlaire Style — タイポグラフィ
+ * 仕様: STYLE_RULEBOOK.md §5
+ */
+
+/* === 5.1 見出し === */
+
+h1 {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+h2 {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+h3 {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+h4 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-base);
+}
+
+h5 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-base);
+}
+
+h6 {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-base);
+}
+
+/* === 5.2 本文・インライン要素 === */
+
+p {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+}
+
+small {
+  font-size: var(--font-size-sm);
+}
+
+strong, b {
+  font-weight: var(--font-weight-bold);
+}
+
+em, i {
+  font-style: italic;
+}
+
+code, kbd, samp {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-bg-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+pre {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-bg-muted);
+  padding: var(--space-4);
+  border-radius: var(--radius-base);
+  overflow-x: auto;
+  margin-top: 0;
+  margin-bottom: var(--space-4);
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+kbd {
+  border: 1px solid var(--color-border);
+}
+
+a {
+  color: var(--color-primary);
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* === 5.3 日本語対応 === */
+
+:lang(ja) {
+  line-height: var(--line-height-base);
+  overflow-wrap: break-word;
+  word-break: normal;
+}

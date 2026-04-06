@@ -1,0 +1,80 @@
+/* Adlaire Style — Form
+ * 仕様: STYLE_RULEBOOK.md §7.5
+ */
+
+.form-group {
+  margin-bottom: var(--space-4);
+}
+
+.form-label {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+input[type="date"],
+textarea,
+select {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--color-text);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  transition: border-color var(--transition-fast), outline var(--transition-fast);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  border-color: var(--color-primary);
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* === エラー状態 === */
+
+input.is-error,
+textarea.is-error,
+select.is-error {
+  border-color: var(--color-danger-text);
+}
+
+input.is-error:focus,
+textarea.is-error:focus,
+select.is-error:focus {
+  outline-color: var(--color-danger-text);
+}
+
+/* === 補助テキスト === */
+
+.form-hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.form-error {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-danger-text);
+}

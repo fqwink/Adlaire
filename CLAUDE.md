@@ -24,7 +24,7 @@
 | `Adlaire BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire BaaS/rulebookdocs/` |
 | `Adlaire Deploy/` | **Adlaire Deploy** | Phase 0 完了 | `Adlaire Deploy/rulebookdocs/` |
 | `Adlaire Portal System/` | **Adlaire Portal System** | Ver.1.1 | `Adlaire Portal System/rulebookdocs/` |
-| `Adlaire Style/` | **Adlaire Style** | Phase 0 完了 | `Adlaire Style/rulebookdocs/` |
+| `Adlaire Style/` | **Adlaire Style** | Ver.1.0-1 | `Adlaire Style/rulebookdocs/` |
 | `Adlaire Framework/` | **Adlaire Framework** | Phase 0 完了 | `Adlaire Framework/rulebookdocs/` |
 
 ### Adlaire Static CMS (`Adlaire Static CMS/`)
