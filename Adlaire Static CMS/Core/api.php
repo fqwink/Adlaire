@@ -534,6 +534,10 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
         apiError(400, 'Missing timestamp');
         return;
     }
+    // Note: TIMESTAMP_PATTERN validates format (\d{8}_\d{6}) but does not
+    // validate date ranges (e.g., month 13 or day 32 would pass).
+    // restoreRevision() performs the pattern check and file existence check,
+    // so invalid dates simply won't match any revision file.
 
     $result = $storage->restoreRevision($slug, $timestamp);
     if (!$result) {

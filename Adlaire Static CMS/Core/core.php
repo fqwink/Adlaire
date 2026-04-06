@@ -461,7 +461,9 @@ final class FileStorage
         $pages = [];
         $memoryLimitRaw = ini_get('memory_limit');
         $val = is_string($memoryLimitRaw) ? (int) $memoryLimitRaw : 0;
-        if ($val > 0) {
+        if ($memoryLimitRaw === '-1' || $val === -1) {
+            // Unlimited memory: skip memory check
+        } elseif ($val > 0) {
             $unit = strtolower(substr(trim($memoryLimitRaw), -1));
             $memoryLimitBytes = match (true) {
                 $unit === 'g' => $val * 1024 * 1024 * 1024,

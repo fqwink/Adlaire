@@ -119,6 +119,15 @@ define('INSTALLER_SUPPORTED_LOCALES', ['ja', 'en']);
 function validate_input(array $post): array
 {
     $errors = [];
+
+    // Validate UTF-8 encoding on all string inputs
+    foreach (['site_name', 'default_locale', 'admin_password', 'admin_password_confirm', 'admin_username'] as $field) {
+        if (isset($post[$field]) && is_string($post[$field]) && !mb_check_encoding($post[$field], 'UTF-8')) {
+            $errors[] = 'Invalid character encoding in ' . $field;
+            return $errors;
+        }
+    }
+
     $siteName = is_string($post['site_name'] ?? '') ? trim($post['site_name'] ?? '') : '';
     $locale = is_string($post['default_locale'] ?? '') ? ($post['default_locale'] ?? '') : '';
     $password = is_string($post['admin_password'] ?? '') ? ($post['admin_password'] ?? '') : '';
@@ -198,7 +207,7 @@ function install_execute(string $siteName, string $locale, string $password): ar
     }
 
     // Create users.json
-    $adminUsername = $GLOBALS['_installer_username'] ?? 'admin';
+    $adminUsername = $_SESSION['_installer_username'] ?? 'admin';
     $usersData = [
         'users' => [
             $adminUsername => [
@@ -293,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors = validate_input($_POST);
         if (empty($errors)) {
             $rawUsername = is_string($_POST['admin_username'] ?? '') ? trim($_POST['admin_username'] ?? '') : 'admin';
-            $GLOBALS['_installer_username'] = $rawUsername !== '' ? $rawUsername : 'admin';
+            $_SESSION['_installer_username'] = $rawUsername !== '' ? $rawUsername : 'admin';
             $rawSiteName = is_string($_POST['site_name'] ?? '') ? trim($_POST['site_name'] ?? '') : '';
             $rawLocale = is_string($_POST['default_locale'] ?? '') ? ($_POST['default_locale'] ?? '') : 'ja';
             $rawPassword = is_string($_POST['admin_password'] ?? '') ? ($_POST['admin_password'] ?? '') : '';
