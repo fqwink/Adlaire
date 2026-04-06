@@ -66,6 +66,8 @@ export interface ProjectConfig {
   webhook_url?: string | null;
   /** Webhook HMAC-SHA256 署名用シークレット（Phase 7） */
   webhook_secret?: string | null;
+  /** モノレポ: Git リポジトリルートからの相対パス（Phase 10） */
+  root_dir?: string | null;
 }
 
 /** ログエントリ */
@@ -128,6 +130,8 @@ export interface DeployConfig {
   dashboard_session_ttl?: number;
   /** SSE ストリーミング認証トークン（Phase 6） */
   sse_token?: string;
+  /** 同時デプロイ数の上限（Phase 10） */
+  max_parallel_deploys?: number;
 }
 
 /** Edge ノード定義 */

@@ -1,5 +1,16 @@
 # CHANGES - 変更履歴
 
+## Ver.1.9-10 (2026-04-06)
+
+### Phase 10: 監査ログ・デプロイパイプライン並列化・モノレポ対応
+
+* `src/audit.ts` — 監査ログ（AuditLog 型、KV 永続化、最大 10,000 件保持、非同期・非ブロッキング）
+* `src/deployer.ts` — グローバルセマフォ並列化（max_parallel_deploys、デフォルト 4）、モノレポ root_dir 対応、監査ログ連携
+* `src/proxy.ts` — `GET /api/audit` エンドポイント追加、start/stop/restart に監査ログ記録
+* `src/cli.ts` — `audit` コマンド追加（--limit N, --project <id>）
+* `src/types.ts` — ProjectConfig に root_dir 追加、DeployConfig に max_parallel_deploys 追加
+* `src/config.ts` — Phase 10 マイグレーション（root_dir / max_parallel_deploys デフォルト値設定）
+
 ## Ver.1.8-9 (2026-04-06)
 
 ### Phase 9: 管理ダッシュボード Web UI

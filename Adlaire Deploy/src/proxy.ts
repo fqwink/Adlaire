@@ -4,6 +4,7 @@
  * Host ヘッダーベースのリクエストルーティング
  */
 
+import { getAuditLogs, recordAudit } from "./audit.ts";
 import type { ClusterManager } from "./cluster.ts";
 import { handleSyncConfig, verifyClusterAuth } from "./cluster.ts";
 import { loadConfig, saveConfig } from "./config.ts";
@@ -165,8 +166,10 @@ export function startAdminApi(
         const id = startMatch[1];
         try {
           await manager.start(id);
+          recordAudit("start", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("start", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "start_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -180,8 +183,10 @@ export function startAdminApi(
         const id = stopMatch[1];
         try {
           await manager.stop(id);
+          recordAudit("stop", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("stop", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "stop_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -195,8 +200,10 @@ export function startAdminApi(
         const id = restartMatch[1];
         try {
           await manager.restart(id);
+          recordAudit("restart", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("restart", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "restart_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -327,6 +334,18 @@ export function startAdminApi(
         const tailParam = url.searchParams.get("tail");
         const tail = tailParam ? parseInt(tailParam, 10) : 100;
         return json({ ok: true, data: getLogTail(id, isNaN(tail) ? 100 : tail) });
+      }
+
+      // GET /api/audit — 監査ログ一覧（Phase 10）
+      if (method === "GET" && path === "/api/audit") {
+        const limitParam = url.searchParams.get("limit");
+        const projectId = url.searchParams.get("project_id");
+        const limit = limitParam ? parseInt(limitParam, 10) : 50;
+        const logs = await getAuditLogs(
+          isNaN(limit) ? 50 : limit,
+          projectId ?? undefined,
+        );
+        return json({ ok: true, data: logs });
       }
 
       // GET /api/health — ノードヘルス

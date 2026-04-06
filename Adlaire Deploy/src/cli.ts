@@ -763,6 +763,57 @@ async function cmdCredential(args: string[]): Promise<void> {
   }
 }
 
+/** 監査ログ表示（Phase 10） */
+async function cmdAudit(args: string[]): Promise<void> {
+  let limit = 20;
+  let projectId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--limit" && args[i + 1]) {
+      limit = parseInt(args[i + 1], 10);
+      i++;
+    } else if (args[i] === "--project" && args[i + 1]) {
+      projectId = args[i + 1];
+      i++;
+    }
+  }
+
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (projectId) params.set("project_id", projectId);
+
+  const res = await fetch(`${adminUrl}/api/audit?${params}`);
+  const body = await res.json();
+  if (!body.ok) {
+    console.error(`Error: ${body.message}`);
+    Deno.exit(1);
+  }
+
+  const logs = body.data as Array<{
+    id: string;
+    timestamp: string;
+    action: string;
+    project_id: string | null;
+    actor: string;
+    detail: string;
+    result: "success" | "failure";
+  }>;
+
+  if (logs.length === 0) {
+    console.log("No audit logs found.");
+    return;
+  }
+
+  console.log("Audit Logs:");
+  console.log("-".repeat(100));
+  for (const log of logs) {
+    const time = log.timestamp.replace("T", " ").slice(0, 19);
+    const proj = log.project_id ?? "(platform)";
+    const icon = log.result === "success" ? "OK" : "NG";
+    console.log(`[${time}] ${icon} ${log.action.padEnd(15)} ${proj.padEnd(20)} by ${log.actor}  ${log.detail}`);
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -789,6 +840,7 @@ Commands:
   logs <id> [opts]         Show worker logs (--tail n, --stream)
   kv-stats <id>            Show KV database info
   kv-reset <id>            Delete KV database (worker must be stopped)
+  audit [opts]             Show audit logs (--limit N, --project <id>)
   nodes                    Show cluster node statuses (origin only)
   sync                     Sync config to all edge nodes (origin only)
   help                     Show this help message
@@ -865,6 +917,9 @@ switch (command) {
     break;
   case "credential":
     await cmdCredential(commandArgs);
+    break;
+  case "audit":
+    await cmdAudit(commandArgs);
     break;
   case "nodes":
     await cmdNodes();

@@ -5,8 +5,10 @@
  * デプロイ履歴はプラットフォーム KV に永続化
  * Phase 6: ロールバック・プライベートリポジトリ対応
  * Phase 7: ビルドステップ・デプロイ通知
+ * Phase 10: デプロイ並列化セマフォ・モノレポ対応・監査ログ
  */
 
+import { recordAudit } from "./audit.ts";
 import { runBuildStep } from "./build.ts";
 import type { ClusterManager } from "./cluster.ts";
 import { embedPatInUrl, getCredential, getSshGitEnv } from "./credential.ts";
@@ -39,9 +41,38 @@ export class Deployer {
   private queued: Map<string, { commit: string; branch: string; pusher: string }> = new Map();
   /** プロジェクト別ロック */
   private locks: Set<string> = new Set();
+  /** グローバル並列デプロイカウンター（Phase 10） */
+  private parallelCount = 0;
+  /** グローバル並列上限超過時の待機キュー（Phase 10） */
+  private globalWaiters: Array<() => void> = [];
 
   constructor(manager: ProcessManager) {
     this.manager = manager;
+  }
+
+  /** 並列デプロイの最大同時実行数を取得する（Phase 10） */
+  private getMaxParallel(): number {
+    return this.manager.getConfig().max_parallel_deploys ?? 4;
+  }
+
+  /** グローバルセマフォを取得する（Phase 10） */
+  private async acquireGlobalSemaphore(): Promise<void> {
+    if (this.parallelCount < this.getMaxParallel()) {
+      this.parallelCount++;
+      return;
+    }
+    // 上限に達した場合は待機
+    await new Promise<void>((resolve) => {
+      this.globalWaiters.push(resolve);
+    });
+    this.parallelCount++;
+  }
+
+  /** グローバルセマフォを解放する（Phase 10） */
+  private releaseGlobalSemaphore(): void {
+    this.parallelCount--;
+    const next = this.globalWaiters.shift();
+    if (next) next();
   }
 
   /** クラスタマネージャを設定する */
@@ -145,6 +176,7 @@ export class Deployer {
       env_snapshot: snapshot.env_snapshot,
     });
 
+    recordAudit("rollback", "cli", "success", `to: ${snapshot.commit.slice(0, 7)}`, projectId);
     console.log(`[deploy] Rollback "${projectId}" completed`);
   }
 
@@ -155,6 +187,8 @@ export class Deployer {
     branch: string,
     pusher: string,
   ): Promise<void> {
+    // グローバルセマフォ取得（Phase 10: 並列デプロイ数制限）
+    await this.acquireGlobalSemaphore();
     this.locks.add(projectId);
     this.states.set(projectId, "deploying");
     const startedAt = new Date().toISOString();
@@ -193,11 +227,16 @@ export class Deployer {
         await this.gitClone(gitUrl, projectConfig.git.branch, projectDir, gitEnv);
       }
 
+      // モノレポ対応: root_dir がある場合はサブディレクトリをプロジェクトルートとする（Phase 10）
+      const effectiveDir = projectConfig.root_dir
+        ? `${projectDir}/${projectConfig.root_dir}`
+        : projectDir;
+
       // ビルドステップの実行（Phase 7）
       if (projectConfig.build_command) {
         const env = await resolveEnv(projectId, projectConfig.env);
         await runBuildStep(
-          projectDir,
+          effectiveDir,
           projectConfig.build_command,
           projectConfig.build_timeout,
           env,
@@ -258,6 +297,9 @@ export class Deployer {
         ).catch(() => {}); // 非同期、エラーは無視
       }
 
+      // 監査ログ記録（Phase 10）
+      recordAudit("deploy", pusher, "success", `commit: ${commit.slice(0, 7)}`, projectId);
+
       console.log(`[deploy] Deploy "${projectId}" succeeded`);
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
@@ -288,9 +330,13 @@ export class Deployer {
         ).catch(() => {});
       }
 
+      // 監査ログ記録（Phase 10）
+      recordAudit("deploy", pusher, "failure", errorMsg, projectId);
+
       console.error(`[deploy] Deploy "${projectId}" failed: ${errorMsg}`);
     } finally {
       this.locks.delete(projectId);
+      this.releaseGlobalSemaphore();
 
       // キューに次のデプロイがある場合は実行
       const next = this.queued.get(projectId);

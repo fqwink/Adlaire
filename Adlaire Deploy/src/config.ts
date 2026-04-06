@@ -48,6 +48,14 @@ export async function loadConfig(): Promise<DeployConfig> {
       if (project.permissions === undefined) {
         project.permissions = null;
       }
+      // Phase 10 マイグレーション: root_dir がない場合は null を設定
+      if (project.root_dir === undefined) {
+        project.root_dir = null;
+      }
+    }
+    // Phase 10 マイグレーション: max_parallel_deploys がない場合はデフォルト値を設定
+    if (config.max_parallel_deploys === undefined) {
+      config.max_parallel_deploys = 4;
     }
     return config;
   } catch (e) {
