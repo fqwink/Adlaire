@@ -22,7 +22,7 @@
   - `rulebookdocs/ARCHITECTURE_RULEBOOK.md` — アーキテクチャルールブック
   - `rulebookdocs/API_RULEBOOK.md` — API・データルールブック
   - `rulebookdocs/GENERATOR_RULEBOOK.md` — 静的サイト生成ルールブック
-  - `rulebookdocs/RELEASE_PLAN_RULEBOOK.md` — リリース計画ルールブック
+  - ※ リリース計画はルート `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（Part I）で統合管理
   - `rulebookdocs/LICENSE_SYSTEM_RULEBOOK.md` — ライセンスシステムルールブック
   - `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` — ライセンスサーバールールブック
   - `rulebookdocs/BAAS_HUB_RULEBOOK.md` — BaaS連携Hubルールブック

@@ -18,6 +18,7 @@
   - `rulebookdocs/LICENSE_SERVER_RULEBOOK.md` — ライセンスサーバールールブック（仕様の正）
   - `rulebookdocs/REVISION_HISTORY.md` — 改訂履歴
   - ※ `rulebookdocs/` 内に README.md は作成しない
+  - ※ リリース計画はルート `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（Part III）で統合管理
 - `docs/` — ドキュメントフォルダ
   - `docs/CHANGES.md` — 変更履歴
 
