@@ -2,6 +2,8 @@
  * Adlaire Deploy — ログキャプチャ
  *
  * Worker の stdout/stderr をリングバッファで保持
+ * Phase 6: SSE ストリーミング連携
+ * Phase 7: ファイル永続化連携
  */
 
 import type { LogEntry } from "./types.ts";
@@ -11,6 +13,15 @@ const MAX_LOG_LINES = 1000;
 
 /** プロジェクト別ログバッファ */
 const buffers: Map<string, LogEntry[]> = new Map();
+
+/** ログエントリ追加時のコールバック（SSE/永続化連携用） */
+type LogCallback = (projectId: string, entry: LogEntry) => void;
+const callbacks: LogCallback[] = [];
+
+/** ログコールバックを登録する */
+export function addLogCallback(cb: LogCallback): void {
+  callbacks.push(cb);
+}
 
 /** ログバッファを取得する（存在しない場合は空配列） */
 export function getLogBuffer(projectId: string): LogEntry[] {
@@ -35,15 +46,26 @@ function addLogEntry(
     buffers.set(projectId, buf);
   }
 
-  buf.push({
+  const entry: LogEntry = {
     timestamp: new Date().toISOString(),
     stream,
     line,
-  });
+  };
+
+  buf.push(entry);
 
   // リングバッファの最大行数を超えた場合、古いエントリを削除
   if (buf.length > MAX_LOG_LINES) {
     buf.splice(0, buf.length - MAX_LOG_LINES);
+  }
+
+  // コールバック呼び出し（SSE/永続化）
+  for (const cb of callbacks) {
+    try {
+      cb(projectId, entry);
+    } catch {
+      // コールバックエラーは無視
+    }
   }
 }
 

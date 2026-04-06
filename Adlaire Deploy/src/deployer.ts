@@ -1,13 +1,20 @@
 /**
  * Adlaire Deploy — デプロイパイプライン
  *
- * Git clone/pull → Worker 再起動の自動化
+ * Git clone/pull → ビルドステップ → Worker 再起動の自動化
  * デプロイ履歴はプラットフォーム KV に永続化
+ * Phase 6: ロールバック・プライベートリポジトリ対応
+ * Phase 7: ビルドステップ・デプロイ通知
  */
 
+import { runBuildStep } from "./build.ts";
 import type { ClusterManager } from "./cluster.ts";
+import { embedPatInUrl, getCredential, getSshGitEnv } from "./credential.ts";
+import { resolveEnv } from "./env_crypto.ts";
 import { getPlatformKv } from "./kv.ts";
+import { sendDeployNotification } from "./notify.ts";
 import type { ProcessManager } from "./process_manager.ts";
+import { getSnapshot, gitCheckout, listSnapshots, saveSnapshot } from "./rollback.ts";
 import type { DeployRecord, DeployState, EdgeDeployResult } from "./types.ts";
 
 /** デプロイ履歴の最大保持件数 */
@@ -78,6 +85,69 @@ export class Deployer {
     return "started";
   }
 
+  /** ロールバックを実行する */
+  async rollback(
+    projectId: string,
+    deployId?: string,
+  ): Promise<void> {
+    const config = this.manager.getConfig();
+    const projectDir = `${config.projects_dir}/${projectId}`;
+
+    let snapshot;
+    if (deployId) {
+      snapshot = await getSnapshot(projectId, deployId);
+      if (!snapshot) {
+        throw new Error(`Snapshot not found: ${deployId}`);
+      }
+    } else {
+      // 直前のスナップショットを取得
+      const snapshots = await listSnapshots(projectId);
+      if (snapshots.length < 2) {
+        throw new Error("No previous snapshot available for rollback");
+      }
+      snapshot = snapshots[1]; // 現在の次に新しいもの
+    }
+
+    console.log(`[deploy] Rolling back "${projectId}" to ${snapshot.commit.slice(0, 7)} (${snapshot.deploy_id})`);
+
+    // git checkout
+    await gitCheckout(projectDir, snapshot.commit);
+
+    // Worker 再起動
+    try {
+      await this.manager.restart(projectId);
+    } catch {
+      await this.manager.start(projectId);
+    }
+
+    // ロールバック完了を新規デプロイとして記録
+    const rollbackDeployId = await nextDeployId();
+    const now = new Date().toISOString();
+
+    await this.saveRecord({
+      id: rollbackDeployId,
+      project_id: projectId,
+      commit: snapshot.commit,
+      branch: "rollback",
+      pusher: "rollback",
+      status: "deployed",
+      started_at: now,
+      finished_at: now,
+      error: null,
+    });
+
+    // スナップショットも保存
+    await saveSnapshot(projectId, {
+      deploy_id: rollbackDeployId,
+      commit: snapshot.commit,
+      deployed_at: now,
+      entry: snapshot.entry,
+      env_snapshot: snapshot.env_snapshot,
+    });
+
+    console.log(`[deploy] Rollback "${projectId}" completed`);
+  }
+
   /** デプロイを実行する */
   private async executeDeploy(
     projectId: string,
@@ -101,16 +171,36 @@ export class Deployer {
 
       const projectDir = `${config.projects_dir}/${projectId}`;
 
+      // プライベートリポジトリ認証情報の取得
+      const credential = await getCredential(projectId).catch(() => null);
+      let gitUrl = projectConfig.git.url;
+      let gitEnv: Record<string, string> = {};
+
+      if (credential) {
+        if (credential.type === "pat") {
+          gitUrl = embedPatInUrl(gitUrl, credential.value);
+        } else if (credential.type === "ssh") {
+          gitEnv = getSshGitEnv(credential.value);
+        }
+      }
+
       // .git ディレクトリの存在で初回/更新を判断
       const isCloned = await this.isGitRepo(projectDir);
 
       if (isCloned) {
-        await this.gitPull(projectDir, projectConfig.git.branch);
+        await this.gitPull(projectDir, projectConfig.git.branch, gitEnv);
       } else {
-        await this.gitClone(
-          projectConfig.git.url,
-          projectConfig.git.branch,
+        await this.gitClone(gitUrl, projectConfig.git.branch, projectDir, gitEnv);
+      }
+
+      // ビルドステップの実行（Phase 7）
+      if (projectConfig.build_command) {
+        const env = await resolveEnv(projectId, projectConfig.env);
+        await runBuildStep(
           projectDir,
+          projectConfig.build_command,
+          projectConfig.build_timeout,
+          env,
         );
       }
 
@@ -132,7 +222,7 @@ export class Deployer {
       }
 
       this.states.set(projectId, "deployed");
-      await this.saveRecord({
+      const record: DeployRecord = {
         id: deployId,
         project_id: projectId,
         commit,
@@ -143,7 +233,30 @@ export class Deployer {
         finished_at: new Date().toISOString(),
         error: null,
         edge_results: edgeResults,
+      };
+      await this.saveRecord(record);
+
+      // デプロイスナップショットの保存（Phase 6）
+      await saveSnapshot(projectId, {
+        deploy_id: deployId,
+        commit,
+        deployed_at: record.finished_at,
+        entry: projectConfig.entry,
+        env_snapshot: projectConfig.env,
       });
+
+      // デプロイ通知の送信（Phase 7）
+      if (projectConfig.webhook_url) {
+        sendDeployNotification(
+          projectConfig.webhook_url,
+          projectConfig.webhook_secret ?? null,
+          projectId,
+          deployId,
+          commit,
+          "success",
+          "Deploy succeeded",
+        ).catch(() => {}); // 非同期、エラーは無視
+      }
 
       console.log(`[deploy] Deploy "${projectId}" succeeded`);
     } catch (e) {
@@ -160,6 +273,20 @@ export class Deployer {
         finished_at: new Date().toISOString(),
         error: errorMsg,
       });
+
+      // デプロイ失敗通知の送信（Phase 7）
+      const projectConfig = this.manager.getProjectConfig(projectId);
+      if (projectConfig?.webhook_url) {
+        sendDeployNotification(
+          projectConfig.webhook_url,
+          projectConfig.webhook_secret ?? null,
+          projectId,
+          deployId,
+          commit,
+          "failure",
+          errorMsg,
+        ).catch(() => {});
+      }
 
       console.error(`[deploy] Deploy "${projectId}" failed: ${errorMsg}`);
     } finally {
@@ -189,6 +316,7 @@ export class Deployer {
     url: string,
     branch: string,
     targetDir: string,
+    extraEnv: Record<string, string> = {},
   ): Promise<void> {
     try {
       await Deno.remove(targetDir, { recursive: true });
@@ -200,6 +328,7 @@ export class Deployer {
       args: ["clone", "--depth", "1", "--branch", branch, url, targetDir],
       stdout: "inherit",
       stderr: "inherit",
+      env: { ...Deno.env.toObject(), ...extraEnv },
     });
 
     const result = await cmd.output();
@@ -209,12 +338,19 @@ export class Deployer {
   }
 
   /** git pull を実行する */
-  private async gitPull(dir: string, branch: string): Promise<void> {
+  private async gitPull(
+    dir: string,
+    branch: string,
+    extraEnv: Record<string, string> = {},
+  ): Promise<void> {
+    const env = { ...Deno.env.toObject(), ...extraEnv };
+
     const fetchCmd = new Deno.Command("git", {
       args: ["fetch", "origin", branch],
       cwd: dir,
       stdout: "inherit",
       stderr: "inherit",
+      env,
     });
 
     const fetchResult = await fetchCmd.output();
@@ -227,6 +363,7 @@ export class Deployer {
       cwd: dir,
       stdout: "inherit",
       stderr: "inherit",
+      env,
     });
 
     const resetResult = await resetCmd.output();

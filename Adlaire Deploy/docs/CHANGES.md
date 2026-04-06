@@ -1,5 +1,52 @@
 # CHANGES - 変更履歴
 
+## Ver.1.8-9 (2026-04-06)
+
+### Phase 9: 管理ダッシュボード Web UI
+
+* `src/dashboard/server.ts` — ダッシュボード HTTP サーバー（ポート 8001、静的ファイル配信、セキュリティヘッダー、ログインページ）
+* `src/dashboard/auth.ts` — セッション認証（64バイトトー���ン、24時間TTL、Cookie: HttpOnly/SameSite=Strict）
+* `src/dashboard/api.ts` — ダッシュボード内部 API（CSRF 対策 X-Requested-With 必須）
+* `src/dashboard/static/index.html` — プロジェクト一覧（状態表示・起動/停止/再起動操作）
+* `src/dashboard/static/project.html` — プロジェクト詳細（ログビューア・デプロイ履歴・設定表示）
+* `src/dashboard/static/cluster.html` — クラスタ状態（origin/edge ノード一覧・ヘルス状態）
+* `src/types.ts` — DeployConfig に dashboard_port / dashboard_session_ttl 追加
+* `src/main.ts` — ダッシュボードサーバー起動統合
+
+## Ver.1.7-8 (2026-04-06)
+
+### Phase 8: edge 自動回復
+
+* `src/cluster.ts` — edge 自動回復（バックオフ付き再接続 10秒〜5分、設定再同期、自動再有効化）
+* `src/types.ts` — ClusterConfig に auto_recovery_enabled / recovery_initial_delay / recovery_max_delay 追加
+* EdgeHealthTracker に recovery_timer / recovery_delay_ms / manually_removed 追加
+
+## Ver.1.6-7 (2026-04-06)
+
+### Phase 7: ビルドステップ・ログ永続化・環境変数暗号化・デプロイ通知
+
+* `src/build.ts` — ビルドステップ実行（シェルインジェクション対策、タイムアウト制御）
+* `src/log_writer.ts` — ログ永続化（logs/{project-id}/{YYYY-MM-DD}.log、30日ローテーション）
+* `src/env_crypto.ts` — 環境変数 AES-256-GCM 暗号化（HKDF 鍵導出、平文マイグレーション対応）
+* `src/notify.ts` — デプロイ通知 Webhook（HMAC-SHA256 署名、3回リトライ）
+* `src/deployer.ts` — ビルドステップ統合、デプロイ通知送信（成功/失敗）
+* `src/types.ts` — ProjectConfig に build_command / build_timeout / log_retention_days / webhook_url / webhook_secret 追加
+* `src/main.ts` — ログ永続化初期化・ローテーション・環境変数マイグレーション統合
+* `src/logger.ts` — ログコールバック機構追加（SSE/永続化連携）
+
+## Ver.1.5-6 (2026-04-06)
+
+### Phase 6: ロールバック・ログ強化・ヘルスチェック・プライベートリポジトリ
+
+* `src/rollback.ts` — ロールバック管理（スナップショット KV 保存・最大10件・git checkout）
+* `src/sse.ts` — ログ SSE ストリーミング（Server-Sent Events、Bearer トークン認証、バッファ即時送信）
+* `src/health_check.ts` — Worker ヘルスチェック & 自動再起動（30秒間隔、指数バックオフ 1〜60秒、最大5回）
+* `src/credential.ts` — 認証情報ストア（PAT/SSH 鍵、AES-256-GCM 暗号化、HKDF 鍵導出）
+* `src/deployer.ts` — ロールバック機能、スナップショット保存、プライベートリポジトリ認証統合
+* `src/proxy.ts` — 管理 API に rollback / history / SSE stream / credential エンドポイント追加
+* `src/cli.ts` — rollback / history / credential / logs --stream コマンド追加
+* `src/types.ts` — ProjectConfig に health_check_* / auto_restart / max_restart_attempts 追加、DeployConfig に sse_token 追加
+
 ## Ver.1.4-5 (2026-04-06)
 
 ### Phase 5: 複数サーバー / エッジ
