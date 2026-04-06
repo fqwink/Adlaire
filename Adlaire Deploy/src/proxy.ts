@@ -7,11 +7,14 @@
 import type { ClusterManager } from "./cluster.ts";
 import { handleSyncConfig, verifyClusterAuth } from "./cluster.ts";
 import { loadConfig, saveConfig } from "./config.ts";
+import { removeCredential, setPatCredential, setSshCredential } from "./credential.ts";
 import type { Deployer } from "./deployer.ts";
 import { deleteProjectKv, getKvStats } from "./kv.ts";
 import { getLogTail } from "./logger.ts";
 import { validateEnv } from "./process_manager.ts";
 import type { ProcessManager } from "./process_manager.ts";
+import { listSnapshots } from "./rollback.ts";
+import { createSseStream } from "./sse.ts";
 import type { ProjectConfig, ProjectStatus } from "./types.ts";
 import { handleWebhook } from "./webhook.ts";
 
@@ -395,6 +398,93 @@ export function startAdminApi(
         const { commit, branch } = JSON.parse(body) as { commit: string; branch: string };
         const result = await deployer.requestDeploy(id, commit, branch, "cluster-sync");
         return json({ ok: true, data: { message: result === "queued" ? "Deploy queued" : "Deploy started" } }, 202);
+      }
+
+      // POST /api/projects/{id}/rollback — ロールバック（Phase 6）
+      const rollbackMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/rollback$`));
+      if (method === "POST" && rollbackMatch) {
+        const id = rollbackMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const deployIdParam = url.searchParams.get("deploy_id") ?? undefined;
+        try {
+          await deployer.rollback(id, deployIdParam);
+          return json({ ok: true, data: { message: "Rollback completed" } });
+        } catch (e) {
+          return json(
+            { ok: false, error: "rollback_failed", message: e instanceof Error ? e.message : String(e) },
+            400,
+          );
+        }
+      }
+
+      // GET /api/projects/{id}/history — デプロイスナップショット一覧（Phase 6）
+      const historyMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/history$`));
+      if (method === "GET" && historyMatch) {
+        const id = historyMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const snapshots = await listSnapshots(id);
+        return json({ ok: true, data: snapshots });
+      }
+
+      // GET /internal/logs/{id}/stream — ログ SSE ストリーミング（Phase 6）
+      const sseMatch = path.match(new RegExp(`^/internal/logs/${ID_PATTERN}/stream$`));
+      if (method === "GET" && sseMatch) {
+        const id = sseMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const authHeader = request.headers.get("authorization") ?? "";
+        const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+        const expectedToken = manager.getConfig().sse_token ?? "";
+        if (!expectedToken) {
+          return json({ ok: false, error: "not_configured", message: "SSE token not configured" }, 400);
+        }
+        return createSseStream(id, token, expectedToken);
+      }
+
+      // POST /api/projects/{id}/credential — 認証情報設定（Phase 6）
+      const credentialSetMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/credential$`));
+      if (method === "POST" && credentialSetMatch) {
+        const id = credentialSetMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        let body: { type: string; value: string };
+        try {
+          body = await request.json() as { type: string; value: string };
+        } catch {
+          return json({ ok: false, error: "bad_request", message: "Invalid JSON body" }, 400);
+        }
+        try {
+          if (body.type === "pat") {
+            await setPatCredential(id, body.value);
+          } else if (body.type === "ssh") {
+            await setSshCredential(id, body.value);
+          } else {
+            return json({ ok: false, error: "bad_request", message: "type must be 'pat' or 'ssh'" }, 400);
+          }
+          return json({ ok: true, data: { message: "Credential saved" } });
+        } catch (e) {
+          return json(
+            { ok: false, error: "credential_error", message: e instanceof Error ? e.message : String(e) },
+            400,
+          );
+        }
+      }
+
+      // DELETE /api/projects/{id}/credential — 認証情報削除（Phase 6）
+      const credentialDeleteMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/credential$`));
+      if (method === "DELETE" && credentialDeleteMatch) {
+        const id = credentialDeleteMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        await removeCredential(id);
+        return json({ ok: true, data: { message: "Credential removed" } });
       }
 
       return json({ ok: false, error: "not_found", message: "Unknown endpoint" }, 404);

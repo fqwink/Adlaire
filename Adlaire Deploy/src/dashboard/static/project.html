@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adlaire Deploy - Project</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#333}
+.header{background:#1e293b;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1.1em;font-weight:600}
+.header nav a{color:#93c5fd;text-decoration:none;margin-left:16px;font-size:.9em}
+.header nav a:hover{color:#fff}
+.header .logout{color:#f87171;cursor:pointer;background:none;border:none;font-size:.9em}
+.container{max-width:1200px;margin:24px auto;padding:0 24px}
+.breadcrumb{font-size:.85em;color:#666;margin-bottom:16px}
+.breadcrumb a{color:#2563eb;text-decoration:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px;overflow:hidden}
+.card-header{padding:12px 16px;border-bottom:1px solid #eee;font-weight:600;font-size:.95em;display:flex;align-items:center;justify-content:space-between}
+.card-body{padding:16px}
+.card-full{grid-column:1/-1}
+.info-row{display:flex;padding:6px 0;font-size:.9em}
+.info-label{width:130px;color:#666;flex-shrink:0}
+.info-value{color:#333}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:.8em;font-weight:600}
+.badge-running{background:#dcfce7;color:#166534}
+.badge-stopped{background:#f3f4f6;color:#4b5563}
+.badge-failed{background:#fee2e2;color:#991b1b}
+.badge-starting{background:#fef3c7;color:#92400e}
+.badge-deployed{background:#dcfce7;color:#166534}
+.badge-deploy_failed{background:#fee2e2;color:#991b1b}
+.btn{padding:6px 12px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;font-size:.85em;margin-right:6px}
+.btn:hover{background:#f5f5f5}
+.btn-primary{background:#2563eb;color:#fff;border-color:#2563eb}
+.btn-primary:hover{background:#1d4ed8}
+.btn-danger{background:#dc2626;color:#fff;border-color:#dc2626}
+.btn-danger:hover{background:#b91c1c}
+.log-box{background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:.8em;padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.log-err{color:#f87171}
+.log-info{color:#86efac}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:.85em}
+th{color:#666;font-weight:600}
+.actions{margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Adlaire Deploy</h1>
+  <nav>
+    <a href="/dashboard">Projects</a>
+    <a href="/dashboard/cluster">Cluster</a>
+    <button class="logout" onclick="logout()">Logout</button>
+  </nav>
+</div>
+<div class="container">
+  <div class="breadcrumb"><a href="/dashboard">Projects</a> / <span id="project-id"></span></div>
+  <div class="actions" id="action-buttons"></div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">Project Info</div>
+      <div class="card-body" id="info"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">Deploy History</div>
+      <div class="card-body"><table><thead><tr><th>ID</th><th>Commit</th><th>Status</th><th>Time</th></tr></thead><tbody id="deploys"></tbody></table></div>
+    </div>
+    <div class="card card-full">
+      <div class="card-header"><span>Logs</span><button class="btn" onclick="loadLogs()" style="font-size:.75em">Refresh</button></div>
+      <div class="card-body"><div class="log-box" id="logs">Loading...</div></div>
+    </div>
+  </div>
+</div>
+<script>
+var projectId=location.pathname.split("/").pop();
+document.getElementById("project-id").textContent=projectId;
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function badge(state){
+  var cls={"running":"running","stopped":"stopped","failed":"failed","starting":"starting","deployed":"deployed","deploy_failed":"deploy_failed"}[state]||"stopped";
+  return '<span class="badge badge-'+cls+'">'+esc(state)+'</span>';
+}
+async function api(path,method,body){
+  var opts={method:method||"GET",headers:{}};
+  if(body){opts.headers["Content-Type"]="application/json";opts.headers["X-Requested-With"]="XMLHttpRequest";opts.body=JSON.stringify(body)}
+  if(method&&method!=="GET")opts.headers["X-Requested-With"]="XMLHttpRequest";
+  var r=await fetch(path,opts);
+  if(r.status===401){location.href="/dashboard/login";return null}
+  return r.json();
+}
+async function loadInfo(){
+  var r=await api("/dashboard/api/projects/"+projectId);
+  if(!r||!r.ok)return;
+  var p=r.data;
+  document.getElementById("info").innerHTML=[
+    ["Hostname",esc(p.hostname)],["Port",p.port],["State",badge(p.state)],
+    ["Deploy State",badge(p.deploy_state)],["Auto Start",p.auto_start?"Yes":"No"],
+    ["Git URL",p.git?esc(p.git.url):"N/A"],["Git Branch",p.git?esc(p.git.branch):"N/A"]
+  ].map(function(r){return '<div class="info-row"><div class="info-label">'+r[0]+'</div><div class="info-value">'+r[1]+'</div></div>'}).join("");
+  var btns='';
+  if(p.state==="running"){
+    btns+='<button class="btn" onclick="action(\'stop\')">Stop</button>';
+    btns+='<button class="btn" onclick="action(\'restart\')">Restart</button>';
+  }else{
+    btns+='<button class="btn btn-primary" onclick="action(\'start\')">Start</button>';
+  }
+  if(p.git)btns+='<button class="btn btn-primary" onclick="action(\'deploy\')">Deploy</button>';
+  document.getElementById("action-buttons").innerHTML=btns;
+}
+async function loadDeploys(){
+  var r=await api("/dashboard/api/projects/"+projectId+"/deploys");
+  if(!r||!r.ok)return;
+  document.getElementById("deploys").innerHTML=r.data.slice(0,20).map(function(d){
+    return '<tr><td>'+esc(d.id)+'</td><td>'+esc(d.commit.slice(0,7))+'</td><td>'+badge(d.status)+'</td><td>'+esc(d.started_at)+'</td></tr>';
+  }).join("")||'<tr><td colspan="4">No deploy history</td></tr>';
+}
+async function loadLogs(){
+  var r=await api("/dashboard/api/projects/"+projectId+"/logs?tail=200");
+  if(!r||!r.ok)return;
+  var box=document.getElementById("logs");
+  if(r.data.length===0){box.textContent="No logs available";return}
+  box.innerHTML=r.data.map(function(e){
+    var cls=e.stream==="stderr"?"log-err":"log-info";
+    return '<span class="'+cls+'">'+esc(e.timestamp)+" ["+esc(e.stream)+"] "+esc(e.line)+"</span>";
+  }).join("\n");
+  box.scrollTop=box.scrollHeight;
+}
+async function action(act){
+  await api("/dashboard/api/projects/"+projectId+"/"+act,"POST");
+  setTimeout(function(){loadInfo();loadDeploys();loadLogs()},500);
+}
+async function logout(){await api("/dashboard/auth/logout","POST");location.href="/dashboard/login"}
+loadInfo();loadDeploys();loadLogs();
+setInterval(function(){loadInfo();loadLogs()},10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adlaire Deploy - Cluster</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#333}
+.header{background:#1e293b;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1.1em;font-weight:600}
+.header nav a{color:#93c5fd;text-decoration:none;margin-left:16px;font-size:.9em}
+.header nav a:hover{color:#fff}
+.header .logout{color:#f87171;cursor:pointer;background:none;border:none;font-size:.9em}
+.container{max-width:1200px;margin:24px auto;padding:0 24px}
+.card{background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px;overflow:hidden}
+.card-header{padding:12px 16px;border-bottom:1px solid #eee;font-weight:600;font-size:.95em;display:flex;align-items:center;justify-content:space-between}
+.card-body{padding:16px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:.9em}
+th{color:#666;font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:.8em;font-weight:600}
+.badge-healthy{background:#dcfce7;color:#166534}
+.badge-unhealthy{background:#fee2e2;color:#991b1b}
+.badge-unknown{background:#f3f4f6;color:#4b5563}
+.standalone{color:#666;font-size:.9em;padding:24px;text-align:center}
+.refresh-btn{font-size:.8em;cursor:pointer;background:none;border:1px solid #ddd;border-radius:3px;padding:4px 10px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Adlaire Deploy</h1>
+  <nav>
+    <a href="/dashboard">Projects</a>
+    <a href="/dashboard/cluster">Cluster</a>
+    <button class="logout" onclick="logout()">Logout</button>
+  </nav>
+</div>
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <span>Cluster Status</span>
+      <button class="refresh-btn" onclick="loadCluster()">Refresh</button>
+    </div>
+    <div class="card-body" id="cluster-content">Loading...</div>
+  </div>
+</div>
+<script>
+function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function badge(health){
+  var cls={"healthy":"healthy","unhealthy":"unhealthy","unknown":"unknown"}[health]||"unknown";
+  return '<span class="badge badge-'+cls+'">'+esc(health)+'</span>';
+}
+async function api(path,method){
+  var opts={method:method||"GET",headers:{}};
+  if(method&&method!=="GET")opts.headers["X-Requested-With"]="XMLHttpRequest";
+  var r=await fetch(path,opts);
+  if(r.status===401){location.href="/dashboard/login";return null}
+  return r.json();
+}
+async function loadCluster(){
+  var r=await api("/dashboard/api/cluster");
+  if(!r||!r.ok)return;
+  var el=document.getElementById("cluster-content");
+  if(r.data.mode==="standalone"){
+    el.innerHTML='<div class="standalone">Standalone mode (no cluster configured)</div>';
+    return;
+  }
+  if(r.data.nodes.length===0){
+    el.innerHTML='<div class="standalone">Cluster mode active, but no edge nodes configured</div>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>Node ID</th><th>URL</th><th>Health</th><th>Last Check</th></tr></thead><tbody>'
+    +r.data.nodes.map(function(n){
+      return '<tr><td>'+esc(n.node_id)+'</td><td>'+esc(n.url)+'</td><td>'+badge(n.health)+'</td><td>'+esc(n.last_check||"never")+'</td></tr>';
+    }).join("")+'</tbody></table>';
+}
+async function logout(){await api("/dashboard/auth/logout","POST");location.href="/dashboard/login"}
+loadCluster();
+setInterval(loadCluster,15000);
+</script>
+</body>
+</html>

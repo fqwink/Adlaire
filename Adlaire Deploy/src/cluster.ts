@@ -30,6 +30,12 @@ interface EdgeHealthTracker {
   health: NodeHealth;
   consecutive_failures: number;
   last_check: string | null;
+  /** Phase 8: 自動回復タイマー */
+  recovery_timer: number | null;
+  /** Phase 8: 現在のリカバリー遅延（ms） */
+  recovery_delay_ms: number;
+  /** Phase 8: 手動削除フラグ（自動回復対象外） */
+  manually_removed: boolean;
 }
 
 export class ClusterManager {
@@ -51,6 +57,9 @@ export class ClusterManager {
           health: "unknown",
           consecutive_failures: 0,
           last_check: null,
+          recovery_timer: null,
+          recovery_delay_ms: (this.cluster.recovery_initial_delay ?? 10) * 1000,
+          manually_removed: false,
         });
       }
     }
@@ -73,6 +82,13 @@ export class ClusterManager {
     if (this.healthCheckTimer !== null) {
       clearInterval(this.healthCheckTimer);
       this.healthCheckTimer = null;
+    }
+    // Phase 8: 回復タイマーもクリア
+    for (const tracker of this.edgeHealth.values()) {
+      if (tracker.recovery_timer !== null) {
+        clearTimeout(tracker.recovery_timer);
+        tracker.recovery_timer = null;
+      }
     }
   }
 
@@ -99,6 +115,15 @@ export class ClusterManager {
       clearTimeout(timeout);
 
       if (response.ok) {
+        if (tracker.health === "unhealthy") {
+          console.log(`[deploy] Edge "${tracker.node_id}" recovered to healthy`);
+          // 回復時にリカバリー遅延をリセット
+          tracker.recovery_delay_ms = (this.cluster.recovery_initial_delay ?? 10) * 1000;
+          if (tracker.recovery_timer !== null) {
+            clearTimeout(tracker.recovery_timer);
+            tracker.recovery_timer = null;
+          }
+        }
         tracker.health = "healthy";
         tracker.consecutive_failures = 0;
       } else {
@@ -109,10 +134,78 @@ export class ClusterManager {
     }
 
     if (tracker.consecutive_failures >= UNHEALTHY_THRESHOLD) {
+      const wasHealthy = tracker.health !== "unhealthy";
       tracker.health = "unhealthy";
+
+      // Phase 8: 自動回復トリガー
+      if (wasHealthy) {
+        this.triggerAutoRecovery(tracker);
+      }
     }
 
     tracker.last_check = new Date().toISOString();
+  }
+
+  /** Phase 8: edge 自動回復を開始する */
+  private triggerAutoRecovery(tracker: EdgeHealthTracker): void {
+    // 自動回復が無効または手動削除された場合は skip
+    if (this.cluster.auto_recovery_enabled === false) return;
+    if (tracker.manually_removed) return;
+    if (tracker.recovery_timer !== null) return;
+
+    const maxDelay = (this.cluster.recovery_max_delay ?? 300) * 1000;
+
+    console.log(
+      `[deploy] Edge "${tracker.node_id}" unhealthy. Auto-recovery in ${tracker.recovery_delay_ms}ms`,
+    );
+
+    tracker.recovery_timer = setTimeout(async () => {
+      tracker.recovery_timer = null;
+
+      try {
+        // 接続テスト
+        const authHeaders = await this.signRequest("/api/health", "");
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+
+        const response = await fetch(`${tracker.url}/api/health`, {
+          signal: controller.signal,
+          headers: authHeaders,
+        });
+
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          // 接続回復 → 設定再同期
+          console.log(`[deploy] Edge "${tracker.node_id}" reconnected. Syncing config...`);
+
+          const body = JSON.stringify(this.config.projects);
+          const path = "/api/cluster/sync-config";
+          const syncHeaders = await this.signRequest(path, body);
+
+          await fetch(`${tracker.url}${path}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...syncHeaders },
+            body,
+          });
+
+          tracker.health = "healthy";
+          tracker.consecutive_failures = 0;
+          tracker.recovery_delay_ms = (this.cluster.recovery_initial_delay ?? 10) * 1000;
+          console.log(`[deploy] Edge "${tracker.node_id}" auto-recovery completed`);
+          return;
+        }
+      } catch {
+        // 接続失敗
+      }
+
+      // 回復失敗 → バックオフ付きで再試行
+      tracker.recovery_delay_ms = Math.min(tracker.recovery_delay_ms * 2, maxDelay);
+      console.log(
+        `[deploy] Edge "${tracker.node_id}" recovery failed. Next attempt in ${tracker.recovery_delay_ms}ms`,
+      );
+      this.triggerAutoRecovery(tracker);
+    }, tracker.recovery_delay_ms) as unknown as number;
   }
 
   /** ノード一覧とヘルス状態を取得する */

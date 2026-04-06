@@ -23,6 +23,7 @@
 | `Adlaire License Server/` | **Adlaire License Server** | 初期実装済 | `Adlaire License Server/rulebookdocs/` |
 | `Adlaire BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire BaaS/rulebookdocs/` |
 | `Adlaire Deploy/` | **Adlaire Deploy** | Phase 0 完了 | `Adlaire Deploy/rulebookdocs/` |
+| `Adlaire Portal System/` | **Adlaire Portal System** | Ver.1.1 | `Adlaire Portal System/rulebookdocs/` |
 
 ### Adlaire Static CMS (`Adlaire Static CMS/`)
 
@@ -55,6 +56,14 @@ Deno / TypeScript。
 
 - 仕様の正: `Adlaire Deploy/rulebookdocs/DEPLOY_PLATFORM_RULEBOOK.md`
 - 開発規約: `Adlaire Deploy/CLAUDE.md`
+
+### Adlaire Portal System (`Adlaire Portal System/`)
+
+サーバー不要で動作する軽量な社内ポータルシステム。
+HTML5 + JavaScript（バニラ）/ LocalStorage / サーバーレス。
+
+- 仕様の正: `Adlaire Portal System/rulebookdocs/PORTAL_SYSTEM_RULEBOOK.md`
+- 開発規約: `Adlaire Portal System/CLAUDE.md`
 
 ---
 

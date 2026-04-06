@@ -10,6 +10,7 @@ import {
   removeProject,
   validateProjectId,
 } from "./config.ts";
+import type { DeploySnapshot } from "./rollback.ts";
 import type { ApiResponse, DeployRecord, KvStats, LogEntry, NodeStatus, ProjectStatus } from "./types.ts";
 
 /** 管理 API のベース URL を取得する */
@@ -425,16 +426,65 @@ async function cmdEnvSet(args: string[]): Promise<void> {
 async function cmdLogs(args: string[]): Promise<void> {
   const id = args[0];
   if (!id) {
-    console.error("Usage: adlaire-deploy logs <id> [--tail <n>]");
+    console.error("Usage: adlaire-deploy logs <id> [--tail <n>] [--stream]");
     Deno.exit(1);
   }
 
   let tail = 100;
+  let stream = false;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--tail" && i + 1 < args.length) {
       tail = parseInt(args[++i], 10);
       if (isNaN(tail)) tail = 100;
+    } else if (args[i] === "--stream") {
+      stream = true;
     }
+  }
+
+  if (stream) {
+    // SSE ストリーミング（Phase 6）
+    const config = await loadConfig();
+    const adminPort = config.port + 1;
+    const sseToken = config.sse_token ?? "";
+    if (!sseToken) {
+      console.error("Error: SSE token not configured (set sse_token in deploy.json)");
+      Deno.exit(1);
+    }
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${adminPort}/internal/logs/${id}/stream`,
+        {
+          headers: { "Authorization": `Bearer ${sseToken}` },
+        },
+      );
+      if (!response.ok) {
+        console.error(`Error: SSE connection failed (HTTP ${response.status})`);
+        Deno.exit(1);
+      }
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        // SSE のデータ行を解析して表示
+        for (const line of text.split("\n")) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6)) as { timestamp: string; level: string; message: string };
+              const prefix = data.level === "error" ? "ERR" : "OUT";
+              console.log(`${data.timestamp} [${prefix}] ${data.message}`);
+            } catch {
+              // 不正な JSON は無視
+            }
+          }
+        }
+      }
+    } catch {
+      console.error("Error: Could not connect to platform. Is 'serve' running?");
+      Deno.exit(1);
+    }
+    return;
   }
 
   try {
@@ -575,6 +625,144 @@ async function cmdSync(): Promise<void> {
   }
 }
 
+/** rollback コマンド — ロールバック実行（Phase 6） */
+async function cmdRollback(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy rollback <id> [deploy-id]");
+    Deno.exit(1);
+  }
+
+  const deployId = args[1];
+  const query = deployId ? `?deploy_id=${deployId}` : "";
+
+  try {
+    const result = await callAdminApi<{ message: string }>(
+      `/api/projects/${id}/rollback${query}`,
+      "POST",
+    );
+
+    if (result.ok) {
+      console.log(result.data.message);
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** history コマンド — デプロイスナップショット一覧（Phase 6） */
+async function cmdHistory(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy history <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<DeploySnapshot[]>(
+      `/api/projects/${id}/history`,
+    );
+
+    if (result.ok) {
+      if (result.data.length === 0) {
+        console.log("No deploy snapshots");
+        return;
+      }
+
+      console.log(
+        "DEPLOY_ID".padEnd(16) +
+        "COMMIT".padEnd(10) +
+        "DEPLOYED_AT",
+      );
+
+      for (const s of result.data) {
+        console.log(
+          s.deploy_id.padEnd(16) +
+          s.commit.slice(0, 7).padEnd(10) +
+          s.deployed_at,
+        );
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** credential コマンド — 認証情報管理（Phase 6） */
+async function cmdCredential(args: string[]): Promise<void> {
+  const action = args[0];
+  const id = args[1];
+
+  if (action === "set" && id) {
+    let type = "";
+    let value = "";
+
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === "--token" && i + 1 < args.length) {
+        type = "pat";
+        value = args[++i];
+      } else if (args[i] === "--ssh-key" && i + 1 < args.length) {
+        type = "ssh";
+        value = args[++i];
+      }
+    }
+
+    if (!type || !value) {
+      console.error("Usage: adlaire-deploy credential set <id> --token <PAT> | --ssh-key <path>");
+      Deno.exit(1);
+    }
+
+    try {
+      const result = await callAdminApi<{ message: string }>(
+        `/api/projects/${id}/credential`,
+        "POST",
+        { type, value },
+      );
+
+      if (result.ok) {
+        console.log(result.data.message);
+      } else {
+        console.error(`Error: ${result.message}`);
+        Deno.exit(1);
+      }
+    } catch {
+      console.error("Error: Could not connect to platform. Is 'serve' running?");
+      Deno.exit(1);
+    }
+  } else if (action === "remove" && id) {
+    try {
+      const result = await callAdminApi<{ message: string }>(
+        `/api/projects/${id}/credential`,
+        "DELETE",
+      );
+
+      if (result.ok) {
+        console.log(result.data.message);
+      } else {
+        console.error(`Error: ${result.message}`);
+        Deno.exit(1);
+      }
+    } catch {
+      console.error("Error: Could not connect to platform. Is 'serve' running?");
+      Deno.exit(1);
+    }
+  } else {
+    console.error("Usage:");
+    console.error("  adlaire-deploy credential set <id> --token <PAT>");
+    console.error("  adlaire-deploy credential set <id> --ssh-key <path>");
+    console.error("  adlaire-deploy credential remove <id>");
+    Deno.exit(1);
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -582,24 +770,28 @@ function showHelp(): void {
 Usage: adlaire-deploy <command> [options]
 
 Commands:
-  serve                Start the platform (reverse proxy + workers)
-  add <id>             Add a new project
-  remove <id>          Remove a project (config only, files preserved)
-  list                 List all configured projects
-  start <id>           Start a project worker
-  stop <id>            Stop a project worker
-  restart <id>         Restart a project worker
-  status [id]          Show project status (all if id omitted)
-  deploy <id>          Trigger a manual deploy
-  deploys <id>         Show deploy history
-  env <id>             Show environment variables (masked)
-  env-set <id> K=V...  Set environment variables (merge)
-  logs <id> [--tail n] Show worker logs (default 100 lines)
-  kv-stats <id>        Show KV database info
-  kv-reset <id>        Delete KV database (worker must be stopped)
-  nodes                Show cluster node statuses (origin only)
-  sync                 Sync config to all edge nodes (origin only)
-  help                 Show this help message
+  serve                    Start the platform (reverse proxy + workers + dashboard)
+  add <id>                 Add a new project
+  remove <id>              Remove a project (config only, files preserved)
+  list                     List all configured projects
+  start <id>               Start a project worker
+  stop <id>                Stop a project worker
+  restart <id>             Restart a project worker
+  status [id]              Show project status (all if id omitted)
+  deploy <id>              Trigger a manual deploy
+  deploys <id>             Show deploy history
+  rollback <id> [dep-id]   Rollback to a previous deploy
+  history <id>             Show deploy snapshots (rollback targets)
+  credential set <id> ...  Set credentials for private repos
+  credential remove <id>   Remove credentials
+  env <id>                 Show environment variables (masked)
+  env-set <id> K=V...      Set environment variables (merge)
+  logs <id> [opts]         Show worker logs (--tail n, --stream)
+  kv-stats <id>            Show KV database info
+  kv-reset <id>            Delete KV database (worker must be stopped)
+  nodes                    Show cluster node statuses (origin only)
+  sync                     Sync config to all edge nodes (origin only)
+  help                     Show this help message
 
 Options for 'serve':
   --host <host>        Bind address (default: 0.0.0.0)
@@ -612,7 +804,11 @@ Options for 'add':
   --no-auto-start      Disable auto-start on platform startup
   --git-url <url>      Git repository URL (HTTPS only)
   --git-branch <br>    Branch to deploy (default: main)
-  --webhook-secret <s> Webhook verification secret (required with --git-url)`);
+  --webhook-secret <s> Webhook verification secret (required with --git-url)
+
+Options for 'credential set':
+  --token <PAT>        Personal Access Token (HTTPS)
+  --ssh-key <path>     SSH key file path`);
 }
 
 // エントリポイント
@@ -660,6 +856,15 @@ switch (command) {
     break;
   case "kv-reset":
     await cmdKvReset(commandArgs);
+    break;
+  case "rollback":
+    await cmdRollback(commandArgs);
+    break;
+  case "history":
+    await cmdHistory(commandArgs);
+    break;
+  case "credential":
+    await cmdCredential(commandArgs);
     break;
   case "nodes":
     await cmdNodes();

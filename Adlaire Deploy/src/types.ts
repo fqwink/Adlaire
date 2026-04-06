@@ -46,6 +46,26 @@ export interface ProjectConfig {
   env: Record<string, string>;
   /** Worker の Deno パーミッション設定（null はデフォルト値を使用） */
   permissions: Permissions | null;
+  /** ヘルスチェック有効化（Phase 6） */
+  health_check_enabled?: boolean;
+  /** ヘルスチェック間隔（秒）（Phase 6） */
+  health_check_interval?: number;
+  /** 連続失敗回数の閾値（Phase 6） */
+  health_check_threshold?: number;
+  /** 自動再起動の有効化（Phase 6） */
+  auto_restart?: boolean;
+  /** 最大再起動試行回数（Phase 6） */
+  max_restart_attempts?: number;
+  /** ビルドコマンド（Phase 7） */
+  build_command?: string | null;
+  /** ビルドタイムアウト（秒）（Phase 7） */
+  build_timeout?: number;
+  /** ログ保持日数（Phase 7） */
+  log_retention_days?: number;
+  /** デプロイ通知 Webhook URL（Phase 7） */
+  webhook_url?: string | null;
+  /** Webhook HMAC-SHA256 署名用シークレット（Phase 7） */
+  webhook_secret?: string | null;
 }
 
 /** ログエントリ */
@@ -102,6 +122,12 @@ export interface DeployConfig {
   cluster: ClusterConfig | null;
   /** プロジェクト定義マップ（キー = プロジェクト ID） */
   projects: Record<string, ProjectConfig>;
+  /** ダッシュボードポート（Phase 9） */
+  dashboard_port?: number;
+  /** ダッシュボードセッション TTL（秒）（Phase 9） */
+  dashboard_session_ttl?: number;
+  /** SSE ストリーミング認証トークン（Phase 6） */
+  sse_token?: string;
 }
 
 /** Edge ノード定義 */
@@ -117,6 +143,12 @@ export interface ClusterConfig {
   secret: string;
   edges: EdgeNode[];
   origin_url?: string;
+  /** edge 自動回復の有効化（Phase 8） */
+  auto_recovery_enabled?: boolean;
+  /** 初回再試行までの遅延（秒）（Phase 8） */
+  recovery_initial_delay?: number;
+  /** 最大再試行間隔（秒）（Phase 8） */
+  recovery_max_delay?: number;
 }
 
 /** Edge ノード状態 */
