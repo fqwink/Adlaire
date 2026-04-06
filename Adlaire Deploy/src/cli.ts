@@ -10,7 +10,7 @@ import {
   removeProject,
   validateProjectId,
 } from "./config.ts";
-import type { ApiResponse, ProjectStatus } from "./types.ts";
+import type { ApiResponse, DeployRecord, ProjectStatus } from "./types.ts";
 
 /** 管理 API のベース URL を取得する */
 async function getAdminBaseUrl(): Promise<string> {
@@ -58,7 +58,7 @@ async function cmdServe(args: string[]): Promise<void> {
 async function cmdAdd(args: string[]): Promise<void> {
   const id = args[0];
   if (!id) {
-    console.error("Usage: adlaire-deploy add <id> --hostname <host> --entry <entry> --port <port> [--no-auto-start]");
+    console.error("Usage: adlaire-deploy add <id> --hostname <host> --entry <entry> --port <port> [options]");
     Deno.exit(1);
   }
 
@@ -72,6 +72,9 @@ async function cmdAdd(args: string[]): Promise<void> {
   let entry = "";
   let port = 0;
   let autoStart = true;
+  let gitUrl = "";
+  let gitBranch = "main";
+  let webhookSecret = "";
 
   for (let i = 1; i < args.length; i++) {
     switch (args[i]) {
@@ -87,6 +90,15 @@ async function cmdAdd(args: string[]): Promise<void> {
       case "--no-auto-start":
         autoStart = false;
         break;
+      case "--git-url":
+        gitUrl = args[++i] ?? "";
+        break;
+      case "--git-branch":
+        gitBranch = args[++i] ?? "main";
+        break;
+      case "--webhook-secret":
+        webhookSecret = args[++i] ?? "";
+        break;
     }
   }
 
@@ -95,12 +107,33 @@ async function cmdAdd(args: string[]): Promise<void> {
     Deno.exit(1);
   }
 
-  await addProject(id, { hostname, entry, port, auto_start: autoStart });
+  // Git URL 指定時は webhook-secret も必須
+  if (gitUrl && !webhookSecret) {
+    console.error("Error: --webhook-secret is required when --git-url is specified");
+    Deno.exit(1);
+  }
+
+  // Git URL は HTTPS のみ
+  if (gitUrl && !gitUrl.startsWith("https://")) {
+    console.error("Error: Git URL must use HTTPS (https://)");
+    Deno.exit(1);
+  }
+
+  const git = gitUrl
+    ? { url: gitUrl, branch: gitBranch, webhook_secret: webhookSecret }
+    : null;
+
+  await addProject(id, { hostname, entry, port, auto_start: autoStart, git });
   console.log(`Added project "${id}"`);
-  console.log(`  hostname:   ${hostname}`);
-  console.log(`  entry:      ${entry}`);
-  console.log(`  port:       ${port}`);
-  console.log(`  auto_start: ${autoStart}`);
+  console.log(`  hostname:       ${hostname}`);
+  console.log(`  entry:          ${entry}`);
+  console.log(`  port:           ${port}`);
+  console.log(`  auto_start:     ${autoStart}`);
+  if (git) {
+    console.log(`  git.url:        ${git.url}`);
+    console.log(`  git.branch:     ${git.branch}`);
+    console.log(`  webhook_secret: ${"*".repeat(8)}`);
+  }
 }
 
 /** remove コマンド */
@@ -183,10 +216,15 @@ async function cmdStatus(args: string[]): Promise<void> {
       if (result.ok) {
         const s = result.data;
         console.log(`Project: ${s.id}`);
-        console.log(`  hostname:   ${s.hostname}`);
-        console.log(`  port:       ${s.port}`);
-        console.log(`  auto_start: ${s.auto_start}`);
-        console.log(`  state:      ${s.state}`);
+        console.log(`  hostname:     ${s.hostname}`);
+        console.log(`  port:         ${s.port}`);
+        console.log(`  auto_start:   ${s.auto_start}`);
+        console.log(`  state:        ${s.state}`);
+        console.log(`  deploy_state: ${s.deploy_state}`);
+        if (s.git) {
+          console.log(`  git.url:      ${s.git.url}`);
+          console.log(`  git.branch:   ${s.git.branch}`);
+        }
       } else {
         console.error(`Error: ${result.message}`);
         Deno.exit(1);
@@ -226,6 +264,76 @@ async function cmdStatus(args: string[]): Promise<void> {
   }
 }
 
+/** deploy コマンド — 手動デプロイ実行 */
+async function cmdDeploy(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy deploy <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<{ message: string }>(
+      `/api/projects/${id}/deploy`,
+      "POST",
+    );
+
+    if (result.ok) {
+      console.log(result.data.message);
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** deploys コマンド — デプロイ履歴表示 */
+async function cmdDeploys(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy deploys <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<DeployRecord[]>(
+      `/api/projects/${id}/deploys`,
+    );
+
+    if (result.ok) {
+      if (result.data.length === 0) {
+        console.log("No deploy history");
+        return;
+      }
+
+      console.log(
+        "ID".padEnd(16) +
+        "COMMIT".padEnd(10) +
+        "STATUS".padEnd(16) +
+        "STARTED_AT",
+      );
+
+      for (const d of result.data) {
+        console.log(
+          d.id.padEnd(16) +
+          d.commit.slice(0, 7).padEnd(10) +
+          d.status.padEnd(16) +
+          d.started_at,
+        );
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -241,6 +349,8 @@ Commands:
   stop <id>            Stop a project worker
   restart <id>         Restart a project worker
   status [id]          Show project status (all if id omitted)
+  deploy <id>          Trigger a manual deploy
+  deploys <id>         Show deploy history
   help                 Show this help message
 
 Options for 'serve':
@@ -251,7 +361,10 @@ Options for 'add':
   --hostname <host>    Hostname for routing (required)
   --entry <file>       Entry point file (required)
   --port <port>        Worker port (required)
-  --no-auto-start      Disable auto-start on platform startup`);
+  --no-auto-start      Disable auto-start on platform startup
+  --git-url <url>      Git repository URL (HTTPS only)
+  --git-branch <br>    Branch to deploy (default: main)
+  --webhook-secret <s> Webhook verification secret (required with --git-url)`);
 }
 
 // エントリポイント
@@ -278,6 +391,12 @@ switch (command) {
     break;
   case "status":
     await cmdStatus(commandArgs);
+    break;
+  case "deploy":
+    await cmdDeploy(commandArgs);
+    break;
+  case "deploys":
+    await cmdDeploys(commandArgs);
     break;
   case "help":
   case "--help":

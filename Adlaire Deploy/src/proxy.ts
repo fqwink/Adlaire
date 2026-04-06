@@ -4,7 +4,10 @@
  * Host ヘッダーベースのリクエストルーティング
  */
 
+import type { Deployer } from "./deployer.ts";
 import type { ProcessManager } from "./process_manager.ts";
+import type { ProjectStatus } from "./types.ts";
+import { handleWebhook } from "./webhook.ts";
 
 /** エラーレスポンスを生成する */
 function errorResponse(
@@ -92,11 +95,26 @@ export function startProxy(
   return server;
 }
 
+/** deploy_state を付与した ProjectStatus を生成する */
+function enrichStatus(
+  base: Omit<ProjectStatus, "deploy_state"> | null,
+  deployer: Deployer,
+): ProjectStatus | null {
+  if (!base) return null;
+  return {
+    ...base,
+    deploy_state: deployer.getState(base.id),
+  };
+}
+
 /** 管理 API サーバーを起動する */
 export function startAdminApi(
   manager: ProcessManager,
+  deployer: Deployer,
   port: number,
 ): Deno.HttpServer {
+  const ID_PATTERN = "([a-z0-9][a-z0-9-]*[a-z0-9])";
+
   const server = Deno.serve(
     { hostname: "127.0.0.1", port },
     async (request: Request): Promise<Response> => {
@@ -113,14 +131,18 @@ export function startAdminApi(
 
       // GET /api/projects — プロジェクト一覧
       if (method === "GET" && path === "/api/projects") {
-        return json({ ok: true, data: manager.listStatus() });
+        const list = manager.listStatus().map((s) => ({
+          ...s,
+          deploy_state: deployer.getState(s.id),
+        }));
+        return json({ ok: true, data: list });
       }
 
       // GET /api/projects/{id} — プロジェクト詳細
-      const detailMatch = path.match(/^\/api\/projects\/([a-z0-9][a-z0-9-]*[a-z0-9])$/);
+      const detailMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}$`));
       if (method === "GET" && detailMatch) {
         const id = detailMatch[1];
-        const status = manager.getStatus(id);
+        const status = enrichStatus(manager.getStatus(id), deployer);
         if (!status) {
           return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
         }
@@ -128,14 +150,12 @@ export function startAdminApi(
       }
 
       // POST /api/projects/{id}/start
-      const startMatch = path.match(
-        /^\/api\/projects\/([a-z0-9][a-z0-9-]*[a-z0-9])\/start$/,
-      );
+      const startMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/start$`));
       if (method === "POST" && startMatch) {
         const id = startMatch[1];
         try {
           await manager.start(id);
-          return json({ ok: true, data: manager.getStatus(id) });
+          return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
           return json(
             { ok: false, error: "start_failed", message: e instanceof Error ? e.message : String(e) },
@@ -145,14 +165,12 @@ export function startAdminApi(
       }
 
       // POST /api/projects/{id}/stop
-      const stopMatch = path.match(
-        /^\/api\/projects\/([a-z0-9][a-z0-9-]*[a-z0-9])\/stop$/,
-      );
+      const stopMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/stop$`));
       if (method === "POST" && stopMatch) {
         const id = stopMatch[1];
         try {
           await manager.stop(id);
-          return json({ ok: true, data: manager.getStatus(id) });
+          return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
           return json(
             { ok: false, error: "stop_failed", message: e instanceof Error ? e.message : String(e) },
@@ -162,20 +180,61 @@ export function startAdminApi(
       }
 
       // POST /api/projects/{id}/restart
-      const restartMatch = path.match(
-        /^\/api\/projects\/([a-z0-9][a-z0-9-]*[a-z0-9])\/restart$/,
-      );
+      const restartMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/restart$`));
       if (method === "POST" && restartMatch) {
         const id = restartMatch[1];
         try {
           await manager.restart(id);
-          return json({ ok: true, data: manager.getStatus(id) });
+          return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
           return json(
             { ok: false, error: "restart_failed", message: e instanceof Error ? e.message : String(e) },
             400,
           );
         }
+      }
+
+      // POST /api/webhook/{id} — Git push Webhook 受信
+      const webhookMatch = path.match(new RegExp(`^/api/webhook/${ID_PATTERN}$`));
+      if (method === "POST" && webhookMatch) {
+        const id = webhookMatch[1];
+        return handleWebhook(request, id, manager, deployer);
+      }
+
+      // GET /api/projects/{id}/deploys — デプロイ履歴一覧
+      const deploysMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/deploys$`));
+      if (method === "GET" && deploysMatch) {
+        const id = deploysMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        return json({ ok: true, data: deployer.getHistory(id) });
+      }
+
+      // POST /api/projects/{id}/deploy — 手動デプロイ実行
+      const manualDeployMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/deploy$`));
+      if (method === "POST" && manualDeployMatch) {
+        const id = manualDeployMatch[1];
+        const projectConfig = manager.getProjectConfig(id);
+        if (!projectConfig) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        if (!projectConfig.git) {
+          return json(
+            { ok: false, error: "not_configured", message: "Git not configured for this project" },
+            400,
+          );
+        }
+        const result = await deployer.requestDeploy(
+          id,
+          "manual",
+          projectConfig.git.branch,
+          "manual",
+        );
+        if (result === "queued") {
+          return json({ ok: true, data: { message: "Deploy queued" } }, 202);
+        }
+        return json({ ok: true, data: { message: "Deploy started" } }, 202);
       }
 
       return json({ ok: false, error: "not_found", message: "Unknown endpoint" }, 404);

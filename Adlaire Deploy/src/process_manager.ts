@@ -39,18 +39,19 @@ export class ProcessManager {
   }
 
   /** 全プロジェクトの状態一覧を取得する */
-  listStatus(): ProjectStatus[] {
+  listStatus(): Omit<ProjectStatus, "deploy_state">[] {
     return Array.from(this.processes.values()).map((info) => ({
       id: info.id,
       hostname: info.config.hostname,
       port: info.config.port,
       auto_start: info.config.auto_start,
       state: info.state,
+      git: info.config.git,
     }));
   }
 
   /** 指定プロジェクトの状態を取得する */
-  getStatus(id: string): ProjectStatus | null {
+  getStatus(id: string): Omit<ProjectStatus, "deploy_state"> | null {
     const info = this.processes.get(id);
     if (!info) return null;
     return {
@@ -59,6 +60,7 @@ export class ProcessManager {
       port: info.config.port,
       auto_start: info.config.auto_start,
       state: info.state,
+      git: info.config.git,
     };
   }
 

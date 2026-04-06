@@ -1,5 +1,19 @@
 # CHANGES - 変更履歴
 
+## Ver.1.1-2 (2026-04-06)
+
+### Phase 2: Git 連携
+
+* DEPLOY_PLATFORM_RULEBOOK.md に Phase 2 詳細仕様を追記（P2.1〜P2.8）
+* RELEASE_PLAN_RULEBOOK.md に Ver.1.1-2 計画を追加
+* `src/types.ts` — GitConfig, DeployState, DeployRecord 型を追加、ProjectStatus 拡張
+* `src/deployer.ts` — デプロイパイプライン（git clone/pull → Worker 再起動・排他制御・履歴管理）
+* `src/webhook.ts` — Webhook 受信ハンドラ（HMAC-SHA256 署名検証・GitHub push イベント解析）
+* `src/proxy.ts` — 管理 API に webhook / deploys / 手動デプロイエンドポイントを追加
+* `src/cli.ts` — deploy / deploys コマンド追加、add コマンドに --git-url / --git-branch / --webhook-secret オプション追加
+* `src/main.ts` — Deployer 初期化統合
+* `src/process_manager.ts` — ProjectStatus に git フィールドを追加
+
 ## Ver.1.0-1 (2026-04-06)
 
 ### Phase 1: 最小デプロイ基盤

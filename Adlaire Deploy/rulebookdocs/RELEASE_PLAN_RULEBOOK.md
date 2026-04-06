@@ -27,6 +27,21 @@
 | 4 | 追加機能 | CLI（serve / add / remove / list / start / stop / restart / status） | 実装済 |
 | 5 | 追加機能 | 管理 API（内部ポート、Worker 制御エンドポイント） | 実装済 |
 
+### Ver.1.1-2 — Phase 2: Git 連携
+
+- **種別**: 追加機能
+- **対象仕様**: DEPLOY_PLATFORM_RULEBOOK.md Phase 2 詳細仕様（P2.1〜P2.8）
+
+#### 含まれる機能
+
+| # | 種別 | 概要 | 状態 |
+|:-:|------|------|:----:|
+| 1 | 追加機能 | Git リポジトリ連携（ProjectConfig 拡張・GitConfig） | 実装済 |
+| 2 | 追加機能 | Webhook 受信（HMAC-SHA256 署名検証・GitHub 互換） | 実装済 |
+| 3 | 追加機能 | デプロイパイプライン（clone/pull → Worker 再起動・排他制御） | 実装済 |
+| 4 | 追加機能 | デプロイ履歴（メモリ内保持・管理 API） | 実装済 |
+| 5 | 追加機能 | CLI 拡張（deploy / deploys コマンド・add オプション拡張） | 実装済 |
+
 ---
 
 ## リリース履歴

@@ -5,6 +5,7 @@
  */
 
 import { loadConfig } from "./config.ts";
+import { Deployer } from "./deployer.ts";
 import { ProcessManager } from "./process_manager.ts";
 import { startAdminApi, startProxy } from "./proxy.ts";
 
@@ -33,14 +34,15 @@ async function serve(args: string[]): Promise<void> {
 
   console.log("[deploy] Adlaire Deploy starting...");
 
-  // プロセスマネージャ初期化
+  // プロセスマネージャ・デプロイヤー初期化
   const manager = new ProcessManager(config);
+  const deployer = new Deployer(manager);
 
   // リバースプロキシ起動
   const proxyServer = startProxy(manager, host, port);
 
   // 管理 API 起動
-  const adminServer = startAdminApi(manager, adminPort);
+  const adminServer = startAdminApi(manager, deployer, adminPort);
 
   // auto_start プロジェクトを起動
   await manager.startAutoStartProjects();

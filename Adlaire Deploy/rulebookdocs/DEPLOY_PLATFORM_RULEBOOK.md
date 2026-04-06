@@ -450,6 +450,215 @@ api-server  api.example.com       3002  true
 
 ---
 
+# Phase 2 詳細仕様 — Git 連携
+
+## P2.1 スコープ
+
+Phase 2 は以下の機能を提供する。
+
+1. **Git リポジトリ連携** — プロジェクトと Git リポジトリの紐付け
+2. **Webhook 受信** — Git push イベントの受信
+3. **自動デプロイパイプライン** — clone/pull → 再起動の自動化
+4. **デプロイ履歴** — デプロイの実行記録
+
+Phase 2 では以下を**対象外**とする。
+
+- ビルドステップ（TypeScript コンパイル等）のカスタマイズ
+- ブランチ別デプロイ（Phase 2 では単一ブランチのみ）
+- ロールバック機能
+- デプロイプレビュー
+
+## P2.2 追加ディレクトリ構成
+
+Phase 1 のディレクトリ構成に以下を追加する。
+
+```
+Adlaire Deploy/
+├── src/
+│   ├── ... (Phase 1 のファイル)
+│   ├── deployer.ts          # デプロイパイプライン
+│   └── webhook.ts           # Webhook 受信ハンドラ
+```
+
+## P2.3 プロジェクト設定の拡張
+
+### P2.3.1 `ProjectConfig` への追加フィールド
+
+```json
+{
+  "projects": {
+    "my-app": {
+      "hostname": "my-app.example.com",
+      "entry": "main.ts",
+      "port": 3001,
+      "auto_start": true,
+      "git": {
+        "url": "https://github.com/user/my-app.git",
+        "branch": "main",
+        "webhook_secret": "random-secret-string"
+      }
+    }
+  }
+}
+```
+
+| フィールド | 型 | 必須 | デフォルト | 説明 |
+|-----------|------|:----:|:----------:|------|
+| `git` | `GitConfig \| null` | — | `null` | Git 連携設定。`null` の場合は Git 連携無効 |
+| `git.url` | `string` | ○ | — | Git リポジトリ URL（HTTPS のみ） |
+| `git.branch` | `string` | — | `"main"` | デプロイ対象ブランチ |
+| `git.webhook_secret` | `string` | ○ | — | Webhook 検証用シークレット |
+
+### P2.3.2 Git リポジトリ URL 制約
+
+- HTTPS URL のみ許可する（`https://` で始まること）。
+- SSH URL（`git@`）は Phase 2 では対象外とする。
+
+## P2.4 デプロイパイプライン
+
+### P2.4.1 デプロイフロー
+
+```
+Webhook 受信 → 検証 → clone/pull → Worker 再起動
+```
+
+1. **Webhook 検証**: シークレットによる署名検証
+2. **ブランチ確認**: push 対象ブランチが設定と一致するか確認
+3. **ソースコード取得**:
+   - 初回: `git clone --depth 1 --branch {branch} {url}` を `projects_dir/{id}/` に実行
+   - 2回目以降: `git pull origin {branch}` を `projects_dir/{id}/` で実行
+4. **Worker 再起動**: プロセスマネージャの `restart` を呼び出す
+
+### P2.4.2 デプロイ状態
+
+```
+idle → deploying → deployed
+              ↘ deploy_failed
+```
+
+| 状態 | 説明 |
+|------|------|
+| `idle` | デプロイ待機中（初期状態） |
+| `deploying` | デプロイ処理中 |
+| `deployed` | 最後のデプロイが成功 |
+| `deploy_failed` | 最後のデプロイが失敗 |
+
+### P2.4.3 排他制御
+
+- 同一プロジェクトに対する同時デプロイは禁止する。
+- デプロイ中に新しい Webhook を受信した場合、現在のデプロイ完了後に再デプロイを実行する（キュー深さ 1）。
+
+### P2.4.4 Git 操作コマンド
+
+初回 clone:
+
+```
+git clone --depth 1 --branch {branch} {url} {projects_dir}/{id}
+```
+
+更新 pull:
+
+```
+cd {projects_dir}/{id} && git fetch origin {branch} && git reset --hard origin/{branch}
+```
+
+- `--depth 1` で履歴を最小化する。
+- `git reset --hard` で強制的に最新コミットに合わせる（ローカル変更は破棄）。
+
+## P2.5 Webhook
+
+### P2.5.1 エンドポイント
+
+管理 API（内部ポート `port + 1`）に以下を追加する。
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `POST` | `/api/webhook/{id}` | Git push Webhook 受信 |
+
+### P2.5.2 署名検証
+
+GitHub 互換の HMAC-SHA256 署名検証を行う。
+
+1. リクエストヘッダー `X-Hub-Signature-256` を取得する。
+2. リクエストボディと `webhook_secret` で HMAC-SHA256 を計算する。
+3. `sha256={hex_digest}` 形式で比較する。
+4. 不一致の場合は `403 Forbidden` を返す。
+
+### P2.5.3 ペイロード解析
+
+GitHub push イベントペイロードから以下を抽出する。
+
+| フィールド | 用途 |
+|-----------|------|
+| `ref` | push 対象ブランチ（`refs/heads/{branch}` 形式） |
+| `after` | コミット SHA |
+| `pusher.name` | push 実行者 |
+
+### P2.5.4 レスポンス
+
+| 状況 | ステータス | ボディ |
+|------|:----------:|--------|
+| デプロイ開始 | `202` | `{"ok": true, "data": {"message": "Deploy started", "commit": "{sha}"}}` |
+| 署名不正 | `403` | `{"ok": false, "error": "forbidden", "message": "Invalid signature"}` |
+| ブランチ不一致 | `200` | `{"ok": true, "data": {"message": "Branch ignored", "ref": "{ref}"}}` |
+| Git 未設定 | `400` | `{"ok": false, "error": "not_configured", "message": "Git not configured for this project"}` |
+| デプロイ中 | `202` | `{"ok": true, "data": {"message": "Deploy queued"}}` |
+
+## P2.6 デプロイ履歴
+
+### P2.6.1 デプロイレコード
+
+各デプロイの結果をメモリ内に保持する（最大 50 件/プロジェクト）。
+
+```json
+{
+  "id": "deploy_001",
+  "project_id": "my-app",
+  "commit": "abc1234",
+  "branch": "main",
+  "pusher": "user",
+  "status": "deployed",
+  "started_at": "2026-04-06T12:00:00Z",
+  "finished_at": "2026-04-06T12:00:05Z",
+  "error": null
+}
+```
+
+### P2.6.2 管理 API 追加
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `GET` | `/api/projects/{id}/deploys` | デプロイ履歴一覧 |
+| `POST` | `/api/projects/{id}/deploy` | 手動デプロイ実行 |
+
+## P2.7 CLI 拡張
+
+### P2.7.1 追加コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `deploy <id>` | 手動デプロイを実行する（管理 API 経由） |
+| `deploys <id>` | デプロイ履歴を表示する（管理 API 経由） |
+
+### P2.7.2 `add` コマンドのオプション拡張
+
+```
+adlaire-deploy add <id> --hostname <host> --entry <entry> --port <port> \
+  [--git-url <url>] [--git-branch <branch>] [--webhook-secret <secret>]
+```
+
+- `--git-url` 指定時、`--webhook-secret` も必須とする。
+- `--git-branch` 省略時は `"main"` をデフォルトとする。
+
+## P2.8 制約事項
+
+- Phase 2 では HTTPS の Git URL のみ対応する。SSH は Phase 5 以降で検討する。
+- 認証付き Git リポジトリ（プライベートリポジトリ）は Phase 2 では対象外とする。公開リポジトリのみ。
+- ビルドステップのカスタマイズは Phase 2 では対象外とする。エントリポイントは直接実行可能な TypeScript/JavaScript ファイルであること。
+- デプロイ履歴はメモリ内保持のみ。プラットフォーム再起動で消失する。永続化は Phase 3 以降で KV ストレージ導入後に対応する。
+
+---
+
 # 9. 最終規則
 
 ## 9.1 上位規範性
