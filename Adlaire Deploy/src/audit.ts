@@ -56,7 +56,6 @@ export function recordAudit(
 
 async function writeAuditLog(entry: AuditLog): Promise<void> {
   const kv = getPlatformKv();
-  if (!kv) return;
 
   const timestampReverse = 9999999999999 - Date.now();
   const key = ["audit", timestampReverse, entry.id];
@@ -92,7 +91,6 @@ export async function getAuditLogs(
   projectId?: string,
 ): Promise<AuditLog[]> {
   const kv = getPlatformKv();
-  if (!kv) return [];
 
   const effectiveLimit = Math.min(Math.max(limit, 1), 100);
   const results: AuditLog[] = [];

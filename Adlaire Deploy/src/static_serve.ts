@@ -45,13 +45,22 @@ export async function serveStaticFile(
   requestPath: string,
 ): Promise<Response> {
   // パス正規化・トラバーサル防止
-  const normalized = normalize(decodeURIComponent(requestPath));
+  const decoded = decodeURIComponent(requestPath);
+
+  // null バイト・.. を含むパスを拒否
+  if (decoded.includes("\0") || decoded.includes("..")) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  const normalized = normalize(decoded);
   const safePath = normalized.replace(/^\/+/, "");
 
   const filePath = join(baseDir, safePath);
 
-  // baseDir 外へのアクセスを拒否
-  if (!filePath.startsWith(baseDir)) {
+  // 正規化後のパスが baseDir 外にあるかチェック
+  const resolvedBase = normalize(baseDir);
+  const resolvedFile = normalize(filePath);
+  if (!resolvedFile.startsWith(resolvedBase)) {
     return new Response("Forbidden", { status: 403 });
   }
 

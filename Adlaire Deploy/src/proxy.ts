@@ -18,7 +18,7 @@ import { listSnapshots } from "./rollback.ts";
 import { createSseStream } from "./sse.ts";
 import type { ProjectConfig, ProjectStatus } from "./types.ts";
 import { createBackup, restoreBackup } from "./backup.ts";
-import { abortCanary, promoteCanary } from "./blue_green.ts";
+import { abortCanary, promoteCanary, resolveCanaryPort } from "./blue_green.ts";
 import { checkForUpdate, getCurrentVersion, performUpdate, platformRollback } from "./updater.ts";
 import { getAllMetricsSummary, getProjectMetrics, recordMetrics } from "./metrics.ts";
 import { createPreview, listPreviews, removePreview } from "./preview.ts";
@@ -88,8 +88,13 @@ export function startProxy(
         );
       }
 
+      // カナリアルーティング（Phase 12）: ウェイト比で転送先ポートを決定
+      const targetPort = projectConfig?.canary
+        ? resolveCanaryPort(projectConfig)
+        : resolved.port;
+
       // Worker への転送 URL を構築
-      const targetUrl = new URL(url.pathname + url.search, `http://127.0.0.1:${resolved.port}`);
+      const targetUrl = new URL(url.pathname + url.search, `http://127.0.0.1:${targetPort}`);
 
       // 転送用ヘッダーを構築
       const forwardHeaders = new Headers(request.headers);
