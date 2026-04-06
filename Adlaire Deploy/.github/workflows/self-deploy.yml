@@ -1,0 +1,28 @@
+# Adlaire Deploy — プラットフォーム自動デプロイ
+# 仕様: DEPLOY_PLATFORM_RULEBOOK.md P14.4
+#
+# main ブランチに Adlaire Deploy/ 以下の変更がプッシュされた時、
+# VPS 上の Adlaire Deploy を自動アップデートする。
+#
+# GitHub Secrets 必須:
+#   ADLAIRE_DEPLOY_URL: https://deploy.example.com
+#   ADLAIRE_ADMIN_TOKEN: 管理 API の認証トークン
+
+name: Adlaire Deploy Self-Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Adlaire Deploy/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Platform Update
+        run: |
+          curl -sf -X POST "${{ secrets.ADLAIRE_DEPLOY_URL }}/api/platform/update" \
+            -H "Authorization: Bearer ${{ secrets.ADLAIRE_ADMIN_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' || echo "Update trigger failed (non-fatal)"

@@ -1,5 +1,58 @@
 # CHANGES - 変更履歴
 
+## Ver.1.10-11 (2026-04-06)
+
+### Phase 11: 静的サイトホスティング・メトリクス収集
+
+* `src/static_serve.ts` — 静的ファイル配信（MIME 自動判定・SPA フォールバック・ディレクトリトラバーサル防止）
+* `src/metrics.ts` — メトリクス収集（1分バケツ・最大60分保持・P99計算・プロジェクト別管理）
+* `src/proxy.ts` — 静的サイト配信統合・メトリクス記録・`GET /api/metrics` / `GET /api/projects/{id}/metrics`
+* `src/types.ts` — ProjectConfig に `type` / `static_dir` 追加
+
+## Ver.1.11-12 (2026-04-06)
+
+### Phase 12: Blue-Green デプロイ・カナリアデプロイ
+
+* `src/blue_green.ts` — Blue-Green デプロイ（Green 起動→ヘルスチェック→切替→旧停止）
+* `src/blue_green.ts` — カナリアルーティング（ウェイト比振り分け・昇格・中止）
+* `src/proxy.ts` — カナリア promote/abort API エンドポイント
+* `src/types.ts` — ProjectConfig に `blue_green` / `green_port` / `canary` (CanaryConfig) 追加
+
+## Ver.1.12-13 (2026-04-06)
+
+### Phase 13: デプロイスケジューリング・デプロイプレビュー URL
+
+* `src/scheduler.ts` — cron スケジューリング（5フィールド cron 式・1回限り実行・60秒チェック間隔）
+* `src/preview.ts` — プレビュー環境（ブランチ単位・TTL 自動削除・ポート自動割当）
+* `src/proxy.ts` — schedules/previews CRUD エンドポイント
+* `src/types.ts` — ScheduledDeploy / PreviewEnv 型、DeployConfig に preview_* フィールド追加
+
+## Ver.1.9-14 (2026-04-06)
+
+### Phase 14: VPS 運用基盤
+
+* `install.sh` — VPS インストールスクリプト（冪等・Deno 自動インストール・systemd・ファイアウォール）
+* `systemd/adlaire-deploy.service` — systemd ユニットファイルテンプレート
+* `src/updater.ts` — セルフアップデート（バージョンチェック・GitHub Releases 連携）
+* `src/backup.ts` — バックアップ・リストア（tar.gz・dry-run 対応）
+* `provision.sh` — マルチVPS プロビジョニングスクリプト
+* `.github/workflows/self-deploy.yml` — プラットフォーム自動デプロイ GitHub Actions
+* `docs/ci-templates/webhook-deploy.yml` — Webhook デプロイテンプレート
+* `VERSION` — 現行バージョンファイル（1.9-14）
+* `src/proxy.ts` — platform version/update/rollback/backup/restore API エンドポイント
+* `src/cli.ts` — platform コマンド（version/update/rollback/backup/restore）
+
+## Ver.1.9-10 (2026-04-06)
+
+### Phase 10: 監査ログ・デプロイパイプライン並列化・モノレポ対応
+
+* `src/audit.ts` — 監査ログ（AuditLog 型、KV 永続化、最大 10,000 件保持、非同期・非ブロッキング）
+* `src/deployer.ts` — グローバルセマフォ並列化（max_parallel_deploys、デフォルト 4）、モノレポ root_dir 対応、監査ログ連携
+* `src/proxy.ts` — `GET /api/audit` エンドポイント追加、start/stop/restart に監査ログ記録
+* `src/cli.ts` — `audit` コマンド追加（--limit N, --project <id>）
+* `src/types.ts` — ProjectConfig に root_dir 追加、DeployConfig に max_parallel_deploys 追加
+* `src/config.ts` — Phase 10 マイグレーション（root_dir / max_parallel_deploys デフォルト値設定）
+
 ## Ver.1.8-9 (2026-04-06)
 
 ### Phase 9: 管理ダッシュボード Web UI

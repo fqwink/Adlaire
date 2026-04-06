@@ -1,0 +1,45 @@
+/* Adlaire Style — Nav
+ * 仕様: STYLE_RULEBOOK.md §7.2
+ */
+
+.nav-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  margin: 0;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-sub);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-base);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-link:hover {
+  background-color: var(--color-bg-muted);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.nav-link.is-active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.nav-count {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background-color: var(--color-bg-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}

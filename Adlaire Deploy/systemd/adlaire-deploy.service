@@ -1,0 +1,30 @@
+# Adlaire Deploy — systemd ユニットファイルテンプレート
+# 仕様: DEPLOY_PLATFORM_RULEBOOK.md P14.2
+#
+# install.sh が __PLACEHOLDER__ を実際の値に置換して /etc/systemd/system/ に配置する。
+
+[Unit]
+Description=Adlaire Deploy Platform
+Documentation=https://github.com/fqwink/adlaire
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_USER__
+WorkingDirectory=__INSTALL_PREFIX__
+EnvironmentFile=-__CONFIG_DIR__/.env
+ExecStart=__DENO_BIN__ run --allow-all __INSTALL_PREFIX__/src/main.ts serve --config __CONFIG_DIR__/deploy.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__DATA_DIR__ __CONFIG_DIR__
+
+[Install]
+WantedBy=multi-user.target

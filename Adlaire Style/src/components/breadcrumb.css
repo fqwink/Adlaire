@@ -1,0 +1,36 @@
+/* Adlaire Style — Breadcrumb
+ * 仕様: STYLE_RULEBOOK.md §7.3
+ */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.breadcrumb-item a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.breadcrumb-item a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-item:not(:last-child)::after {
+  content: "/";
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.breadcrumb-item.is-current {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}

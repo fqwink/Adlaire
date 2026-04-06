@@ -1,0 +1,137 @@
+/* Adlaire Style — Modal
+ * 仕様: STYLE_RULEBOOK.md §7.10
+ */
+
+/* === 7.10.1 基本モーダル === */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: none;
+}
+
+.modal-backdrop.is-open {
+  display: block;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
+  background-color: var(--color-bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: none;
+}
+
+.modal.is-open {
+  display: block;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-weight: var(--font-weight-semibold);
+}
+
+.modal-body {
+  padding: var(--space-4);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: var(--font-size-xl);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--color-text);
+}
+
+/* === 7.10.2 差分表示モーダル === */
+
+.diff-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: none;
+}
+
+.diff-modal.is-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diff-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.diff-modal__content {
+  position: relative;
+  z-index: 1;
+  background-color: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 800px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  padding: var(--space-4);
+}
+
+.diff-modal__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  background: none;
+  border: none;
+  font-size: var(--font-size-xl);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.diff-line--added {
+  background-color: var(--color-success-bg);
+  display: block;
+  padding: 1px var(--space-2);
+}
+
+.diff-line--removed {
+  background-color: var(--color-danger-bg);
+  display: block;
+  padding: 1px var(--space-2);
+}
+
+.diff-line--changed {
+  background-color: var(--color-warning-bg);
+  display: block;
+  padding: 1px var(--space-2);
+}

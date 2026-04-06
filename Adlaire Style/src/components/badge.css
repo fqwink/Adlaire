@@ -1,0 +1,107 @@
+/* Adlaire Style — Badge
+ * 仕様: STYLE_RULEBOOK.md §7.7
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+/* === 7.7.1 セマンティックバリアント === */
+
+.badge-primary {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.badge-success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.badge-warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.badge-danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.badge-info {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.badge-neutral {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral-text);
+}
+
+/* === 7.7.2 デプロイ・プロセスステータス === */
+
+.badge-running {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.badge-stopped {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral-text);
+}
+
+.badge-failed {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.badge-starting {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.badge-deployed {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.badge-deploy-failed {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+/* === 7.7.3 クラスタ・ヘルスステータス === */
+
+.badge-healthy {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.badge-unhealthy {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.badge-unknown {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral-text);
+}
+
+/* === 7.7.4 コンテンツステータス === */
+
+.status-published {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.status-draft {
+  background-color: var(--color-neutral-bg);
+  color: var(--color-neutral-text);
+}

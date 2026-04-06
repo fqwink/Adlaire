@@ -4,6 +4,7 @@
  * Host ヘッダーベースのリクエストルーティング
  */
 
+import { getAuditLogs, recordAudit } from "./audit.ts";
 import type { ClusterManager } from "./cluster.ts";
 import { handleSyncConfig, verifyClusterAuth } from "./cluster.ts";
 import { loadConfig, saveConfig } from "./config.ts";
@@ -16,6 +17,13 @@ import type { ProcessManager } from "./process_manager.ts";
 import { listSnapshots } from "./rollback.ts";
 import { createSseStream } from "./sse.ts";
 import type { ProjectConfig, ProjectStatus } from "./types.ts";
+import { createBackup, restoreBackup } from "./backup.ts";
+import { abortCanary, promoteCanary, resolveCanaryPort } from "./blue_green.ts";
+import { checkForUpdate, getCurrentVersion, performUpdate, platformRollback } from "./updater.ts";
+import { getAllMetricsSummary, getProjectMetrics, recordMetrics } from "./metrics.ts";
+import { createPreview, listPreviews, removePreview } from "./preview.ts";
+import { addSchedule, listSchedules, removeSchedule } from "./scheduler.ts";
+import { serveStaticFile } from "./static_serve.ts";
 import { handleWebhook } from "./webhook.ts";
 
 /** エラーレスポンスを生成する */
@@ -56,6 +64,22 @@ export function startProxy(
         );
       }
 
+      const startTime = Date.now();
+      const projectId = resolved.id;
+
+      // Phase 11: 静的サイトホスティング
+      const projectConfig = manager.getProjectConfig(projectId);
+      if (projectConfig?.type === "static" && projectConfig.static_dir) {
+        const config = manager.getConfig();
+        const rootDir = projectConfig.root_dir ?? "";
+        const baseDir = rootDir
+          ? `${config.projects_dir}/${projectId}/${rootDir}/${projectConfig.static_dir}`
+          : `${config.projects_dir}/${projectId}/${projectConfig.static_dir}`;
+        const response = await serveStaticFile(baseDir, url.pathname);
+        recordMetrics(projectId, response.status, Date.now() - startTime);
+        return response;
+      }
+
       if (resolved.state !== "running") {
         return errorResponse(
           502,
@@ -64,8 +88,13 @@ export function startProxy(
         );
       }
 
+      // カナリアルーティング（Phase 12）: ウェイト比で転送先ポートを決定
+      const targetPort = projectConfig?.canary
+        ? resolveCanaryPort(projectConfig)
+        : resolved.port;
+
       // Worker への転送 URL を構築
-      const targetUrl = new URL(url.pathname + url.search, `http://127.0.0.1:${resolved.port}`);
+      const targetUrl = new URL(url.pathname + url.search, `http://127.0.0.1:${targetPort}`);
 
       // 転送用ヘッダーを構築
       const forwardHeaders = new Headers(request.headers);
@@ -85,12 +114,15 @@ export function startProxy(
 
         // レスポンスヘッダーをコピー
         const responseHeaders = new Headers(response.headers);
+        // Phase 11: メトリクス記録
+        recordMetrics(projectId, response.status, Date.now() - startTime);
         return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
           headers: responseHeaders,
         });
       } catch {
+        recordMetrics(projectId, 502, Date.now() - startTime);
         return errorResponse(
           502,
           "proxy_error",
@@ -165,8 +197,10 @@ export function startAdminApi(
         const id = startMatch[1];
         try {
           await manager.start(id);
+          recordAudit("start", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("start", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "start_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -180,8 +214,10 @@ export function startAdminApi(
         const id = stopMatch[1];
         try {
           await manager.stop(id);
+          recordAudit("stop", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("stop", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "stop_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -195,8 +231,10 @@ export function startAdminApi(
         const id = restartMatch[1];
         try {
           await manager.restart(id);
+          recordAudit("restart", "api", "success", "", id);
           return json({ ok: true, data: enrichStatus(manager.getStatus(id), deployer) });
         } catch (e) {
+          recordAudit("restart", "api", "failure", e instanceof Error ? e.message : String(e), id);
           return json(
             { ok: false, error: "restart_failed", message: e instanceof Error ? e.message : String(e) },
             400,
@@ -327,6 +365,120 @@ export function startAdminApi(
         const tailParam = url.searchParams.get("tail");
         const tail = tailParam ? parseInt(tailParam, 10) : 100;
         return json({ ok: true, data: getLogTail(id, isNaN(tail) ? 100 : tail) });
+      }
+
+      // --- Phase 13: スケジュール ---
+      const schedListMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/schedules$`));
+      if (method === "GET" && schedListMatch) {
+        const id = schedListMatch[1];
+        return json({ ok: true, data: await listSchedules(id) });
+      }
+      if (method === "POST" && schedListMatch) {
+        const id = schedListMatch[1];
+        const body = await request.json();
+        const sched = await addSchedule(id, body.branch ?? "main", body.cron ?? null, body.run_at ?? null);
+        return json({ ok: true, data: sched }, 201);
+      }
+      const schedDelMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/schedules/([\\w-]+)$`));
+      if (method === "DELETE" && schedDelMatch) {
+        const id = schedDelMatch[1];
+        const schedId = schedDelMatch[2];
+        const ok = await removeSchedule(id, schedId);
+        if (!ok) return json({ ok: false, error: "not_found", message: "Schedule not found" }, 404);
+        return json({ ok: true, data: null });
+      }
+
+      // --- Phase 13: プレビュー ---
+      const previewListMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/previews$`));
+      if (method === "GET" && previewListMatch) {
+        const id = previewListMatch[1];
+        return json({ ok: true, data: await listPreviews(id) });
+      }
+      if (method === "POST" && previewListMatch) {
+        const id = previewListMatch[1];
+        const body = await request.json();
+        const config = manager.getConfig();
+        const preview = await createPreview(id, body.branch ?? "main", config);
+        return json({ ok: true, data: preview }, 201);
+      }
+      const previewDelMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/previews/([\\w-]+)$`));
+      if (method === "DELETE" && previewDelMatch) {
+        const id = previewDelMatch[1];
+        const previewId = previewDelMatch[2];
+        const ok = await removePreview(id, previewId);
+        if (!ok) return json({ ok: false, error: "not_found", message: "Preview not found" }, 404);
+        return json({ ok: true, data: null });
+      }
+
+      // --- Phase 12: カナリア操作 ---
+      const canaryPromoteMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/canary/promote$`));
+      if (method === "POST" && canaryPromoteMatch) {
+        const id = canaryPromoteMatch[1];
+        const pc = manager.getProjectConfig(id);
+        if (!pc) return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        promoteCanary(pc);
+        recordAudit("canary_promote", "api", "success", "", id);
+        return json({ ok: true, data: { message: "Canary promoted" } });
+      }
+      const canaryAbortMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/canary/abort$`));
+      if (method === "POST" && canaryAbortMatch) {
+        const id = canaryAbortMatch[1];
+        const pc = manager.getProjectConfig(id);
+        if (!pc) return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        abortCanary(pc);
+        recordAudit("canary_abort", "api", "success", "", id);
+        return json({ ok: true, data: { message: "Canary aborted" } });
+      }
+
+      // --- Phase 14: プラットフォーム管理 ---
+      if (method === "GET" && path === "/api/platform/version") {
+        const version = await getCurrentVersion();
+        const info = await checkForUpdate();
+        return json({ ok: true, data: info });
+      }
+      if (method === "POST" && path === "/api/platform/update") {
+        const body = await request.json().catch(() => ({}));
+        const result = await performUpdate(body.version);
+        return json({ ok: result.success, data: result });
+      }
+      if (method === "POST" && path === "/api/platform/rollback") {
+        const result = await platformRollback();
+        return json({ ok: result.success, data: result });
+      }
+      if (method === "POST" && path === "/api/platform/backup") {
+        const body = await request.json().catch(() => ({}));
+        const result = await createBackup(body.output);
+        return json({ ok: result.success, data: result });
+      }
+      if (method === "POST" && path === "/api/platform/restore") {
+        const body = await request.json().catch(() => ({}));
+        if (!body.archive) return json({ ok: false, error: "bad_request", message: "archive path required" }, 400);
+        const result = await restoreBackup(body.archive, body.dry_run ?? false);
+        return json({ ok: result.success, data: result });
+      }
+
+      // GET /api/metrics — 全プロジェクトメトリクスサマリー（Phase 11）
+      if (method === "GET" && path === "/api/metrics") {
+        return json({ ok: true, data: getAllMetricsSummary() });
+      }
+
+      // GET /api/projects/{id}/metrics — プロジェクト別メトリクス（Phase 11）
+      const metricsMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/metrics$`));
+      if (method === "GET" && metricsMatch) {
+        const id = metricsMatch[1];
+        return json({ ok: true, data: getProjectMetrics(id) });
+      }
+
+      // GET /api/audit — 監査ログ一覧（Phase 10）
+      if (method === "GET" && path === "/api/audit") {
+        const limitParam = url.searchParams.get("limit");
+        const projectId = url.searchParams.get("project_id");
+        const limit = limitParam ? parseInt(limitParam, 10) : 50;
+        const logs = await getAuditLogs(
+          isNaN(limit) ? 50 : limit,
+          projectId ?? undefined,
+        );
+        return json({ ok: true, data: logs });
       }
 
       // GET /api/health — ノードヘルス

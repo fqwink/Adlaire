@@ -1,0 +1,34 @@
+/* Adlaire Style — Log Box
+ * 仕様: STYLE_RULEBOOK.md §7.11
+ */
+
+.log-box {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-loose);
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-sub);
+  padding: var(--space-4);
+  border-radius: var(--radius-base);
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 400px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-entry {
+  display: block;
+}
+
+.log-err {
+  color: var(--color-danger-text);
+}
+
+.log-info {
+  color: var(--color-text-muted);
+}
+
+.log-warn {
+  color: var(--color-warning-text);
+}

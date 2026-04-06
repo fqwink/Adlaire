@@ -164,7 +164,9 @@ export function embedPatInUrl(url: string, token: string): string {
 
 /** SSH 用の Git 環境変数を取得する */
 export function getSshGitEnv(sshKeyPath: string): Record<string, string> {
+  // シェルメタ文字をエスケープしてコマンドインジェクションを防止
+  const safePath = sshKeyPath.replace(/[^a-zA-Z0-9_\-./]/g, "");
   return {
-    GIT_SSH_COMMAND: `ssh -i ${sshKeyPath} -o StrictHostKeyChecking=accept-new`,
+    GIT_SSH_COMMAND: `ssh -i '${safePath}' -o StrictHostKeyChecking=accept-new`,
   };
 }

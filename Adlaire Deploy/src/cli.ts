@@ -763,6 +763,122 @@ async function cmdCredential(args: string[]): Promise<void> {
   }
 }
 
+/** 監査ログ表示（Phase 10） */
+async function cmdAudit(args: string[]): Promise<void> {
+  let limit = 20;
+  let projectId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--limit" && args[i + 1]) {
+      limit = parseInt(args[i + 1], 10);
+      i++;
+    } else if (args[i] === "--project" && args[i + 1]) {
+      projectId = args[i + 1];
+      i++;
+    }
+  }
+
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (projectId) params.set("project_id", projectId);
+
+  const res = await fetch(`${adminUrl}/api/audit?${params}`);
+  const body = await res.json();
+  if (!body.ok) {
+    console.error(`Error: ${body.message}`);
+    Deno.exit(1);
+  }
+
+  const logs = body.data as Array<{
+    id: string;
+    timestamp: string;
+    action: string;
+    project_id: string | null;
+    actor: string;
+    detail: string;
+    result: "success" | "failure";
+  }>;
+
+  if (logs.length === 0) {
+    console.log("No audit logs found.");
+    return;
+  }
+
+  console.log("Audit Logs:");
+  console.log("-".repeat(100));
+  for (const log of logs) {
+    const time = log.timestamp.replace("T", " ").slice(0, 19);
+    const proj = log.project_id ?? "(platform)";
+    const icon = log.result === "success" ? "OK" : "NG";
+    console.log(`[${time}] ${icon} ${log.action.padEnd(15)} ${proj.padEnd(20)} by ${log.actor}  ${log.detail}`);
+  }
+}
+
+/** プラットフォーム管理コマンド（Phase 14） */
+async function cmdPlatform(args: string[]): Promise<void> {
+  const sub = args[0];
+
+  if (sub === "version") {
+    const res = await fetch(`${adminUrl}/api/platform/version`);
+    const body = await res.json();
+    if (body.ok) {
+      console.log(`Current: ${body.data.current}`);
+      console.log(`Latest:  ${body.data.latest}`);
+      console.log(`Update:  ${body.data.updateAvailable ? "Available" : "Up to date"}`);
+    }
+  } else if (sub === "update") {
+    let version: string | undefined;
+    if (args[1] === "--version" && args[2]) version = args[2];
+    const payload = version ? JSON.stringify({ version }) : "{}";
+    const res = await fetch(`${adminUrl}/api/platform/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    });
+    const body = await res.json();
+    console.log(body.data?.message ?? body.message ?? "Update request sent");
+  } else if (sub === "rollback") {
+    const res = await fetch(`${adminUrl}/api/platform/rollback`, { method: "POST" });
+    const body = await res.json();
+    console.log(body.data?.message ?? body.message ?? "Rollback request sent");
+  } else if (sub === "backup") {
+    let output: string | undefined;
+    if (args[1] === "--output" && args[2]) output = args[2];
+    const payload = output ? JSON.stringify({ output }) : "{}";
+    const res = await fetch(`${adminUrl}/api/platform/backup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    });
+    const body = await res.json();
+    if (body.ok) {
+      console.log(`Backup created: ${body.data.path}`);
+    } else {
+      console.error(`Backup failed: ${body.data?.error ?? body.message}`);
+    }
+  } else if (sub === "restore") {
+    const archive = args[1];
+    if (!archive) { console.error("Usage: platform restore <archive> [--dry-run]"); Deno.exit(1); }
+    const dryRun = args.includes("--dry-run");
+    const res = await fetch(`${adminUrl}/api/platform/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archive, dry_run: dryRun }),
+    });
+    const body = await res.json();
+    if (body.ok && dryRun && body.data.files) {
+      console.log("Dry run — files in archive:");
+      for (const f of body.data.files) console.log(`  ${f}`);
+    } else if (body.ok) {
+      console.log("Restore completed.");
+    } else {
+      console.error(`Restore failed: ${body.data?.error ?? body.message}`);
+    }
+  } else {
+    console.log("Usage: platform <version|update|rollback|backup|restore>");
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -789,6 +905,12 @@ Commands:
   logs <id> [opts]         Show worker logs (--tail n, --stream)
   kv-stats <id>            Show KV database info
   kv-reset <id>            Delete KV database (worker must be stopped)
+  audit [opts]             Show audit logs (--limit N, --project <id>)
+  platform version         Show current/latest version
+  platform update          Update platform to latest version
+  platform rollback        Rollback to previous version
+  platform backup          Create platform backup
+  platform restore <file>  Restore from backup (--dry-run)
   nodes                    Show cluster node statuses (origin only)
   sync                     Sync config to all edge nodes (origin only)
   help                     Show this help message
@@ -865,6 +987,12 @@ switch (command) {
     break;
   case "credential":
     await cmdCredential(commandArgs);
+    break;
+  case "audit":
+    await cmdAudit(commandArgs);
+    break;
+  case "platform":
+    await cmdPlatform(commandArgs);
     break;
   case "nodes":
     await cmdNodes();

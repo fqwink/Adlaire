@@ -101,11 +101,11 @@ export class ProcessManager {
     };
   }
 
-  /** hostname から running 状態のプロジェクトのポートを取得する */
-  resolveHostname(hostname: string): { port: number; state: ProcessState } | null {
+  /** hostname からプロジェクトの ID・ポート・状態を取得する */
+  resolveHostname(hostname: string): { id: string; port: number; state: ProcessState } | null {
     for (const info of this.processes.values()) {
       if (info.config.hostname === hostname) {
-        return { port: info.config.port, state: info.state };
+        return { id: info.id, port: info.config.port, state: info.state };
       }
     }
     return null;
