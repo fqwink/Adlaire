@@ -66,13 +66,13 @@ function nl2br(s: string): string {
 
 // #95: fieldSave大規模content上限（1MB）
 const FIELD_SAVE_MAX_LENGTH = 1_048_576;
-function fieldSave(key: string, val: string): void {
+function fieldSave(key: string, val: string): Promise<void> {
     // #95: 大規模content対策 — 上限超過時は警告して中断
     if (val.length > FIELD_SAVE_MAX_LENGTH) {
         console.warn('fieldSave: content exceeds max length, skipping save for:', key);
         showFieldFeedback(key, false);
         changing = false;
-        return;
+        return Promise.resolve();
     }
     // #5: CSRF同時リクエスト時のトークン不整合対策 — キューで直列化
     fieldSaveQueue = fieldSaveQueue.then(() => {
@@ -124,6 +124,7 @@ function fieldSave(key: string, val: string): void {
             showFieldFeedback(key, false);
         });
     });
+    return fieldSaveQueue;
 }
 
 // #107: CSS.escapeフォールバック追加（Safari旧バージョン対策）

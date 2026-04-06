@@ -68,15 +68,18 @@ function login_rate_check(): bool
     if (is_file($rateFile)) {
         $fp = fopen($rateFile, 'r');
         if ($fp !== false) {
-            if (flock($fp, LOCK_SH | LOCK_NB) || flock($fp, LOCK_SH)) {
-                $raw = stream_get_contents($fp);
-                flock($fp, LOCK_UN);
-                $decoded = json_decode(is_string($raw) && $raw !== '' ? $raw : '[]', true);
-                if (is_array($decoded)) {
-                    $attempts = $decoded;
-                }
+            $locked = flock($fp, LOCK_SH | LOCK_NB) || flock($fp, LOCK_SH);
+            if (!$locked) {
+                fclose($fp);
+                return true; // Allow login on lock failure
             }
+            $raw = stream_get_contents($fp);
+            flock($fp, LOCK_UN);
             fclose($fp);
+            $decoded = json_decode(is_string($raw) && $raw !== '' ? $raw : '[]', true);
+            if (is_array($decoded)) {
+                $attempts = $decoded;
+            }
         }
     }
 
