@@ -663,7 +663,125 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.2 Ver.3.1 — ブログ基盤【暫定】
+### 5.1.1 Ver.3.1 — バグ修正（69件精査）
+
+> Ver.3.0 基盤刷新後の全コード精査に基づくバグ修正。
+> PHP 27件 + TypeScript 42件 = 69件。
+> 致命的4件 + 重大27件 + 中程度30件 + 軽微8件。
+> 致命的・重大を最優先で実装する（CLAUDE.md バグ修正ポリシー準拠）。
+
+#### 精査サマリー
+
+| 区分 | PHP | TS | 合計 |
+|:----:|:---:|:--:|:----:|
+| 致命的 | 0 | 4 | 4 |
+| 重大 | 8 | 19 | 27 |
+| 中程度 | 15 | 15 | 30 |
+| 軽微 | 4 | 4 | 8 |
+| **合計** | **27** | **42** | **69** |
+
+#### 致命的バグ（最優先）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| TS-4 | editInplace.ts | beforeunload の sendBeacon() に URLSearchParams を直接渡し（文字列変換必要）。ページ離脱時データ消失リスク | 計画 |
+| TS-20 | editor.ts | save() でブロック保存が例外時、そのブロックのデータがサイレントに消失 | 計画 |
+| TS-25 | markdown.ts | 複雑な正規表現による ReDoS（サービス拒否）の可能性 | 計画 |
+| TS-39 | globals.d.ts | csrfToken がグローバルミュータブル変数。外部コードから改ざん可能 | 計画 |
+
+#### 重大バグ（PHP: 8件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-1 | helpers.php | レートリミットファイルの flock() 戻り値未チェック。ロック取得失敗時も処理続行 | 計画 |
+| PHP-3 | helpers.php | レートリミットファイル作成時の TOCTOU 競合 | 計画 |
+| PHP-5 | license.php | アトミック書き込みの一時ファイル名が予測可能。同時書き込み時に衝突リスク | 計画 |
+| PHP-11 | app.php | セッション破棄後の session_status() 未確認。破棄失敗時にセッション残存 | 計画 |
+| PHP-17 | api.php | CORS Origin 検証ロジックの不備。null/空 Origin が明示的に拒否されない | 計画 |
+| PHP-18 | api.php | インポート処理で slug バリデーション前にパス構築。パストラバーサルリスク | 計画 |
+| PHP-20 | generator.php | 静的生成クリーンアップ時の symlink TOCTOU 攻撃。チェックと unlink の間にシンボリックリンク差し替え可能 | 計画 |
+| PHP-24 | admin-ui.php | 一部管理アクションで CSRF トークン検証が不十分 | 計画 |
+
+#### 重大バグ（TypeScript: 19件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| TS-1 | editInplace.ts | fieldSave の非同期処理未 await。保存完了前に changing=false となる競合 | 計画 |
+| TS-2 | editInplace.ts | fieldSaveQueue の Promise チェーンがエラーを伝播せず後続操作が実行される | 計画 |
+| TS-13 | editor.ts | attachBackspaceHandler() のイベントリスナーがブロック再作成時に蓄積 | 計画 |
+| TS-16 | editor.ts | paragraph ブロックの save で sanitizeHtml 後の HTML がそのまま保持。意図しない書式が永続化 | 計画 |
+| TS-17 | editor.ts | list items の innerHTML 取得時にブロック要素が混入。不正なリスト項目テキスト | 計画 |
+| TS-18 | editor.ts | setInterval(5秒) が全エディタで個別に実行。10エディタで10ポーリング | 計画 |
+| TS-19 | editor.ts | focusout デバウンスタイマーのエラー時フラグ不整合 | 計画 |
+| TS-22 | editor.ts | キーボードショートカットがフォーカス中エディタを区別せず全エディタで発火 | 計画 |
+| TS-23 | editor.ts | showToolbox() のイベントリスナーが表示のたびに蓄積 | 計画 |
+| TS-24 | editor.ts | ツールボックス表示時の RAF タイミングでクリックがすり抜ける可能性 | 計画 |
+| TS-26 | markdown.ts | コードブロックプレースホルダー `%%CODEBLOCK_N%%` がユーザーコンテンツと衝突可能 | 計画 |
+| TS-27 | markdown.ts | 脚注定義の継続行マッチが悪意ある入力で過剰ループ | 計画 |
+| TS-28 | markdown.ts | テーブル解析正規表現の ReDoS リスク | 計画 |
+| TS-32 | api.ts | 並行 API 呼び出し時に csrfToken のグローバル更新が競合 | 計画 |
+| TS-35 | api.ts | generateSubMaster() の res.json() 失敗時に未処理 Promise rejection | 計画 |
+| TS-37 | autosize.ts | scrollHeight 取得前にリフローが保証されない。高さ計算が不正確になる可能性 | 計画 |
+| TS-7 | editInplace.ts | focusin リスナーがエディタ破棄時に未解除。メモリリーク | 計画 |
+| TS-9 | editInplace.ts | showRevisionDiffModal の keydown リスナーが Escape 以外の閉じ方で残存 | 計画 |
+| TS-15 | editor.ts | paste ハンドラで sanitizeHtml 後に innerHTML を再取得。XSS ペイロードが残存する可能性 | 計画 |
+
+#### 中程度バグ（PHP: 15件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-2 | helpers.php | JSON デコード失敗時の $attempts 未初期化 | 計画 |
+| PHP-4 | license.php | json_encode の JSON_THROW_ON_ERROR 例外がカスタムハンドラで抑制される可能性 | 計画 |
+| PHP-6 | core.php | listPages メモリ閾値チェックが "unlimited"(-1) を未処理 | 計画 |
+| PHP-7 | core.php | glob() のエラー(false)とディレクトリ不存在を区別できない | 計画 |
+| PHP-9 | app.php | パスワード最大長超過時のエラーメッセージが password_too_short（逆） | 計画 |
+| PHP-12 | app.php | preg_match() 失敗(false)時のフォールバックが SERVER_NAME に暗黙依存 | 計画 |
+| PHP-13 | helpers.php | CSRF トークン再生成がフォーム処理完了前に実行される | 計画 |
+| PHP-14 | renderer.php | Markdown レンダラーで html_entity_decode() が二重適用 | 計画 |
+| PHP-15 | renderer.php | 画像キャプションの属性インジェクション可能性 | 計画 |
+| PHP-16 | api.php | json_decode に depth 制限なし。深いネスト JSON で DoS リスク | 計画 |
+| PHP-19 | api.php | リビジョンタイムスタンプの日付範囲未検証 | 計画 |
+| PHP-21 | generator.php | ディレクトリ作成時の競合（is_dir と mkdir の間） | 計画 |
+| PHP-22 | generator.php | サイトマップ XML 生成時の slug エスケープ不足 | 計画 |
+| PHP-23 | admin-ui.php | インラインスクリプト内の PHP 値エスケープ不備 | 計画 |
+| PHP-25 | index.php | nonce がリクエスト単位で再生成されるがキャッシュされたスクリプトで再利用可能 | 計画 |
+
+#### 中程度バグ（TypeScript: 15件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| TS-3 | editInplace.ts | flushSave の FIELD_SAVE_MAX_LENGTH 超過時に無限再トリガーの可能性 | 計画 |
+| TS-5 | editInplace.ts | renderMarkdownContent エラー時にフォーマットが完全消失しサイレントにテキスト化 | 計画 |
+| TS-6 | editInplace.ts | renderBlocksContent の型ガードが JSON.parse 後の非配列オブジェクトを通過 | 計画 |
+| TS-8 | editInplace.ts | safeNormalize で normalize() 例外時に検索機能が全壊 | 計画 |
+| TS-10 | editInplace.ts | 認証情報表示で i18n.t() の戻り値が innerHTML に未エスケープで注入される可能性 | 計画 |
+| TS-11 | editInplace.ts | plainTextEdit/richTextHook 例外時に changing フラグが永続ロック | 計画 |
+| TS-12 | editInplace.ts | DOMContentLoaded 時の i18n 未完了状態でエディタ UI 初期化される競合 | 計画 |
+| TS-14 | editor.ts | attachListItemHandlers の dataset フラグが文字列比較で不確実 | 計画 |
+| TS-29 | markdown.ts | テーブル 1000行/50列超過時にサイレントにプレーンテキスト化 | 計画 |
+| TS-30 | markdown.ts | escCell が & をエスケープしない。二重エスケープまたは未エスケープの可能性 | 計画 |
+| TS-31 | markdown.ts | リストラッピング正規表現が貪欲マッチで複数リストを結合 | 計画 |
+| TS-33 | api.ts | extractApiError の HTML ストリップが JSON エスケープ済み HTML を未処理 | 計画 |
+| TS-38 | autosize.ts | 同一 textarea への二重初期化でリスナーが蓄積 | 計画 |
+| TS-40 | editInplace.ts | plainTextEdit の textarea.value が DOM 追加前に設定される前提の不整合 | 計画 |
+| TS-41 | editInplace.ts | showWarnings のコンテナが外部 DOM 操作で切断された場合の安全性 | 計画 |
+
+#### 軽微バグ（PHP: 4件 + TypeScript: 4件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-8 | core.php | isConfigKey のホワイトリスト検証不足 | 計画 |
+| PHP-10 | app.php | null 合体演算子で null/false が正常値として通過 | 計画 |
+| PHP-26 | bundle-installer.php | $GLOBALS 依存の管理者ユーザー名。フォーム再送信時にリセット | 計画 |
+| PHP-27 | bundle-installer.php | POST 値の UTF-8 バリデーション未実施 | 計画 |
+| TS-34 | api.ts | getPage の slug チェックが "0" や "false" を誤拒否 | 計画 |
+| TS-36 | i18n.ts | has() がプロトタイプ汚染に脆弱（in 演算子使用） | 計画 |
+| TS-42 | editInplace.ts | パスワードバリデーションが文字列長でバイト長を未確認 | 計画 |
+| TS-21 | editor.ts | destroy() の WeakMap 手動削除が GC セマンティクスと冗長 | 計画 |
+
+---
+
+### 5.2 Ver.3.2 — ブログ基盤【暫定】
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -674,7 +792,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.3 Ver.3.2 — ブログ機能拡充【暫定】
+### 5.3 Ver.3.3 — ブログ機能拡充【暫定】
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -684,20 +802,20 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.4 Ver.3.3 — バグ修正【暫定】
+### 5.4 Ver.3.4 — バグ修正【暫定】
 
-> マイナーバージョン x.3 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> バグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
 | 品質 | 50件以上精査（PHP + TS） | 計画 |
-| 品質 | Ver.3.1〜3.2 ブログ機能のバグ修正 | 計画 |
+| 品質 | Ver.3.2〜3.3 ブログ機能のバグ修正 | 計画 |
 
 ---
 
-### 5.5 Ver.3.4 — バグ修正【暫定】
+### 5.5 Ver.3.5 — バグ修正【暫定】
 
-> マイナーバージョン x.4 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> バグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -706,7 +824,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.6 Ver.3.5 — エディタ強化【暫定】
+### 5.6 Ver.3.6 — エディタ強化【暫定】
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -716,9 +834,9 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.7 Ver.3.6 — バグ修正【暫定】
+### 5.7 Ver.3.7 — バグ修正【暫定】
 
-> マイナーバージョン x.6 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> バグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -726,7 +844,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.8 Ver.3.7 — 機能拡充【暫定】
+### 5.8 Ver.3.8 — 機能拡充【暫定】
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
@@ -736,9 +854,9 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-### 5.9 Ver.3.8 — バグ修正【暫定】
+### 5.9 Ver.3.9 — バグ修正【暫定】
 
-> マイナーバージョン x.8 はバグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> バグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
