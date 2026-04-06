@@ -20,6 +20,16 @@ export interface GitConfig {
   webhook_secret: string;
 }
 
+/** Worker 権限設定 */
+export interface Permissions {
+  allow_net: boolean;
+  allow_read: boolean;
+  allow_write: boolean;
+  allow_env: boolean;
+  allow_ffi: boolean;
+  allow_run: boolean;
+}
+
 /** プロジェクト設定 */
 export interface ProjectConfig {
   /** ルーティング対象のホスト名 */
@@ -32,6 +42,17 @@ export interface ProjectConfig {
   auto_start: boolean;
   /** Git 連携設定（null の場合は Git 連携無効） */
   git: GitConfig | null;
+  /** Worker に注入する環境変数 */
+  env: Record<string, string>;
+  /** Worker の Deno パーミッション設定（null はデフォルト値を使用） */
+  permissions: Permissions | null;
+}
+
+/** ログエントリ */
+export interface LogEntry {
+  timestamp: string;
+  stream: "stdout" | "stderr";
+  line: string;
 }
 
 /** デプロイ状態 */

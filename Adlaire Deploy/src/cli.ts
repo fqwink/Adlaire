@@ -10,7 +10,7 @@ import {
   removeProject,
   validateProjectId,
 } from "./config.ts";
-import type { ApiResponse, DeployRecord, KvStats, ProjectStatus } from "./types.ts";
+import type { ApiResponse, DeployRecord, KvStats, LogEntry, ProjectStatus } from "./types.ts";
 
 /** 管理 API のベース URL を取得する */
 async function getAdminBaseUrl(): Promise<string> {
@@ -23,9 +23,15 @@ async function getAdminBaseUrl(): Promise<string> {
 async function callAdminApi<T>(
   path: string,
   method = "GET",
+  body?: unknown,
 ): Promise<ApiResponse<T>> {
   const baseUrl = await getAdminBaseUrl();
-  const response = await fetch(`${baseUrl}${path}`, { method });
+  const options: RequestInit = { method };
+  if (body !== undefined) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch(`${baseUrl}${path}`, options);
   return await response.json() as ApiResponse<T>;
 }
 
@@ -123,7 +129,7 @@ async function cmdAdd(args: string[]): Promise<void> {
     ? { url: gitUrl, branch: gitBranch, webhook_secret: webhookSecret }
     : null;
 
-  await addProject(id, { hostname, entry, port, auto_start: autoStart, git });
+  await addProject(id, { hostname, entry, port, auto_start: autoStart, git, env: {}, permissions: null });
   console.log(`Added project "${id}"`);
   console.log(`  hostname:       ${hostname}`);
   console.log(`  entry:          ${entry}`);
@@ -334,6 +340,127 @@ async function cmdDeploys(args: string[]): Promise<void> {
   }
 }
 
+/** env コマンド — 環境変数表示 */
+async function cmdEnv(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy env <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<Record<string, string>>(
+      `/api/projects/${id}/env`,
+    );
+
+    if (result.ok) {
+      const entries = Object.entries(result.data);
+      if (entries.length === 0) {
+        console.log("No environment variables configured");
+        return;
+      }
+      for (const [key, value] of entries) {
+        console.log(`${key}=${value}`);
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** env-set コマンド — 環境変数設定 */
+async function cmdEnvSet(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id || args.length < 2) {
+    console.error("Usage: adlaire-deploy env-set <id> <KEY=VALUE>...");
+    Deno.exit(1);
+  }
+
+  // まず現在の環境変数を取得（マージ用に deploy.json から直接読む）
+  const config = await loadConfig();
+  const existing = config.projects[id]?.env ?? {};
+
+  // 引数をパース
+  const merged = { ...existing };
+  for (let i = 1; i < args.length; i++) {
+    const eq = args[i].indexOf("=");
+    if (eq === -1) {
+      console.error(`Error: Invalid format "${args[i]}", expected KEY=VALUE`);
+      Deno.exit(1);
+    }
+    const key = args[i].slice(0, eq);
+    const value = args[i].slice(eq + 1);
+    if (value === "") {
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+
+  try {
+    const result = await callAdminApi<{ message: string; count: number }>(
+      `/api/projects/${id}/env`,
+      "PUT",
+      merged,
+    );
+
+    if (result.ok) {
+      console.log(`${result.data.message} (${result.data.count} variables)`);
+      console.log("Note: Restart the worker to apply changes");
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** logs コマンド — ログ表示 */
+async function cmdLogs(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy logs <id> [--tail <n>]");
+    Deno.exit(1);
+  }
+
+  let tail = 100;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--tail" && i + 1 < args.length) {
+      tail = parseInt(args[++i], 10);
+      if (isNaN(tail)) tail = 100;
+    }
+  }
+
+  try {
+    const result = await callAdminApi<LogEntry[]>(
+      `/api/projects/${id}/logs?tail=${tail}`,
+    );
+
+    if (result.ok) {
+      if (result.data.length === 0) {
+        console.log("No logs available");
+        return;
+      }
+      for (const entry of result.data) {
+        const prefix = entry.stream === "stderr" ? "ERR" : "OUT";
+        console.log(`${entry.timestamp} [${prefix}] ${entry.line}`);
+      }
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
 /** kv-stats コマンド — KV 統計情報表示 */
 async function cmdKvStats(args: string[]): Promise<void> {
   const id = args[0];
@@ -406,6 +533,9 @@ Commands:
   status [id]          Show project status (all if id omitted)
   deploy <id>          Trigger a manual deploy
   deploys <id>         Show deploy history
+  env <id>             Show environment variables (masked)
+  env-set <id> K=V...  Set environment variables (merge)
+  logs <id> [--tail n] Show worker logs (default 100 lines)
   kv-stats <id>        Show KV database info
   kv-reset <id>        Delete KV database (worker must be stopped)
   help                 Show this help message
@@ -454,6 +584,15 @@ switch (command) {
     break;
   case "deploys":
     await cmdDeploys(commandArgs);
+    break;
+  case "env":
+    await cmdEnv(commandArgs);
+    break;
+  case "env-set":
+    await cmdEnvSet(commandArgs);
+    break;
+  case "logs":
+    await cmdLogs(commandArgs);
     break;
   case "kv-stats":
     await cmdKvStats(commandArgs);

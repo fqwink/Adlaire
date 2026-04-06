@@ -4,8 +4,11 @@
  * Host ヘッダーベースのリクエストルーティング
  */
 
+import { loadConfig, saveConfig } from "./config.ts";
 import type { Deployer } from "./deployer.ts";
 import { deleteProjectKv, getKvStats } from "./kv.ts";
+import { getLogTail } from "./logger.ts";
+import { validateEnv } from "./process_manager.ts";
 import type { ProcessManager } from "./process_manager.ts";
 import type { ProjectStatus } from "./types.ts";
 import { handleWebhook } from "./webhook.ts";
@@ -265,6 +268,59 @@ export function startAdminApi(
         }
         await deleteProjectKv(manager.getConfig(), id);
         return json({ ok: true, data: { message: "KV database deleted" } });
+      }
+
+      // GET/PUT /api/projects/{id}/env — 環境変数
+      const envMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/env$`));
+      if (method === "GET" && envMatch) {
+        const id = envMatch[1];
+        const pc = manager.getProjectConfig(id);
+        if (!pc) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const masked: Record<string, string> = {};
+        for (const [k, v] of Object.entries(pc.env)) {
+          masked[k] = v.length > 3 ? v.slice(0, 3) + "***" : "***";
+        }
+        return json({ ok: true, data: masked });
+      }
+
+      if (method === "PUT" && envMatch) {
+        const id = envMatch[1];
+        const pc = manager.getProjectConfig(id);
+        if (!pc) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        let body: Record<string, string>;
+        try {
+          body = await request.json() as Record<string, string>;
+        } catch {
+          return json({ ok: false, error: "bad_request", message: "Invalid JSON body" }, 400);
+        }
+        const envError = validateEnv(body);
+        if (envError) {
+          return json({ ok: false, error: "validation_error", message: envError }, 400);
+        }
+        // deploy.json を更新
+        const config = await loadConfig();
+        if (config.projects[id]) {
+          config.projects[id].env = body;
+          await saveConfig(config);
+          manager.updateConfig(config);
+        }
+        return json({ ok: true, data: { message: "Environment variables updated", count: Object.keys(body).length } });
+      }
+
+      // GET /api/projects/{id}/logs — ログ取得
+      const logsMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/logs$`));
+      if (method === "GET" && logsMatch) {
+        const id = logsMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const tailParam = url.searchParams.get("tail");
+        const tail = tailParam ? parseInt(tailParam, 10) : 100;
+        return json({ ok: true, data: getLogTail(id, isNaN(tail) ? 100 : tail) });
       }
 
       return json({ ok: false, error: "not_found", message: "Unknown endpoint" }, 404);

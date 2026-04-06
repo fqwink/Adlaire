@@ -4,13 +4,50 @@
  * Deno サブプロセスのライフサイクル管理（起動・停止・再起動）
  */
 
+import { captureStream } from "./logger.ts";
 import type {
   DeployConfig,
+  Permissions,
   ProcessInfo,
   ProcessState,
   ProjectConfig,
   ProjectStatus,
 } from "./types.ts";
+
+/** デフォルト権限 */
+const DEFAULT_PERMISSIONS: Permissions = {
+  allow_net: true,
+  allow_read: true,
+  allow_write: false,
+  allow_env: true,
+  allow_ffi: false,
+  allow_run: false,
+};
+
+/** 予約済み環境変数名 */
+const RESERVED_ENV_NAMES = new Set(["PORT", "DENO_KV_PATH"]);
+
+/** 環境変数のバリデーション */
+export function validateEnv(env: Record<string, string>): string | null {
+  for (const key of Object.keys(env)) {
+    if (RESERVED_ENV_NAMES.has(key)) {
+      return `Environment variable "${key}" is reserved by the platform`;
+    }
+  }
+  return null;
+}
+
+/** Permissions からコマンドラインフラグを構築する */
+function buildPermissionFlags(perms: Permissions): string[] {
+  const flags: string[] = [];
+  if (perms.allow_net) flags.push("--allow-net");
+  if (perms.allow_read) flags.push("--allow-read");
+  if (perms.allow_write) flags.push("--allow-write");
+  if (perms.allow_env) flags.push("--allow-env");
+  if (perms.allow_ffi) flags.push("--allow-ffi");
+  if (perms.allow_run) flags.push("--allow-run");
+  return flags;
+}
 
 /** 停止タイムアウト（ms） — SIGTERM 後 SIGKILL までの猶予 */
 const STOP_TIMEOUT_MS = 5000;
@@ -96,22 +133,24 @@ export class ProcessManager {
     }
 
     const kvPath = `${this.config.data_dir}/projects/${id}.kv`;
+    const perms = info.config.permissions ?? DEFAULT_PERMISSIONS;
+    const permFlags = buildPermissionFlags(perms);
+
     const command = new Deno.Command("deno", {
       args: [
         "run",
-        "--allow-net",
-        "--allow-read",
-        "--allow-env",
+        ...permFlags,
         "--unstable-kv",
         entryPath,
       ],
       env: {
         ...Deno.env.toObject(),
+        ...info.config.env,
         PORT: String(info.config.port),
         DENO_KV_PATH: kvPath,
       },
-      stdout: "inherit",
-      stderr: "inherit",
+      stdout: "piped",
+      stderr: "piped",
     });
 
     try {
@@ -120,6 +159,10 @@ export class ProcessManager {
       info.state = "running";
 
       console.log(`[deploy] Started "${id}" (pid: ${process.pid}, port: ${info.config.port})`);
+
+      // stdout/stderr のログキャプチャ
+      captureStream(id, "stdout", process.stdout);
+      captureStream(id, "stderr", process.stderr);
 
       // 異常終了監視
       process.status.then((status) => {

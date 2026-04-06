@@ -1,5 +1,19 @@
 # CHANGES - 変更履歴
 
+## Ver.1.3-4 (2026-04-06)
+
+### Phase 4: 環境変数・ログ
+
+* DEPLOY_PLATFORM_RULEBOOK.md に Phase 4 詳細仕様を追記（P4.1〜P4.8）
+* RELEASE_PLAN_RULEBOOK.md に Ver.1.3-4 計画を追加
+* `src/types.ts` — Permissions, LogEntry 型追加、ProjectConfig に env/permissions 追加
+* `src/logger.ts` — ログキャプチャモジュール（リングバッファ 1000 行、stdout/stderr 転送）
+* `src/process_manager.ts` — 環境変数注入・動的権限フラグ構築・stdout/stderr piped + キャプチャ
+* `src/proxy.ts` — 管理 API に env GET/PUT・logs GET エンドポイント追加
+* `src/cli.ts` — env / env-set / logs コマンド追加
+* `src/config.ts` — Phase 4 マイグレーション（env/permissions デフォルト値）
+* `deno.json` — 変更なし（--unstable-kv は Phase 3 で追加済み）
+
 ## Ver.1.2-3 (2026-04-06)
 
 ### Phase 3: KV ストレージ

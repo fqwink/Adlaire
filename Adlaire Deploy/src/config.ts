@@ -35,6 +35,15 @@ export async function loadConfig(): Promise<DeployConfig> {
     if (!config.data_dir) {
       config.data_dir = "./data";
     }
+    // Phase 4 マイグレーション: env と permissions がないプロジェクトにデフォルト値を設定
+    for (const project of Object.values(config.projects)) {
+      if (!project.env) {
+        project.env = {};
+      }
+      if (project.permissions === undefined) {
+        project.permissions = null;
+      }
+    }
     return config;
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {

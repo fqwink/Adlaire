@@ -811,6 +811,247 @@ Phase 3 で永続化する対象:
 
 ---
 
+# Phase 4 詳細仕様 — 環境変数・ログ
+
+## P4.1 スコープ
+
+Phase 4 は以下の機能を提供する。
+
+1. **プロジェクト単位の環境変数管理** — Worker に注入する環境変数の設定・取得・削除
+2. **ログキャプチャ** — Worker の stdout/stderr をキャプチャしバッファリング
+3. **ログストリーム API** — リアルタイムログ取得エンドポイント
+4. **Worker 権限設定** — プロジェクト単位の Deno パーミッション設定
+
+Phase 4 では以下を**対象外**とする。
+
+- ログの永続化（KV やファイルへの保存）
+- ログのフィルタリング・検索
+- メトリクス収集・ヘルスチェック
+
+## P4.2 追加ディレクトリ構成
+
+```
+Adlaire Deploy/
+├── src/
+│   ├── ... (既存ファイル)
+│   └── logger.ts           # ログキャプチャ・バッファ管理
+```
+
+## P4.3 環境変数管理
+
+### P4.3.1 `ProjectConfig` への追加フィールド
+
+```json
+{
+  "projects": {
+    "my-app": {
+      "hostname": "my-app.example.com",
+      "entry": "main.ts",
+      "port": 3001,
+      "auto_start": true,
+      "git": null,
+      "env": {
+        "DATABASE_URL": "postgres://localhost/mydb",
+        "API_KEY": "secret-key"
+      },
+      "permissions": {
+        "allow_net": true,
+        "allow_read": true,
+        "allow_write": false,
+        "allow_env": true,
+        "allow_ffi": false,
+        "allow_run": false
+      }
+    }
+  }
+}
+```
+
+| フィールド | 型 | 必須 | デフォルト | 説明 |
+|-----------|------|:----:|:----------:|------|
+| `env` | `Record<string, string>` | — | `{}` | Worker に注入する環境変数 |
+| `permissions` | `Permissions \| null` | — | `null` | Worker の Deno パーミッション設定（null はデフォルト値を使用） |
+
+### P4.3.2 環境変数の優先順位
+
+Worker 起動時の環境変数は以下の優先順位で適用する（後のものが上書き）。
+
+1. システム環境変数（Deno.env）
+2. プロジェクト設定の `env` フィールド
+3. プラットフォーム注入変数（`PORT`, `DENO_KV_PATH`）
+
+### P4.3.3 禁止環境変数名
+
+以下の環境変数名はプラットフォームが予約する。プロジェクト設定での上書きは禁止する。
+
+- `PORT` — Worker ポート番号
+- `DENO_KV_PATH` — KV ファイルパス
+
+設定保存時にバリデーションを行い、予約名が含まれる場合はエラーとする。
+
+## P4.4 Worker 権限設定
+
+### P4.4.1 `Permissions` 型
+
+```typescript
+interface Permissions {
+  allow_net: boolean;
+  allow_read: boolean;
+  allow_write: boolean;
+  allow_env: boolean;
+  allow_ffi: boolean;
+  allow_run: boolean;
+}
+```
+
+### P4.4.2 デフォルト権限
+
+`permissions` が `null` の場合、以下のデフォルト値を使用する。
+
+| 権限 | デフォルト |
+|------|:----------:|
+| `allow_net` | `true` |
+| `allow_read` | `true` |
+| `allow_write` | `false` |
+| `allow_env` | `true` |
+| `allow_ffi` | `false` |
+| `allow_run` | `false` |
+
+### P4.4.3 Worker 起動コマンドの変更
+
+権限設定に基づいてフラグを動的に構築する。
+
+```
+deno run [--allow-net] [--allow-read] [--allow-write] [--allow-env] [--allow-ffi] [--allow-run] --unstable-kv {entry}
+```
+
+- `true` の権限のみフラグとして付与する。
+
+## P4.5 ログキャプチャ
+
+### P4.5.1 設計方針
+
+- Worker の stdout/stderr を `"piped"` モードでキャプチャする。
+- キャプチャしたログをリングバッファに保持する（最大 1000 行/プロジェクト）。
+- 同時にプラットフォームの stdout にも転送する（従来動作の維持）。
+
+### P4.5.2 ログエントリ
+
+```typescript
+interface LogEntry {
+  timestamp: string;  // ISO 8601
+  stream: "stdout" | "stderr";
+  line: string;
+}
+```
+
+### P4.5.3 リングバッファ
+
+- プロジェクトごとに最大 **1000 行**を保持する。
+- バッファが満杯の場合、最も古いエントリを破棄する。
+- Worker 再起動時にバッファはクリアしない（累積）。
+- プラットフォーム再起動時にバッファは消失する（メモリ内のみ）。
+
+## P4.6 管理 API の拡張
+
+### P4.6.1 環境変数エンドポイント
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `GET` | `/api/projects/{id}/env` | 環境変数一覧を取得する |
+| `PUT` | `/api/projects/{id}/env` | 環境変数を一括設定する（全置換） |
+
+#### `GET /api/projects/{id}/env` レスポンス
+
+```json
+{
+  "ok": true,
+  "data": {
+    "DATABASE_URL": "postgres://localhost/mydb",
+    "API_KEY": "***"
+  }
+}
+```
+
+- 値が 4 文字以上の場合、先頭 3 文字 + `***` でマスクする。
+- 値が 3 文字以下の場合、`***` のみ表示する。
+
+#### `PUT /api/projects/{id}/env` リクエスト・レスポンス
+
+リクエストボディ:
+
+```json
+{
+  "DATABASE_URL": "postgres://localhost/mydb",
+  "API_KEY": "new-secret-key"
+}
+```
+
+レスポンス:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "message": "Environment variables updated",
+    "count": 2
+  }
+}
+```
+
+- 設定後、Worker の再起動は**自動で行わない**。手動で `restart` が必要。
+
+### P4.6.2 ログエンドポイント
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `GET` | `/api/projects/{id}/logs` | ログバッファを取得する |
+| `GET` | `/api/projects/{id}/logs?tail={n}` | 末尾 n 行を取得する（デフォルト 100） |
+
+#### レスポンス
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "timestamp": "2026-04-06T12:00:00.000Z",
+      "stream": "stdout",
+      "line": "Listening on port 3001"
+    }
+  ]
+}
+```
+
+## P4.7 CLI の拡張
+
+### P4.7.1 追加コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `env <id>` | プロジェクトの環境変数を表示する（マスク済み） |
+| `env-set <id> <KEY=VALUE>...` | 環境変数を設定する |
+| `logs <id> [--tail <n>]` | ログを表示する（デフォルト 100 行） |
+
+### P4.7.2 `env-set` コマンド
+
+```
+adlaire-deploy env-set my-app DATABASE_URL=postgres://localhost/mydb API_KEY=secret
+```
+
+- 既存の環境変数とマージする（指定したキーのみ上書き）。
+- キーを空値にすると削除: `API_KEY=`
+
+## P4.8 制約事項
+
+- ログはメモリ内リングバッファのみ。永続化は対象外。
+- 環境変数の値は暗号化しない。`deploy.json` にプレーンテキストで保存する。機密値の管理はプラットフォーム外のシークレット管理を推奨する。
+- 環境変数の変更後は手動で Worker を再起動する必要がある。ホットリロードは対象外。
+- Worker 権限の変更後も手動で Worker を再起動する必要がある。
+- `--allow-write` はデフォルト `false`。Worker が KV 以外のファイル書き込みを行う場合は明示的に有効化すること。
+
+---
+
 # 9. 最終規則
 
 ## 9.1 上位規範性
