@@ -149,7 +149,11 @@ export function markdownToHtml(md: string): string {
     html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
         const rows = tableBlock.trim().split('\n').filter(r => r.trim() !== '');
         // R5-3: テーブル最大行数制限 — DoS防止（1000行超はスキップ）
-        if (rows.length < 2 || rows.length > 1000) return tableBlock;
+        if (rows.length > 1000) {
+            console.warn('markdownToHtml: table exceeds 1000 row limit, skipping render (' + rows.length + ' rows)');
+            return tableBlock;
+        }
+        if (rows.length < 2) return tableBlock;
 
         const parseRow = (row: string): string[] =>
             row.split('|').slice(1, -1).map(cell => cell.trim());

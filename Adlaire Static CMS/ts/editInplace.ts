@@ -717,8 +717,10 @@ function initPageSearch(): void {
         if (searchTimer) clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
             // Ver.2.9 TS#37: normalize古ブラウザ対応 — normalize未対応ブラウザフォールバック
-            const safeNormalize = (s: string): string =>
-                typeof s.normalize === 'function' ? s.normalize('NFKC') : s;
+            const safeNormalize = (s: string): string => {
+                if (typeof s.normalize !== 'function') return s;
+                try { return s.normalize('NFKC'); } catch { return s; }
+            };
             const query = safeNormalize(input.value).toLowerCase().trim();
             tbody.querySelectorAll<HTMLTableRowElement>('tr').forEach(row => {
                 if (!query) { row.style.display = ''; return; }

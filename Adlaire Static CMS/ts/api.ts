@@ -98,7 +98,7 @@ export const api = {
     // #105: getPage — CSRF token更新追加
     // R3-2: slug空文字チェック追加
     async getPage(slug: string): Promise<PageData> {
-        if (!slug) throw new Error('getPage: slug is required');
+        if (slug == null || slug === '') throw new Error('getPage: slug is required');
         const res = await fetch(buildApiUrl('pages', { slug }));
         updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }

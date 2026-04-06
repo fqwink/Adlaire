@@ -68,6 +68,6 @@ export const i18n = {
      * Ver.2.9 #22: Check if a translation key exists.
      */
     has(key: string): boolean {
-        return key in this.translations;
+        return Object.prototype.hasOwnProperty.call(this.translations, key);
     },
 };
