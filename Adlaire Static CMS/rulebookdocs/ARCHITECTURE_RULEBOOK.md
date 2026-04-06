@@ -245,7 +245,6 @@ Adlaire/
 │   └── admin.css              #   管理 UI スタイルシート
 ├── dist/                      # [生成] 静的サイト出力ディレクトリ
 ├── plugins/                   # [実行時生成] プラグインディレクトリ
-├── adlaire-license-server/    # ライセンスサーバー（当面は本体リポジトリ内で管理）
 ├── .github/                   # CI/CD
 │   └── workflows/             #   GitHub Actions ワークフロー
 ├── deno.json                  # Deno 設定・タスク定義
