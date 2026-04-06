@@ -2,28 +2,30 @@
  * Adlaire Deploy — デプロイパイプライン
  *
  * Git clone/pull → Worker 再起動の自動化
+ * デプロイ履歴はプラットフォーム KV に永続化
  */
 
+import { getPlatformKv } from "./kv.ts";
 import type { ProcessManager } from "./process_manager.ts";
 import type { DeployRecord, DeployState } from "./types.ts";
 
 /** デプロイ履歴の最大保持件数 */
 const MAX_DEPLOY_HISTORY = 50;
 
-/** デプロイ ID カウンター */
-let deployCounter = 0;
-
-function generateDeployId(): string {
-  deployCounter++;
-  return `deploy_${String(deployCounter).padStart(4, "0")}`;
+/** KV からデプロイ ID カウンターを読み込み、インクリメントして返す */
+async function nextDeployId(): Promise<string> {
+  const kv = getPlatformKv();
+  const key = ["deploy_counter"];
+  const entry = await kv.get<number>(key);
+  const next = (entry.value ?? 0) + 1;
+  await kv.set(key, next);
+  return `deploy_${String(next).padStart(4, "0")}`;
 }
 
 export class Deployer {
   private manager: ProcessManager;
   /** プロジェクト別デプロイ状態 */
   private states: Map<string, DeployState> = new Map();
-  /** プロジェクト別デプロイ履歴 */
-  private history: Map<string, DeployRecord[]> = new Map();
   /** プロジェクト別キューフラグ（デプロイ中に次のリクエストが来た場合） */
   private queued: Map<string, { commit: string; branch: string; pusher: string }> = new Map();
   /** プロジェクト別ロック */
@@ -38,9 +40,17 @@ export class Deployer {
     return this.states.get(projectId) ?? "idle";
   }
 
-  /** デプロイ履歴を取得する */
-  getHistory(projectId: string): DeployRecord[] {
-    return this.history.get(projectId) ?? [];
+  /** デプロイ履歴を KV から取得する */
+  async getHistory(projectId: string): Promise<DeployRecord[]> {
+    const kv = getPlatformKv();
+    const records: DeployRecord[] = [];
+    const iter = kv.list<DeployRecord>({ prefix: ["deploy", projectId] });
+    for await (const entry of iter) {
+      records.push(entry.value);
+    }
+    // started_at の降順でソート
+    records.sort((a, b) => b.started_at.localeCompare(a.started_at));
+    return records.slice(0, MAX_DEPLOY_HISTORY);
   }
 
   /** デプロイを実行する（非同期、即座に戻る） */
@@ -71,7 +81,7 @@ export class Deployer {
     this.locks.add(projectId);
     this.states.set(projectId, "deploying");
     const startedAt = new Date().toISOString();
-    const deployId = generateDeployId();
+    const deployId = await nextDeployId();
 
     console.log(`[deploy] Deploying "${projectId}" (commit: ${commit.slice(0, 7)}, by: ${pusher})`);
 
@@ -88,10 +98,8 @@ export class Deployer {
       const isCloned = await this.isGitRepo(projectDir);
 
       if (isCloned) {
-        // 更新 pull
         await this.gitPull(projectDir, projectConfig.git.branch);
       } else {
-        // 初回 clone
         await this.gitClone(
           projectConfig.git.url,
           projectConfig.git.branch,
@@ -103,12 +111,11 @@ export class Deployer {
       try {
         await this.manager.restart(projectId);
       } catch {
-        // Worker が stopped/failed の場合は start を試みる
         await this.manager.start(projectId);
       }
 
       this.states.set(projectId, "deployed");
-      this.addRecord({
+      await this.saveRecord({
         id: deployId,
         project_id: projectId,
         commit,
@@ -124,7 +131,7 @@ export class Deployer {
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       this.states.set(projectId, "deploy_failed");
-      this.addRecord({
+      await this.saveRecord({
         id: deployId,
         project_id: projectId,
         commit,
@@ -165,7 +172,6 @@ export class Deployer {
     branch: string,
     targetDir: string,
   ): Promise<void> {
-    // 既存ディレクトリを削除して clone（中途半端な状態を防ぐ）
     try {
       await Deno.remove(targetDir, { recursive: true });
     } catch {
@@ -186,7 +192,6 @@ export class Deployer {
 
   /** git pull を実行する */
   private async gitPull(dir: string, branch: string): Promise<void> {
-    // fetch
     const fetchCmd = new Deno.Command("git", {
       args: ["fetch", "origin", branch],
       cwd: dir,
@@ -199,7 +204,6 @@ export class Deployer {
       throw new Error(`git fetch failed (exit code: ${fetchResult.code})`);
     }
 
-    // reset --hard
     const resetCmd = new Deno.Command("git", {
       args: ["reset", "--hard", `origin/${branch}`],
       cwd: dir,
@@ -213,13 +217,25 @@ export class Deployer {
     }
   }
 
-  /** デプロイ履歴を追加する */
-  private addRecord(record: DeployRecord): void {
-    const records = this.history.get(record.project_id) ?? [];
-    records.unshift(record);
-    if (records.length > MAX_DEPLOY_HISTORY) {
-      records.length = MAX_DEPLOY_HISTORY;
+  /** デプロイレコードを KV に保存する */
+  private async saveRecord(record: DeployRecord): Promise<void> {
+    const kv = getPlatformKv();
+    await kv.set(["deploy", record.project_id, record.id], record);
+
+    // 古いレコードを削除（MAX_DEPLOY_HISTORY 超過分）
+    const all: string[] = [];
+    const iter = kv.list<DeployRecord>({ prefix: ["deploy", record.project_id] });
+    for await (const entry of iter) {
+      all.push(entry.value.id);
     }
-    this.history.set(record.project_id, records);
+
+    if (all.length > MAX_DEPLOY_HISTORY) {
+      // ID 昇順（古い順）でソートし、超過分を削除
+      all.sort();
+      const toDelete = all.slice(0, all.length - MAX_DEPLOY_HISTORY);
+      for (const id of toDelete) {
+        await kv.delete(["deploy", record.project_id, id]);
+      }
+    }
   }
 }

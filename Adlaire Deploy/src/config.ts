@@ -18,6 +18,7 @@ function createDefaultConfig(): DeployConfig {
     host: "0.0.0.0",
     port: 8000,
     projects_dir: "./projects",
+    data_dir: "./data",
     projects: {},
   };
 }
@@ -29,6 +30,10 @@ export async function loadConfig(): Promise<DeployConfig> {
     const config: DeployConfig = JSON.parse(text);
     if (config.version !== 1) {
       throw new Error(`Unsupported config version: ${config.version}`);
+    }
+    // Phase 3 マイグレーション: data_dir がない場合はデフォルト値を設定
+    if (!config.data_dir) {
+      config.data_dir = "./data";
     }
     return config;
   } catch (e) {

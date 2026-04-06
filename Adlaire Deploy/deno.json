@@ -1,7 +1,7 @@
 {
   "tasks": {
-    "serve": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env src/main.ts serve",
-    "cli": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env src/cli.ts",
+    "serve": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --unstable-kv src/main.ts serve",
+    "cli": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --unstable-kv src/cli.ts",
     "check": "deno check src/**/*.ts"
   },
   "compilerOptions": {

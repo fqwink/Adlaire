@@ -73,8 +73,17 @@ export interface DeployConfig {
   port: number;
   /** プロジェクト配置ディレクトリパス */
   projects_dir: string;
+  /** データディレクトリパス（KV ファイル格納先） */
+  data_dir: string;
   /** プロジェクト定義マップ（キー = プロジェクト ID） */
   projects: Record<string, ProjectConfig>;
+}
+
+/** KV 統計情報 */
+export interface KvStats {
+  path: string;
+  size_bytes: number;
+  exists: boolean;
 }
 
 /** プロセス情報（ランタイム） */

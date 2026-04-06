@@ -1,5 +1,21 @@
 # CHANGES - 変更履歴
 
+## Ver.1.2-3 (2026-04-06)
+
+### Phase 3: KV ストレージ
+
+* DEPLOY_PLATFORM_RULEBOOK.md に Phase 3 詳細仕様を追記（P3.1〜P3.8）
+* RELEASE_PLAN_RULEBOOK.md に Ver.1.2-3 計画を追加
+* `src/types.ts` — DeployConfig に `data_dir` 追加、KvStats 型追加
+* `src/config.ts` — デフォルト設定に `data_dir` 追加、マイグレーション対応
+* `src/kv.ts` — KV 管理モジュール（プラットフォーム KV 開閉・プロジェクト KV 統計/削除）
+* `src/deployer.ts` — デプロイ履歴を KV に永続化（メモリ → Deno KV）
+* `src/process_manager.ts` — Worker 起動時に `DENO_KV_PATH` 環境変数と `--unstable-kv` を追加
+* `src/proxy.ts` — 管理 API に KV stats/delete エンドポイント追加
+* `src/cli.ts` — `kv-stats` / `kv-reset` コマンド追加
+* `src/main.ts` — プラットフォーム KV 初期化・シャットダウン時クリーンアップ
+* `deno.json` — serve/cli タスクに `--unstable-kv` フラグ追加
+
 ## Ver.1.1-2 (2026-04-06)
 
 ### Phase 2: Git 連携

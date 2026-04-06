@@ -6,6 +6,7 @@
 
 import { loadConfig } from "./config.ts";
 import { Deployer } from "./deployer.ts";
+import { closePlatformKv, openPlatformKv } from "./kv.ts";
 import { ProcessManager } from "./process_manager.ts";
 import { startAdminApi, startProxy } from "./proxy.ts";
 
@@ -34,6 +35,9 @@ async function serve(args: string[]): Promise<void> {
 
   console.log("[deploy] Adlaire Deploy starting...");
 
+  // プラットフォーム KV 初期化
+  await openPlatformKv(config);
+
   // プロセスマネージャ・デプロイヤー初期化
   const manager = new ProcessManager(config);
   const deployer = new Deployer(manager);
@@ -55,6 +59,7 @@ async function serve(args: string[]): Promise<void> {
     await manager.stopAll();
     proxyServer.shutdown();
     adminServer.shutdown();
+    closePlatformKv();
     console.log("[deploy] Shutdown complete");
   };
 

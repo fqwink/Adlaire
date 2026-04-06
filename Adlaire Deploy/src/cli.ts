@@ -10,7 +10,7 @@ import {
   removeProject,
   validateProjectId,
 } from "./config.ts";
-import type { ApiResponse, DeployRecord, ProjectStatus } from "./types.ts";
+import type { ApiResponse, DeployRecord, KvStats, ProjectStatus } from "./types.ts";
 
 /** 管理 API のベース URL を取得する */
 async function getAdminBaseUrl(): Promise<string> {
@@ -334,6 +334,61 @@ async function cmdDeploys(args: string[]): Promise<void> {
   }
 }
 
+/** kv-stats コマンド — KV 統計情報表示 */
+async function cmdKvStats(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy kv-stats <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<KvStats>(
+      `/api/projects/${id}/kv/stats`,
+    );
+
+    if (result.ok) {
+      const s = result.data;
+      console.log(`KV Stats for "${id}":`);
+      console.log(`  path:       ${s.path}`);
+      console.log(`  exists:     ${s.exists}`);
+      console.log(`  size_bytes: ${s.size_bytes}`);
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
+/** kv-reset コマンド — KV データベース削除 */
+async function cmdKvReset(args: string[]): Promise<void> {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: adlaire-deploy kv-reset <id>");
+    Deno.exit(1);
+  }
+
+  try {
+    const result = await callAdminApi<{ message: string }>(
+      `/api/projects/${id}/kv`,
+      "DELETE",
+    );
+
+    if (result.ok) {
+      console.log(result.data.message);
+    } else {
+      console.error(`Error: ${result.message}`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error("Error: Could not connect to platform. Is 'serve' running?");
+    Deno.exit(1);
+  }
+}
+
 /** ヘルプ表示 */
 function showHelp(): void {
   console.log(`Adlaire Deploy — CLI
@@ -351,6 +406,8 @@ Commands:
   status [id]          Show project status (all if id omitted)
   deploy <id>          Trigger a manual deploy
   deploys <id>         Show deploy history
+  kv-stats <id>        Show KV database info
+  kv-reset <id>        Delete KV database (worker must be stopped)
   help                 Show this help message
 
 Options for 'serve':
@@ -397,6 +454,12 @@ switch (command) {
     break;
   case "deploys":
     await cmdDeploys(commandArgs);
+    break;
+  case "kv-stats":
+    await cmdKvStats(commandArgs);
+    break;
+  case "kv-reset":
+    await cmdKvReset(commandArgs);
     break;
   case "help":
   case "--help":

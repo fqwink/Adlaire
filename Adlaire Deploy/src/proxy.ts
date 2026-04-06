@@ -5,6 +5,7 @@
  */
 
 import type { Deployer } from "./deployer.ts";
+import { deleteProjectKv, getKvStats } from "./kv.ts";
 import type { ProcessManager } from "./process_manager.ts";
 import type { ProjectStatus } from "./types.ts";
 import { handleWebhook } from "./webhook.ts";
@@ -208,7 +209,7 @@ export function startAdminApi(
         if (!manager.getProjectConfig(id)) {
           return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
         }
-        return json({ ok: true, data: deployer.getHistory(id) });
+        return json({ ok: true, data: await deployer.getHistory(id) });
       }
 
       // POST /api/projects/{id}/deploy — 手動デプロイ実行
@@ -235,6 +236,35 @@ export function startAdminApi(
           return json({ ok: true, data: { message: "Deploy queued" } }, 202);
         }
         return json({ ok: true, data: { message: "Deploy started" } }, 202);
+      }
+
+      // GET /api/projects/{id}/kv/stats — KV 統計情報
+      const kvStatsMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/kv/stats$`));
+      if (method === "GET" && kvStatsMatch) {
+        const id = kvStatsMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const stats = await getKvStats(manager.getConfig(), id);
+        return json({ ok: true, data: stats });
+      }
+
+      // DELETE /api/projects/{id}/kv — KV データベース削除
+      const kvDeleteMatch = path.match(new RegExp(`^/api/projects/${ID_PATTERN}/kv$`));
+      if (method === "DELETE" && kvDeleteMatch) {
+        const id = kvDeleteMatch[1];
+        if (!manager.getProjectConfig(id)) {
+          return json({ ok: false, error: "not_found", message: "Project not found" }, 404);
+        }
+        const state = manager.getState(id);
+        if (state === "running") {
+          return json(
+            { ok: false, error: "worker_running", message: "Stop the worker before deleting KV" },
+            400,
+          );
+        }
+        await deleteProjectKv(manager.getConfig(), id);
+        return json({ ok: true, data: { message: "KV database deleted" } });
       }
 
       return json({ ok: false, error: "not_found", message: "Unknown endpoint" }, 404);

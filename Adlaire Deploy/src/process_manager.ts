@@ -95,17 +95,20 @@ export class ProcessManager {
       throw new Error(`Entry file not found: ${entryPath}`);
     }
 
+    const kvPath = `${this.config.data_dir}/projects/${id}.kv`;
     const command = new Deno.Command("deno", {
       args: [
         "run",
         "--allow-net",
         "--allow-read",
         "--allow-env",
+        "--unstable-kv",
         entryPath,
       ],
       env: {
         ...Deno.env.toObject(),
         PORT: String(info.config.port),
+        DENO_KV_PATH: kvPath,
       },
       stdout: "inherit",
       stderr: "inherit",

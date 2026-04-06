@@ -659,6 +659,158 @@ adlaire-deploy add <id> --hostname <host> --entry <entry> --port <port> \
 
 ---
 
+# Phase 3 詳細仕様 — KV ストレージ
+
+## P3.1 スコープ
+
+Phase 3 は以下の機能を提供する。
+
+1. **プロジェクト別 KV ストレージ** — プロジェクトごとに分離された Deno KV データベース
+2. **KV 管理** — プラットフォームによる KV ファイルのライフサイクル管理
+3. **デプロイ履歴の永続化** — Phase 2 のメモリ内デプロイ履歴を KV に永続化
+
+Phase 3 では以下を**対象外**とする。
+
+- KV のリモートバックアップ・レプリケーション
+- KV のブラウザ管理 UI
+- KV のクエリ API（プロジェクトは直接 `Deno.openKv()` を使用する）
+
+## P3.2 設計方針
+
+### P3.2.1 Deno KV の活用
+
+Deno KV は Deno ランタイムに組み込まれた KV ストアであり、SQLite をバックエンドとして使用する。
+Adlaire Deploy では以下の方針で KV を提供する。
+
+- **プロジェクト Worker** は `Deno.openKv()` を通常通り使用する。プラットフォームが KV ファイルのパスを環境変数で注入する。
+- **プラットフォーム自身** も内部状態（デプロイ履歴等）の永続化に KV を使用する。
+
+### P3.2.2 ストレージ分離
+
+プロジェクトごとに独立した KV データベースファイルを使用する。
+
+```
+data/
+├── platform.kv          # プラットフォーム内部用 KV
+└── projects/
+    ├── my-app.kv         # my-app プロジェクト用 KV
+    └── api-server.kv     # api-server プロジェクト用 KV
+```
+
+## P3.3 プラットフォーム設定の拡張
+
+### P3.3.1 `DeployConfig` への追加フィールド
+
+```json
+{
+  "version": 1,
+  "host": "0.0.0.0",
+  "port": 8000,
+  "projects_dir": "./projects",
+  "data_dir": "./data",
+  "projects": {}
+}
+```
+
+| フィールド | 型 | 必須 | デフォルト | 説明 |
+|-----------|------|:----:|:----------:|------|
+| `data_dir` | `string` | — | `"./data"` | データディレクトリパス（KV ファイル格納先） |
+
+## P3.4 Worker への KV パス注入
+
+### P3.4.1 環境変数
+
+Worker 起動時に以下の環境変数を設定する。
+
+| 環境変数 | 値 | 説明 |
+|---------|-----|------|
+| `DENO_KV_PATH` | `{data_dir}/projects/{id}.kv` | プロジェクト専用 KV ファイルパス |
+
+Worker は `Deno.openKv()` を引数なしで呼び出すか、`Deno.openKv(Deno.env.get("DENO_KV_PATH"))` で明示的にパスを指定する。
+
+### P3.4.2 Worker 起動コマンドの変更
+
+Phase 1 の起動コマンドを拡張する。
+
+```
+deno run --allow-net --allow-read --allow-env --unstable-kv {entry}
+```
+
+- `--unstable-kv` フラグを追加し、Deno KV API を有効化する。
+
+## P3.5 プラットフォーム KV
+
+### P3.5.1 用途
+
+プラットフォーム内部の永続データを `{data_dir}/platform.kv` に保存する。
+
+Phase 3 で永続化する対象:
+
+| キープレフィックス | 用途 |
+|-------------------|------|
+| `["deploy", "{project_id}", "{deploy_id}"]` | デプロイ履歴レコード |
+| `["deploy_counter"]` | デプロイ ID カウンター |
+
+### P3.5.2 デプロイ履歴の永続化
+
+- Phase 2 のメモリ内デプロイ履歴を KV に永続化する。
+- `Deployer` クラスがプラットフォーム KV を使用してデプロイレコードを保存・取得する。
+- 取得時はプレフィックス `["deploy", "{project_id}"]` で `list` し、`started_at` の降順で返す。
+- 最大保持件数は引き続き 50 件/プロジェクトとする。古いレコードは新規保存時に削除する。
+
+## P3.6 管理 API の拡張
+
+### P3.6.1 KV 管理エンドポイント
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| `DELETE` | `/api/projects/{id}/kv` | プロジェクトの KV データベースを削除する |
+| `GET` | `/api/projects/{id}/kv/stats` | KV データベースのファイルサイズを返す |
+
+### P3.6.2 `/api/projects/{id}/kv/stats` レスポンス
+
+```json
+{
+  "ok": true,
+  "data": {
+    "path": "./data/projects/my-app.kv",
+    "size_bytes": 40960,
+    "exists": true
+  }
+}
+```
+
+### P3.6.3 `/api/projects/{id}/kv` DELETE レスポンス
+
+```json
+{
+  "ok": true,
+  "data": {
+    "message": "KV database deleted"
+  }
+}
+```
+
+- Worker が稼働中の場合は `400` エラーを返す（Worker を停止してから削除すること）。
+
+## P3.7 CLI の拡張
+
+### P3.7.1 追加コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `kv-stats <id>` | プロジェクトの KV データベース情報を表示する |
+| `kv-reset <id>` | プロジェクトの KV データベースを削除する |
+
+## P3.8 制約事項
+
+- KV のバックアップ・リストア機能は Phase 3 では対象外とする。
+- KV のサイズ制限は Phase 3 では設けない。将来的にクォータ制御を検討する。
+- `Deno.openKv()` を引数なしで使用した場合、Deno ランタイムのデフォルト動作（一時ファイル）となる。プロジェクトが永続 KV を必要とする場合は `DENO_KV_PATH` 環境変数を使用すること。
+- プラットフォーム KV（`platform.kv`）はプラットフォームプロセスのみが使用する。プロジェクト Worker からのアクセスは禁止。
+
+---
+
 # 9. 最終規則
 
 ## 9.1 上位規範性
