@@ -423,7 +423,7 @@ a:hover {
 
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .sidebar {
@@ -1080,7 +1080,7 @@ select.is-error:focus {
 .diff-modal {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 1002;
   display: none;
 }
 
@@ -1148,7 +1148,7 @@ select.is-error:focus {
   font-size: var(--font-size-sm);
   line-height: var(--line-height-loose);
   background-color: var(--color-bg-dark);
-  color: #ddd;
+  color: var(--color-text-sub);
   padding: var(--space-4);
   border-radius: var(--radius-base);
   overflow-x: auto;
@@ -1163,15 +1163,15 @@ select.is-error:focus {
 }
 
 .log-err {
-  color: #f87171;
+  color: var(--color-danger-text);
 }
 
 .log-info {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .log-warn {
-  color: #fbbf24;
+  color: var(--color-warning-text);
 }
 /* Adlaire Style — Info Row
  * 仕様: STYLE_RULEBOOK.md §7.12

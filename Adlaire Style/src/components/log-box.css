@@ -7,7 +7,7 @@
   font-size: var(--font-size-sm);
   line-height: var(--line-height-loose);
   background-color: var(--color-bg-dark);
-  color: #ddd;
+  color: var(--color-text-sub);
   padding: var(--space-4);
   border-radius: var(--radius-base);
   overflow-x: auto;
@@ -22,13 +22,13 @@
 }
 
 .log-err {
-  color: #f87171;
+  color: var(--color-danger-text);
 }
 
 .log-info {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .log-warn {
-  color: #fbbf24;
+  color: var(--color-warning-text);
 }

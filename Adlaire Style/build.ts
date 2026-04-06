@@ -6,8 +6,15 @@
  * - dist/adlaire-style.css       (非圧縮)
  * - dist/adlaire-style.min.css   (minify 済み)
  *
- * 使用方法: deno run --allow-read --allow-write build.ts
+ * 使用方法: deno task build
  */
+
+// スクリプト配置ディレクトリを基準にパスを解決する
+const BASE_DIR = new URL(".", import.meta.url).pathname;
+
+function resolve(path: string): string {
+  return `${BASE_DIR}${path}`;
+}
 
 const SOURCE_ORDER = [
   "src/tokens.css",
@@ -29,15 +36,21 @@ const SOURCE_ORDER = [
   "src/utilities.css",
 ];
 
-const DIST_DIR = "dist";
+const DIST_DIR = resolve("dist");
 const OUT_CSS = `${DIST_DIR}/adlaire-style.css`;
 const OUT_MIN = `${DIST_DIR}/adlaire-style.min.css`;
 
 async function readSources(): Promise<string> {
   const parts: string[] = [];
   for (const path of SOURCE_ORDER) {
-    const content = await Deno.readTextFile(path);
-    parts.push(content);
+    const fullPath = resolve(path);
+    try {
+      const content = await Deno.readTextFile(fullPath);
+      parts.push(content);
+    } catch (e) {
+      console.error(`ファイル読み込み失敗: ${fullPath}`);
+      throw e;
+    }
   }
   return parts.join("\n");
 }
@@ -59,11 +72,7 @@ async function main() {
   console.log("Adlaire Style — ビルド開始");
 
   // dist/ ディレクトリを確保
-  try {
-    await Deno.mkdir(DIST_DIR, { recursive: true });
-  } catch {
-    // 既存なら無視
-  }
+  await Deno.mkdir(DIST_DIR, { recursive: true });
 
   // ソース結合
   console.log(`ソースファイル: ${SOURCE_ORDER.length} 件`);
