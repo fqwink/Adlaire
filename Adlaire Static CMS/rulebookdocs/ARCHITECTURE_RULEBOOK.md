@@ -586,31 +586,23 @@ main push
 
 ## 4.6 将来方針 — Adlaire Framework 採用（時期未定）
 
-> 本セクションは**将来の計画**を記録する。現行 Ver.3.x の実装要件ではない。
+> 本セクションは**将来の確定計画**を記録する。現行 Ver.3.x の実装要件ではない。
 
 ### 4.6.1 Adlaire Framework 採用方針
 
-Adlaire Static CMS は将来的に **Adlaire Framework** を採用する方針とする。時期は未定。
+Adlaire Static CMS は将来的に **Adlaire Framework** を採用する。時期は未定。
 
 採用により、以下の変化が生じる:
 
 | 項目 | 現行 Ver.3.x | Adlaire Framework 採用後 |
 |------|-------------|------------------------|
-| バックエンド開発言語 | PHP（手動実装） | TypeScript（全ソース） |
-| バックエンドデプロイ | PHP（直接） | TypeScript → PHP 自動変換（Framework 付随機能） |
 | フロントエンド | TypeScript SPA（esbuild） | TypeScript（Adlaire Framework） |
-| 共用ホスティング対応 | **維持** | **維持**（PHP 変換により互換性継続） |
+| バックエンド | PHP（変更なし） | PHP（変更なし） |
 
-### 4.6.2 TypeScript → PHP 変換
-
-Adlaire Framework は **TypeScript → PHP 自動変換機能**を付随する（Adlaire Framework RULEBOOK に仕様を定義する）。  
-これにより、全ソースコードを TypeScript で開発し、ビルド時に PHP に変換してデプロイすることが可能になる。
-
-### 4.6.3 現行 Ver.3.x との整合
+### 4.6.2 現行 Ver.3.x との整合
 
 現行 Ver.3.x アーキテクチャ（§4.5）は Adlaire Framework 採用への**適切な中間状態**として設計する。
 
-- PHP の責務を REST API・認証・静的生成・ファイルストレージに純化しておく（§4.5.8）ことで、将来の TypeScript 置換が容易になる。
 - 管理 UI は TypeScript SPA として独立しているため、Framework 採用時の移行影響を最小化できる。
 - データフォーマット（JSON フラットファイル）・API 設計は変更しない。
 
