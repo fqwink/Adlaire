@@ -51,15 +51,14 @@
 | `Core/helpers.php` | ヘルパー関数（esc, csrf, rate_limit） |
 | `Core/core.php` | FileStorage クラス（データ層） |
 | `Core/license.php` | LicenseValidator クラス（API キー認証） |
-| `Core/app.php` | App クラス（設定, 認証, 翻訳, シェル HTML 出力, プラグイン） |
+| `Core/app.php` | App クラス（設定, 認証, 翻訳, プラグイン） |
 | `Core/renderer.php` | サーバーサイド描画関数（renderBlocksToHtml, renderMarkdownToHtml） |
 | `Core/api.php` | REST API ルーター + 全ハンドラー |
 | `Core/generator.php` | 静的サイト生成（handleApiGenerate, generatePageHtml） |
-| ~~`Core/admin-ui.php`~~ | **廃止**（§11 参照）。管理 UI は TypeScript SPA に全移管 |
+| `Core/admin-ui.php` | 管理 UI HTML 生成 |
 
 > **設計判断**: 認証メソッドは App クラスのプライベートメソッドとして密結合しているため、
 > 分離せず app.php に統合。「複雑性より整合性」の原則に基づく。
-> `admin-ui.php` の廃止により PHP の責務は REST API・認証・静的生成・ファイルストレージに純化される。
 
 ## 2.3 require 順序（index.php）
 
@@ -71,7 +70,7 @@ require 'Core/app.php';        // App クラス（helpers, core に依存）
 require 'Core/renderer.php';   // 描画関数（helpers に依存）
 require 'Core/api.php';        // API ハンドラー（全てに依存）
 require 'Core/generator.php';  // 静的生成（全てに依存）
-// Core/admin-ui.php は廃止（§11 参照）
+require 'Core/admin-ui.php';   // 管理 UI HTML 生成（admin-ui に依存）
 ```
 
 ## 2.4 .htaccess アクセス制御
@@ -148,207 +147,34 @@ deno task watch   # ウォッチモード（開発時）
 - esbuild のバージョンは **`deno.json` の `esbuildVersion` フィールドで一元管理する**。CI/CD は `deno.json` から読み取ること（`jq -r '.esbuildVersion' deno.json`）。バージョン変更は `deno.json` のみを更新すれば全体に反映される。
 - `--allow-run` は `esbuild` のみに限定する（`--allow-run=esbuild`）。任意コマンド実行を禁止する。
 
-## 4.4 ES モジュール移行（Ver.3.0）
-
-> Ver.2.x 系の `module: none`（グローバルスクリプト方式）を廃止し、ES モジュールに移行する。
-
-### 4.4.1 基本方針
-
-- TypeScript ソースに `import` / `export` 文を導入する。
-- ビルドスクリプトが全モジュールを**単一バンドルファイル `js/main.js`** に結合する。
-- PHP テンプレートは `<script>` タグ 1つで `js/main.js` をロードする。
-- バンドルは IIFE（即時実行関数式）形式で出力し、モジュールスコープで隔離する。
-- PHP 側から参照が必要なグローバル関数は、エントリポイントで明示的に `window` に公開する。
-
-### 4.4.2 エントリポイント
-
-- **管理画面エントリ**: `ts/app.ts`（SPA 初期化・ルーター起動。§4.5 参照）
-- **公開ページエントリ**: `ts/public.ts`（`markdown.ts` 等の公開側必要モジュールのみインポート）
-- ビルドスクリプトはエントリポイントごとにバンドルを出力する。
-
-### 4.4.3 出力ファイル
-
-| 出力ファイル | エントリポイント | 用途 |
-|-------------|----------------|------|
-| `js/admin.js` | `ts/app.ts` | 管理画面 SPA 用（全機能） |
-| `js/public.js` | `ts/public.ts` | 公開ページ用（描画のみ） |
-
-### 4.4.4 PHP 側の変更
-
-- `App::adminShell()`: 管理画面用 Shell HTML を出力する。インラインスクリプトは最小限（CSRF トークンのみ）。
-- `App::scriptTags()` は廃止する。Shell HTML 内に直接 `<script>` タグを記述する。
-- 管理画面: `<script src="js/admin.js" defer></script>`
-- 公開ページ: `<script src="js/public.js" defer></script>`
-- `ADMIN_SCRIPTS` / `PUBLIC_SCRIPTS` 定数を廃止する。
-
-### 4.4.5 グローバル公開関数
-
-以下の関数は PHP テンプレートまたはインラインスクリプトから参照されるため、バンドル内でグローバルに公開する。
-
-| 関数 | 用途 |
-|------|------|
-| `markdownToHtml()` | Markdown → HTML 変換（公開ページ描画） |
-| `renderBlocks()` | ブロック → HTML 変換（公開ページ描画） |
-| `sanitizeHtml()` | HTML サニタイズ |
-| `escHtml()` | HTML エスケープ |
-
-公開方法: エントリポイントで `(window as any).functionName = functionName;` として明示的に代入する。
-
-### 4.4.6 廃止項目（Ver.3.x 対応済み）
-
-- `module: none` によるグローバルスクリプト方式を廃止した。
-- 個別 JS ファイルの `<script>` タグ複数読み込みを廃止した。
-- `ts/globals.d.ts` のグローバル関数宣言を廃止し、モジュールインポートに置換した。
-
----
-
-## 4.5 管理 UI SPA アーキテクチャ（完全フロントエンド化）
-
-> **Ver.3.x 新規策定**
-
-### 4.5.1 基本方針
-
-- **管理 UI の全レンダリングを TypeScript に移管する**。PHP は管理 UI の HTML を一切生成しない。
-- PHP の責務を **REST API・認証・静的生成・ファイルストレージ** に純化する。
-- `Core/admin-ui.php` を**廃止**し、TypeScript SPA が全ての管理画面を描画する。
-- **共用ホスティング互換性は絶対に維持する**。実行ランタイムは引き続き Apache + PHP のみ。Deno ランタイムは本番環境に持ち込まない。
-
-### 4.5.2 Shell HTML 方式
-
-`index.php` は管理画面リクエストに対して**最小限の Shell HTML** を返す。Shell HTML は UI を持たず、SPA の起動台座のみを提供する。
-
-**Shell HTML の必須要素:**
-
-```html
-<!DOCTYPE html>
-<html lang="<?= esc($lang) ?>">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="csrf-token" content="<?= esc(csrf_token()) ?>">
-  <title>Adlaire Admin</title>
-  <link rel="stylesheet" href="assets/adlaire-style.min.css">
-</head>
-<body>
-  <div id="app"></div>
-  <script src="js/admin.js" defer></script>
-</body>
-</html>
-```
-
-- CSRF トークンは `<meta name="csrf-token">` でフロントエンドに渡す。
-- `<div id="app">` が SPA のマウントポイントとなる。
-- PHP はこれ以上の HTML を生成しない。
-
-### 4.5.3 CSRF トークン管理
-
-- Shell HTML の `<meta name="csrf-token">` から初期トークンを読み取る。
-- API レスポンスの `X-CSRF-Token` ヘッダーでトークンを更新し続ける（既存仕様と同一）。
-- TypeScript 側: `api.ts` が全リクエストに `X-CSRF-Token` ヘッダーを自動付与する。
-
-### 4.5.4 クライアントサイドルーター
-
-管理画面のページ遷移はクライアントサイドで処理する。History API（`pushState`）を使用。
-
-| パス | 画面 | TypeScript モジュール |
-|------|------|----------------------|
-| `/admin` または `/?admin` | ダッシュボード | `ts/pages/dashboard.ts` |
-| `/admin/pages` | ページ一覧 | `ts/pages/page-list.ts` |
-| `/admin/pages/{slug}/edit` | ページ編集 | `ts/pages/page-edit.ts` |
-| `/admin/settings` | サイト設定 | `ts/pages/settings.ts` |
-| `/admin/users` | ユーザー管理 | `ts/pages/users.ts` |
-| `/admin/login` | ログイン | `ts/pages/login.ts` |
-
-- ルーターは `ts/router.ts` に実装する。
-- ページコンポーネントは `ts/pages/` ディレクトリに配置する。
-- **ログインページも TypeScript が描画する**。PHP はログイン API（`POST /api/auth/login`）のみを担当する。
-
-### 4.5.5 認証状態管理
-
-- SPA 起動時に `GET /api/auth/status` を呼び出し、ログイン状態を確認する。
-- 未ログイン: ログインページ（`ts/pages/login.ts`）にリダイレクト。
-- ログイン済み: ダッシュボードを表示。
-- PHP セッションは変更なし（`httponly`・`SameSite=Strict` 維持）。
-- Shell HTML はログイン状態に関係なく常に返す（セッション確認は JS が行う）。
-
-### 4.5.6 TypeScript モジュール構成（新規追加分）
-
-| ファイル | 責務 |
-|---------|------|
-| `ts/app.ts` | SPA エントリポイント。ルーター初期化・認証チェック・初期レンダリング |
-| `ts/router.ts` | クライアントサイドルーター（History API ベース） |
-| `ts/pages/dashboard.ts` | ダッシュボードページ |
-| `ts/pages/page-list.ts` | ページ一覧ページ |
-| `ts/pages/page-edit.ts` | ページ編集ページ（既存 `editor.ts` を内包） |
-| `ts/pages/settings.ts` | サイト設定ページ |
-| `ts/pages/users.ts` | ユーザー管理ページ |
-| `ts/pages/login.ts` | ログインページ |
-
-- 既存の `ts/editor.ts`・`ts/i18n.ts`・`ts/markdown.ts`・`ts/api.ts`・`ts/autosize.ts` は継続使用する。
-- `ts/editInplace.ts` の責務は `ts/app.ts` に統合し、廃止する（§11 参照）。
-
-### 4.5.7 Adlaire Style 統合
-
-- 管理 UI のスタイルシートを `themes/admin.css` から **Adlaire Style** に移行する。
-- Shell HTML は `assets/adlaire-style.min.css` を読み込む。
-- `themes/admin.css` は廃止する（§11 参照）。
-- Adlaire Style の CSS クラス（`STYLE_RULEBOOK.md` 準拠）を TypeScript 生成 HTML 内で使用する。
-
-### 4.5.8 PHP の最終責務範囲（完全フロントエンド化後）
-
-| 責務 | 担当 |
-|------|------|
-| Shell HTML 配信（管理画面） | PHP（`App::adminShell()`） |
-| 公開ページ HTML 生成 | PHP（`renderer.php`・`generator.php`） |
-| 認証・セッション管理 | PHP（`app.php`） |
-| REST API | PHP（`api.php`） |
-| ファイルストレージ | PHP（`core.php`） |
-| 静的サイト生成 | PHP（`generator.php`） |
-| ライセンス検証 | PHP（`license.php`） |
-| **管理 UI レンダリング** | **TypeScript（`js/admin.js`）** |
-| **クライアントルーティング** | **TypeScript（`ts/router.ts`）** |
-
 ---
 
 # 5. プロジェクト構成
 
 ```
 Adlaire Static CMS/
-├── index.php                  # エントリーポイント + ルーティング（Shell HTML 配信含む）
+├── index.php                  # エントリーポイント + ルーティング
 ├── bundle-installer.php       # セットアップツール（初回のみ）
 ├── .htaccess                  # Apache URL書き換え・アクセス制御
 ├── Core/                      # Core 基盤（直接HTTPアクセス禁止）
 │   ├── helpers.php            #   ヘルパー関数（esc, csrf, rate_limit）
 │   ├── core.php               #   FileStorage クラス（データ層）
 │   ├── license.php            #   LicenseValidator（API キー認証）
-│   ├── app.php                #   App クラス（設定, 認証, 翻訳, Shell HTML 出力）
-│   ├── renderer.php           #   サーバーサイド描画関数（公開ページ用）
+│   ├── app.php                #   App クラス（設定, 認証, 翻訳, プラグイン）
+│   ├── renderer.php           #   サーバーサイド描画関数
 │   ├── api.php                #   REST API ルーター + 全ハンドラー
-│   └── generator.php          #   静的サイト生成
-│   # admin-ui.php は廃止（§11 参照）
+│   ├── generator.php          #   静的サイト生成
+│   └── admin-ui.php           #   管理 UI HTML 生成
 ├── ts/                        # TypeScript ソース
 │   ├── globals.d.ts           #   グローバル型定義
-│   ├── app.ts                 #   管理画面 SPA エントリポイント（§4.5.6）
-│   ├── router.ts              #   クライアントサイドルーター（History API ベース）
-│   ├── public.ts              #   公開ページエントリポイント（描画のみ）
+│   ├── editInplace.ts         #   管理画面エントリポイント
+│   ├── public.ts              #   公開ページエントリポイント
 │   ├── editor.ts              #   ブロックエディタ
 │   ├── autosize.ts            #   textarea 自動リサイズ
 │   ├── i18n.ts                #   多言語化モジュール
 │   ├── markdown.ts            #   Markdown→HTML コンバーター
-│   ├── api.ts                 #   REST API クライアント
-│   └── pages/                 #   ページコンポーネント（§4.5.4）
-│       ├── login.ts           #     ログインページ
-│       ├── dashboard.ts       #     ダッシュボード
-│       ├── page-list.ts       #     ページ一覧
-│       ├── page-edit.ts       #     ページ編集（editor.ts を内包）
-│       ├── settings.ts        #     サイト設定
-│       └── users.ts           #     ユーザー管理
-│   # editInplace.ts は廃止（§11 参照）
-├── js/                        # バンドル済み JavaScript（自動生成・手動編集禁止）
-│   ├── admin.js               #   管理画面 SPA IIFE バンドル
-│   └── public.js              #   公開ページ用 IIFE バンドル
-├── assets/                    # 静的アセット（直接HTTPアクセス許可）
-│   └── adlaire-style.min.css  #   Adlaire Style（管理 UI 用 CSS）
+│   └── api.ts                 #   REST API クライアント
+├── js/                        # コンパイル済み JavaScript（自動生成・手動編集禁止）
 ├── scripts/                   # ビルドスクリプト
 │   └── build.ts               #   esbuild IIFE バンドル生成
 ├── data/                      # データストレージ
@@ -391,18 +217,6 @@ Adlaire Static CMS/
 └── Licenses/
     └── LICENSE_Ver.2.0        #   Adlaire License Ver.2.0
 ```
-
-### 5.1 ZIP リリースへの反映
-
-§7.3.3 の ZIP パッケージ構成に以下の変更を加える。
-
-**追加（含める）:**
-- `assets/` ディレクトリ（`adlaire-style.min.css`）
-
-**削除（含めない）:**
-- `ts/editInplace.ts`（廃止）
-- `Core/admin-ui.php`（廃止）
-- `themes/admin.css`（廃止）
 
 ---
 
@@ -586,50 +400,26 @@ main push
 
 ## 4.6 将来方針 — Adlaire Framework 採用（時期未定）
 
-> 本セクションは**将来の計画**を記録する。現行 Ver.3.x の実装要件ではない。
+> 本セクションは**将来の確定計画**を記録する。現行 Ver.3.x の実装要件ではない。
 
 ### 4.6.1 Adlaire Framework 採用方針
 
-Adlaire Static CMS は将来的に **Adlaire Framework** を採用する方針とする。時期は未定。
+Adlaire Static CMS は将来的に **Adlaire Framework** を採用する。時期は未定。
 
 採用により、以下の変化が生じる:
 
 | 項目 | 現行 Ver.3.x | Adlaire Framework 採用後 |
 |------|-------------|------------------------|
-| バックエンド開発言語 | PHP（手動実装） | TypeScript（全ソース） |
-| バックエンドデプロイ | PHP（直接） | TypeScript → PHP 自動変換（Framework 付随機能） |
 | フロントエンド | TypeScript SPA（esbuild） | TypeScript（Adlaire Framework） |
-| 共用ホスティング対応 | **維持** | **維持**（PHP 変換により互換性継続） |
+| バックエンド | PHP（変更なし） | PHP（変更なし） |
 
-### 4.6.2 TypeScript → PHP 変換
+### 4.6.2 現行アーキテクチャとの整合
 
-Adlaire Framework は **TypeScript → PHP 自動変換機能**を付随する（Adlaire Framework RULEBOOK に仕様を定義する）。  
-これにより、全ソースコードを TypeScript で開発し、ビルド時に PHP に変換してデプロイすることが可能になる。
-
-### 4.6.3 現行 Ver.3.x との整合
-
-現行 Ver.3.x アーキテクチャ（§4.5）は Adlaire Framework 採用への**適切な中間状態**として設計する。
-
-- PHP の責務を REST API・認証・静的生成・ファイルストレージに純化しておく（§4.5.8）ことで、将来の TypeScript 置換が容易になる。
-- 管理 UI は TypeScript SPA として独立しているため、Framework 採用時の移行影響を最小化できる。
-- データフォーマット（JSON フラットファイル）・API 設計は変更しない。
+- データフォーマット（JSON フラットファイル）・API 設計は Adlaire Framework 採用後も変更しない。
+- TypeScript による既存クライアント機能（エディタ・Markdown 等）は Framework 採用時に移行する。
 
 ---
 
-# 11. 廃止項目（Ver.3.x 以降）
-
-以下は完全フロントエンド化（§4.5）に伴い廃止する。廃止ポリシー（`CHARTER.md` §6）に従い、レガシーソースコードの互換性維持は行わない。
-
-| 廃止ファイル / 機能 | 廃止理由 | 代替 |
-|---|---|---|
-| `Core/admin-ui.php` | 管理 UI のレンダリング責務を TypeScript SPA に全移管 | `ts/pages/*.ts` |
-| `ts/editInplace.ts` | SPA エントリポイントが `ts/app.ts` に統合 | `ts/app.ts` |
-| `themes/admin.css` | Adlaire Style に移行 | `assets/adlaire-style.min.css` |
-| `App::scriptTags()` メソッド | Shell HTML 内に直接 `<script>` タグを記述 | `App::adminShell()` |
-| `ADMIN_SCRIPTS` / `PUBLIC_SCRIPTS` 定数 | 不要 | 削除 |
-| PHP による管理 UI HTML 文字列生成 | 全機能を TypeScript に移管 | `ts/pages/*.ts` |
-
----
 
 # 9. バージョン規則・廃止ポリシー
 
