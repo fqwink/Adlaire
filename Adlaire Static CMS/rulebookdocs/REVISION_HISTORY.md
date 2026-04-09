@@ -48,6 +48,7 @@
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| Ver.3.3 | 2026-04-09 | **SPA 計画（Ver.3.0）を全面白紙**。§4.4（ES モジュール移行・SPA エントリポイント）・§4.5（管理 UI SPA アーキテクチャ）・§5.1（SPA ZIP 変更）・§11（SPA 廃止項目）を削除。§2.2 の `admin-ui.php` 廃止記述を復元（現役ファイルとして再定義）。§2.3 の require 順序に `admin-ui.php` を復元。§5 プロジェクト構成を SPA 前の状態に戻す（`ts/editInplace.ts` 復元、`ts/pages/` 削除、`js/` を個別ファイル形式に戻す）。§4.6 の §4.5 参照を除去。 |
 | Ver.3.2 | 2026-04-09 | §4.6「将来方針 — Adlaire Framework 採用」を改訂。TypeScript → PHP 自動変換計画（白紙）を削除。バックエンド（PHP）は変更なしと明記。Adlaire Framework 採用（時期未定）は確定事項として維持。 |
 | Ver.3.1 | 2026-04-06 | §4.6 将来方針「Adlaire Framework 採用（時期未定）」を新設。TypeScript → PHP 自動変換機能（Framework 付随）の採用方針・現行 Ver.3.x との整合方針を記録。 |
 | Ver.3.0 | 2026-04-06 | **完全フロントエンド化・TypeScript SPA 移行の仕様策定**。§4.4.2 エントリポイントを `editInplace.ts` → `app.ts` に変更。§4.4.4 PHP 側変更（`adminShell()` 新設・`scriptTags()` 廃止）。§4.5 管理 UI SPA アーキテクチャを新設（Shell HTML 方式・CSRF トークン管理・クライアントサイドルーター・認証状態管理・TypeScript モジュール構成・Adlaire Style 統合・PHP 最終責務範囲）。§5 プロジェクト構成全面更新（`ts/pages/` ディレクトリ新設・`assets/` ディレクトリ追加・`admin-ui.php` 廃止・`editInplace.ts` 廃止・`admin.css` 廃止）。§5.1 ZIP リリース構成への反映追加。§11 廃止項目（Ver.3.x 以降）を新設（`admin-ui.php`・`editInplace.ts`・`admin.css`・`scriptTags()`・定数廃止）。§2.2 `admin-ui.php` を廃止済みとしてマーク。§2.3 require 順序から `admin-ui.php` を除外。文書バージョンを Ver.1.9 → Ver.3.0 に更新。 |
