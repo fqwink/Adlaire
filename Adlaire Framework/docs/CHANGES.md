@@ -4,6 +4,25 @@
 
 ---
 
+## Ver.1.8-10 — logger(format) 拡張 + cache()
+
+**リリース日**: 2026-04-10
+**種別**: 機能改良 + 追加機能
+
+### 機能改良
+
+- **`logger(options?)`**（§8.5）: `options` 引数（`LoggerOptions`）を追加。`format: "json"` を指定すると `{ method, path, status, ms, timestamp }` の JSON Lines 形式でコンソールに出力する。`format: "text"`（デフォルト）は従来の `${METHOD} ${PATH} ${STATUS} — ${ms}ms` 形式のまま。後方互換を維持（引数なしで呼び出し可能）。
+
+### 追加機能
+
+- **`cache(options?)`**（§8.10）: `Cache-Control` ヘッダーを設定するミドルウェア。`noStore: true` の場合は `"no-store"` のみを設定（他オプションを無視）。それ以外は `public`/`private`・`no-cache`・`max-age`・`stale-while-revalidate` を組み合わせてディレクティブを生成する。ミドルウェア初期化時にディレクティブ文字列をキャッシュして毎リクエスト生成を避ける。
+- `builtin_middleware.ts`: `LoggerOptions` / `CacheOptions` インターフェースを追加。
+- `mod.ts`: `cache` 関数と `CacheOptions` / `LoggerOptions` 型をエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.27 準拠（§8.5 / §8.10）
+
+---
+
 ## Ver.1.7-9 — securityHeaders() + requestId()
 
 **リリース日**: 2026-04-10

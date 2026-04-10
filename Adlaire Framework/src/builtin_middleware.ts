@@ -88,16 +88,37 @@ export function cors(options: CorsOptions = {}): MiddlewareFunction<MiddlewareSt
 
 // ─── LOGGER ──────────────────────────────────────────────────────────────────
 
+/** logger() オプション（§8.5） */
+export interface LoggerOptions {
+  /** 出力フォーマット（デフォルト: "text"） */
+  format?: "text" | "json";
+}
+
 /**
  * リクエストログを出力するミドルウェア（§8.5）。
- * `${METHOD} ${PATH} ${STATUS} — ${ms}ms` 形式でコンソールに出力する。
+ * format: "text"（デフォルト）: `${METHOD} ${PATH} ${STATUS} — ${ms}ms` 形式。
+ * format: "json": JSON Lines 形式（{ method, path, status, ms, timestamp }）。
  */
-export function logger(): MiddlewareFunction<MiddlewareState> {
+export function logger(options: LoggerOptions = {}): MiddlewareFunction<MiddlewareState> {
+  const { format = "text" } = options;
+
   return async (ctx, next) => {
     const start = performance.now();
     const res = await next();
-    const ms = (performance.now() - start).toFixed(1);
-    console.log(`${ctx.req.method} ${ctx.url.pathname} ${res.status} — ${ms}ms`);
+    const ms = parseFloat((performance.now() - start).toFixed(1));
+
+    if (format === "json") {
+      console.log(JSON.stringify({
+        method: ctx.req.method,
+        path: ctx.url.pathname,
+        status: res.status,
+        ms,
+        timestamp: new Date().toISOString(),
+      }));
+    } else {
+      console.log(`${ctx.req.method} ${ctx.url.pathname} ${res.status} — ${ms}ms`);
+    }
+
     return res;
   };
 }
@@ -453,6 +474,61 @@ export function requestId(
     const headers = new Headers(res.headers);
     headers.set(headerName, id);
 
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  };
+}
+
+// ─── CACHE ───────────────────────────────────────────────────────────────────
+
+/** cache() オプション（§8.10） */
+export interface CacheOptions {
+  /** max-age=<n>（秒） */
+  maxAge?: number;
+  /** stale-while-revalidate=<n>（秒） */
+  staleWhileRevalidate?: number;
+  /** private ディレクティブ（デフォルト: false → public） */
+  private?: boolean;
+  /** no-store ディレクティブ。true の場合は他のオプションを無視（デフォルト: false） */
+  noStore?: boolean;
+  /** no-cache ディレクティブ（デフォルト: false） */
+  noCache?: boolean;
+}
+
+/**
+ * Cache-Control ヘッダーを設定するミドルウェア（§8.10）。
+ * noStore: true の場合は "no-store" のみを設定し、他のオプションをすべて無視する。
+ */
+export function cache(options: CacheOptions = {}): MiddlewareFunction<MiddlewareState> {
+  const {
+    maxAge,
+    staleWhileRevalidate,
+    private: isPrivate = false,
+    noStore = false,
+    noCache = false,
+  } = options;
+
+  let cacheControl: string;
+  if (noStore) {
+    cacheControl = "no-store";
+  } else {
+    const directives: string[] = [];
+    directives.push(isPrivate ? "private" : "public");
+    if (noCache) directives.push("no-cache");
+    if (maxAge !== undefined) directives.push(`max-age=${maxAge}`);
+    if (staleWhileRevalidate !== undefined) {
+      directives.push(`stale-while-revalidate=${staleWhileRevalidate}`);
+    }
+    cacheControl = directives.join(", ");
+  }
+
+  return async (_ctx, next) => {
+    const res = await next();
+    const headers = new Headers(res.headers);
+    headers.set("Cache-Control", cacheControl);
     return new Response(res.body, {
       status: res.status,
       statusText: res.statusText,

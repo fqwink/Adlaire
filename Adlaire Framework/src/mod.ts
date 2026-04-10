@@ -19,7 +19,7 @@ export { getEnv } from "./env.ts";
 export { ValidationError } from "./error.ts";
 
 // --- 組み込みミドルウェア ---
-export { compress, cors, csrf, jwtAuth, logger, rateLimit, requestId, securityHeaders } from "./builtin_middleware.ts";
+export { cache, compress, cors, csrf, jwtAuth, logger, rateLimit, requestId, securityHeaders } from "./builtin_middleware.ts";
 
 // --- ハンドラー ---
 export { defineHandler, defineErrorHandler, defineNotFoundHandler } from "./handler.ts";
@@ -49,9 +49,11 @@ export type {
   WebSocketHandlers,
 } from "./types.ts";
 export type {
+  CacheOptions,
   CorsOptions,
   CsrfOptions,
   JwtAuthOptions,
+  LoggerOptions,
   RateLimitOptions,
   RequestIdOptions,
   SecurityHeadersOptions,

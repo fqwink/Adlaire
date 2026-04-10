@@ -19,7 +19,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 
 ## 状態
 
-**Ver.1.7-9**（実装済み）
+**Ver.1.8-10**（実装済み）
 
 | バージョン | 内容 |
 |-----------|------|
@@ -32,6 +32,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 | Ver.1.5-7 | ルートグループ（`(group)`）・`getEnv()` 型安全環境変数アクセサ |
 | Ver.1.6-8 | `jwtAuth()` JWT Bearer 認証・`csrf()` CSRF 二重送信 Cookie 保護 |
 | Ver.1.7-9 | `securityHeaders()` セキュリティヘッダー一括付与・`requestId()` リクエスト ID 注入 |
+| Ver.1.8-10 | `logger(format)` JSON Lines 出力対応・`cache()` Cache-Control ヘッダー設定 |
 
 ## 仕様
 
