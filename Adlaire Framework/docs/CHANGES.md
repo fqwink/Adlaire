@@ -4,6 +4,23 @@
 
 ---
 
+## Ver.1.9-11 — ctx.sendFile() + ctx.negotiate()
+
+**リリース日**: 2026-04-10
+**種別**: 追加機能
+
+### 追加機能
+
+- **`ctx.sendFile(path, options?)`**（§6.10）: 任意ファイルをレスポンスとして配信する。拡張子から MIME タイプを自動判定（30種対応）し、`Content-Type` を設定する。`disposition: "attachment"` 指定時は `Content-Disposition: attachment; filename="..."` を付与する。ファイルが存在しない場合は 404、ディレクトリの場合は 403 を返す。Deno の `Deno.stat()` + `Deno.open()` + `file.readable` ストリームを使用。Set-Cookie の自動反映（`withCookies`）を適用。
+- **`ctx.negotiate(handlers)`**（§6.11）: `Accept` ヘッダーを解析（q 値降順ソート）し、一致するハンドラーを選択して実行する。`*/*` に対しては登録済みハンドラーの先頭を選択する。一致なし時は 406 Not Acceptable を返す。
+- `context.ts`: `MIME_TYPES` マップ（30種）・`getMimeType()` / `parseAccept()` ヘルパーをモジュール内部実装として追加。
+- `types.ts`: `SendFileOptions` インターフェース・`NegotiateHandlers` 型を追加。`Context` インターフェースに `sendFile()` / `negotiate()` を追加。
+- `mod.ts`: `SendFileOptions` / `NegotiateHandlers` 型をエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.28 準拠（§6.10 / §6.11）
+
+---
+
 ## Ver.1.8-10 — logger(format) 拡張 + cache()
 
 **リリース日**: 2026-04-10

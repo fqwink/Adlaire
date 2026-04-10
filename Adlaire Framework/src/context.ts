@@ -1,14 +1,16 @@
 /**
  * Adlaire Framework — 型付きリクエストコンテキスト
- * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §6.10 / §6.11 準拠
  */
 
 import type {
   Context,
   MiddlewareState,
+  NegotiateHandlers,
   RedirectStatus,
   ResponseInit,
   RouteParams,
+  SendFileOptions,
   SSEEvent,
   SSEStream,
   WebSocketHandlers,
@@ -26,6 +28,61 @@ import {
 } from "./response.ts";
 import { applySetCookies, createCookieStore } from "./cookies.ts";
 import { ValidationError } from "./error.ts";
+
+// ─── MIME タイプマップ（§6.10）────────────────────────────────────────────────
+
+const MIME_TYPES: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".ts": "application/typescript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+};
+
+function getMimeType(filePath: string): string {
+  const dot = filePath.lastIndexOf(".");
+  if (dot === -1) return "application/octet-stream";
+  return MIME_TYPES[filePath.slice(dot).toLowerCase()] ?? "application/octet-stream";
+}
+
+// ─── Accept ヘッダーパーサー（§6.11）─────────────────────────────────────────
+
+function parseAccept(accept: string): Array<{ type: string; q: number }> {
+  return accept
+    .split(",")
+    .map((part) => {
+      const segments = part.trim().split(";");
+      const type = (segments[0] ?? "").trim();
+      const qSeg = segments.slice(1).find((s) => s.trim().startsWith("q="));
+      const q = qSeg ? parseFloat(qSeg.trim().slice(2)) : 1.0;
+      return { type, q: isNaN(q) ? 1.0 : q };
+    })
+    .sort((a, b) => b.q - a.q);
+}
 
 /**
  * Context の実体を生成する。
@@ -186,6 +243,75 @@ export function createContext<
           "Connection": "keep-alive",
         },
       });
+    },
+
+    // §6.10: 任意ファイルの配信
+    async sendFile(filePath: string, options?: SendFileOptions): Promise<Response> {
+      const { disposition = "inline", fileName, contentType } = options ?? {};
+
+      // ファイル情報確認
+      let stat: Deno.FileInfo;
+      try {
+        stat = await Deno.stat(filePath);
+      } catch {
+        return withCookies(notFoundResponse());
+      }
+
+      if (stat.isDirectory) {
+        return withCookies(forbiddenResponse());
+      }
+
+      // ファイルオープン
+      let file: Deno.FsFile;
+      try {
+        file = await Deno.open(filePath, { read: true });
+      } catch {
+        return withCookies(notFoundResponse());
+      }
+
+      const mimeType = contentType ?? getMimeType(filePath);
+      const name = fileName ?? filePath.split("/").pop() ?? "file";
+
+      const headers = new Headers();
+      headers.set("Content-Type", mimeType);
+      if (disposition === "attachment") {
+        headers.set("Content-Disposition", `attachment; filename="${name}"`);
+      } else {
+        headers.set("Content-Disposition", "inline");
+      }
+      if (stat.size !== null && stat.size > 0) {
+        headers.set("Content-Length", String(stat.size));
+      }
+
+      return withCookies(new Response(file.readable, { headers }));
+    },
+
+    // §6.11: コンテンツネゴシエーション
+    async negotiate(handlers: NegotiateHandlers): Promise<Response> {
+      const acceptHeader = req.headers.get("Accept") ?? "*/*";
+      const accepted = parseAccept(acceptHeader);
+
+      for (const { type } of accepted) {
+        if (type === "*/*") {
+          // 登録済みの最初のハンドラーを選択
+          const keys = Object.keys(handlers);
+          for (const key of keys) {
+            const h = handlers[key];
+            if (h) return await h();
+          }
+          break;
+        }
+        const h = handlers[type];
+        if (h) return await h();
+      }
+
+      return new Response(
+        JSON.stringify({ error: "Not Acceptable" }),
+        {
+          status: 406,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        },
+      );
     },
   };
 }

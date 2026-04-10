@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — 共通型定義
- * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §7 / §8 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §6.10 / §6.11 / §7 / §8 準拠
  */
 
 import type { CookieOptions, Cookies } from "./cookies.ts";
@@ -56,6 +56,10 @@ export interface Context<
   upgradeWebSocket(handlers: WebSocketHandlers): Response;
   /** SSE レスポンスの生成（§6.9） */
   sse(callback: (stream: SSEStream) => void | Promise<void>): Response;
+  /** 任意ファイルの配信（§6.10） */
+  sendFile(path: string, options?: SendFileOptions): Promise<Response>;
+  /** Accept ヘッダーによるコンテンツネゴシエーション（§6.11） */
+  negotiate(handlers: NegotiateHandlers): Promise<Response>;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;
@@ -127,6 +131,26 @@ export interface ResolvedRoute {
   /** 適用されるミドルウェアチェーン */
   middleware: MiddlewareFunction[];
 }
+
+/**
+ * ctx.sendFile() オプション（§6.10）
+ */
+export interface SendFileOptions {
+  /** MIME タイプ（省略時は拡張子から自動判定） */
+  contentType?: string;
+  /** ダウンロード時のファイル名（disposition: "attachment" で使用） */
+  fileName?: string;
+  /** Content-Disposition（デフォルト: "inline"） */
+  disposition?: "inline" | "attachment";
+}
+
+/**
+ * ctx.negotiate() ハンドラーマップ（§6.11）
+ * キーはメディアタイプ文字列（例: "application/json"）。
+ */
+export type NegotiateHandlers = Partial<
+  Record<string, () => Response | Promise<Response>>
+>;
 
 /**
  * SSE イベント（§6.9）
