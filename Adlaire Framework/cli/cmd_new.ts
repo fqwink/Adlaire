@@ -60,6 +60,22 @@ export const middleware = defineMiddleware(async (ctx, next) => {
 });
 `;
 
+/**
+ * ディレクトリを再帰的にコピーする。
+ */
+async function copyDirRecursive(src: string, dest: string): Promise<void> {
+  await Deno.mkdir(dest, { recursive: true });
+  for await (const entry of Deno.readDir(src)) {
+    const srcPath = `${src}/${entry.name}`;
+    const destPath = `${dest}/${entry.name}`;
+    if (entry.isDirectory) {
+      await copyDirRecursive(srcPath, destPath);
+    } else {
+      await Deno.copyFile(srcPath, destPath);
+    }
+  }
+}
+
 export async function commandNew(args: string[]): Promise<void> {
   if (args.length === 0) {
     console.error("Usage: adlaire new <app-name>");
@@ -79,6 +95,13 @@ export async function commandNew(args: string[]): Promise<void> {
   // ディレクトリ構造を作成
   await Deno.mkdir(`${appName}/routes`, { recursive: true });
   await Deno.mkdir(`${appName}/static`, { recursive: true });
+
+  // フレームワークソースを framework/ にコピー
+  // import.meta.url を使用してこの CLI ファイルからの相対パスで src/ を特定する
+  const frameworkSrc = decodeURIComponent(
+    new URL("../src", import.meta.url).pathname,
+  );
+  await copyDirRecursive(frameworkSrc, `${appName}/framework`);
 
   // ファイルを書き込む
   const encoder = new TextEncoder();

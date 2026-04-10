@@ -115,13 +115,22 @@ export class Router {
   }
 
   /**
+   * ファイルパスを file:// URL に変換する（パスセグメントをパーセントエンコード）。
+   */
+  private toFileUrl(filePath: string): string {
+    const realPath = Deno.realPathSync(filePath);
+    return "file://" +
+      realPath.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+  }
+
+  /**
    * ミドルウェアファイルをロードする。
    */
   private async loadMiddleware(
     filePath: string,
     prefix: string,
   ): Promise<void> {
-    const mod = await import(`file://${Deno.realPathSync(filePath)}`);
+    const mod = await import(this.toFileUrl(filePath));
     const mw = mod.middleware;
 
     if (Array.isArray(mw)) {
@@ -142,7 +151,7 @@ export class Router {
     urlPrefix: string,
     fileName: string,
   ): Promise<void> {
-    const mod = await import(`file://${Deno.realPathSync(filePath)}`);
+    const mod = await import(this.toFileUrl(filePath));
     const handler = mod.handler;
     if (!handler) return;
 
@@ -234,8 +243,13 @@ export class Router {
       }
 
       // 適用対象のミドルウェアを収集（§8.3: 外側から順に）
+      // パスセグメント境界で一致判定（例: /admin は /administrator にマッチしない）
       const applicableMiddleware = this.middlewares
-        .filter((mw) => url.pathname.startsWith(mw.prefix) || mw.prefix === "/")
+        .filter((mw) =>
+          mw.prefix === "/" ||
+          url.pathname === mw.prefix ||
+          url.pathname.startsWith(mw.prefix + "/")
+        )
         .map((mw) => mw.fn);
 
       return {
