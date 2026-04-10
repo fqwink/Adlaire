@@ -212,7 +212,11 @@ export function createContext<
             typeof event.data === "string"
               ? event.data
               : JSON.stringify(event.data);
-          chunk += `data: ${data}\n\n`;
+          // RFC 8895: 改行を含むデータは複数の data: フィールドに分割する
+          for (const line of data.split("\n")) {
+            chunk += `data: ${line}\n`;
+          }
+          chunk += "\n";
           controller.enqueue(encoder.encode(chunk));
         },
         close(): void {
@@ -275,7 +279,9 @@ export function createContext<
       const headers = new Headers();
       headers.set("Content-Type", mimeType);
       if (disposition === "attachment") {
-        headers.set("Content-Disposition", `attachment; filename="${name}"`);
+        // RFC 6266: ダブルクォートとバックスラッシュをエスケープ
+        const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        headers.set("Content-Disposition", `attachment; filename="${escaped}"`);
       } else {
         headers.set("Content-Disposition", "inline");
       }
@@ -307,10 +313,12 @@ export function createContext<
         throw new ValidationError("Failed to parse form data");
       }
 
-      // FormData → Record<string, string | File> に変換
+      // FormData → Record<string, string | File> に変換（同名キーは最初の値を保持）
       const data: Record<string, string | File> = {};
       for (const [key, value] of formData.entries()) {
-        data[key] = value;
+        if (!(key in data)) {
+          data[key] = value;
+        }
       }
 
       if (guard !== undefined && !guard(data)) {

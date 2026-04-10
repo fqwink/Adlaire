@@ -46,7 +46,12 @@ export function cors(options: CorsOptions = {}): MiddlewareFunction<MiddlewareSt
   const allowHeaders = allowedHeaders.join(", ");
 
   function getAllowOrigin(requestOrigin: string | null): string | null {
-    if (origins === "*") return "*";
+    // §8.5: credentials: true のときは "*" を使えない（RFC 違反）
+    // リクエストオリジンをそのまま返す
+    if (origins === "*") {
+      if (credentials && requestOrigin) return requestOrigin;
+      return "*";
+    }
     if (!requestOrigin) return null;
     const list = Array.isArray(origins) ? origins : [origins];
     return list.includes(requestOrigin) ? requestOrigin : null;
@@ -156,6 +161,13 @@ export function rateLimit(
     if (!entry || entry.reset <= now) {
       entry = { count: 0, reset: now + windowSec * 1000 };
       store.set(ip, entry);
+
+      // 期限切れエントリの定期パージ（メモリリーク防止）
+      if (store.size > max * 2) {
+        for (const [key, val] of store) {
+          if (val.reset <= now) store.delete(key);
+        }
+      }
     }
     entry.count++;
 
@@ -191,6 +203,9 @@ export function compress(): MiddlewareFunction<MiddlewareState> {
     const res = await next();
 
     if (!res.body) return res;
+
+    // 既に圧縮済みのレスポンスはスキップ
+    if (res.headers.get("Content-Encoding")) return res;
 
     const contentType = res.headers.get("Content-Type") ?? "";
     const isCompressible = COMPRESSIBLE.some((p) => contentType.includes(p));
@@ -303,7 +318,12 @@ const JSON_CONTENT_TYPE = { "Content-Type": "application/json; charset=utf-8" };
  * 検証失敗時は 401 Unauthorized を返す。
  */
 export function jwtAuth(options: JwtAuthOptions): MiddlewareFunction<MiddlewareState> {
-  const { secret, stateKey = "jwtPayload", getToken } = options;
+  const { secret, algorithms = ["HS256"], stateKey = "jwtPayload", getToken } = options;
+
+  // algorithms に HS256 が含まれていなければ設定ミス
+  if (!algorithms.includes("HS256")) {
+    throw new Error("jwtAuth: currently only HS256 is supported");
+  }
 
   return async (ctx, next) => {
     // トークン取得

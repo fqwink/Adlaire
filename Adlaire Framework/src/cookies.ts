@@ -67,7 +67,8 @@ function serializeCookie(
   value: string,
   options?: CookieOptions,
 ): string {
-  let str = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+  // RFC 6265: Cookie名はトークン文字のみ（エンコード不要）、値のみエンコード
+  let str = `${name}=${encodeURIComponent(value)}`;
   str += `; Path=${options?.path ?? "/"}`;
   if (options?.maxAge !== undefined) str += `; Max-Age=${options.maxAge}`;
   if (options?.expires) str += `; Expires=${options.expires.toUTCString()}`;

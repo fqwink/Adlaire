@@ -192,8 +192,11 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
     }
   }
 
-  // §4.2: シグナル受信時の onStop フック + シャットダウン
+  // §4.2: シグナル受信時の onStop フック + シャットダウン（二重呼び出し防止）
+  let stopping = false;
   const handleStop = async () => {
+    if (stopping) return;
+    stopping = true;
     if (onStop) {
       try {
         await onStop();

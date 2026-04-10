@@ -4,6 +4,30 @@
 
 ---
 
+## Ver.1.12-14 — バグ修正（56件精査・10件修正）
+
+**リリース日**: 2026-04-10
+**種別**: バグ修正
+
+### バグ修正
+
+全12ファイル56項目を精査し、10件のバグを修正した。
+
+| # | 深刻度 | 対象 | 概要 |
+|:-:|:------:|------|------|
+| 1 | 重大 | `builtin_middleware.ts` | CORS `credentials: true` + `origins: "*"` で RFC 違反。`Access-Control-Allow-Origin: *` と `Credentials: true` が同時送信されブラウザ拒否 → credentials 有効時はリクエストオリジンを使用 |
+| 2 | 重大 | `builtin_middleware.ts` | rateLimit の Map にユニーク IP エントリが永久蓄積（メモリリーク）→ store サイズが max×2 を超過したとき期限切れエントリをパージ |
+| 3 | 重大 | `context.ts` | SSE data に改行を含む文字列が不正イベントを生成（RFC 8895 違反）→ `\n` で分割して各行を `data:` フィールドに展開 |
+| 4 | 中程度 | `cookies.ts` | `serializeCookie` が Cookie 名を `encodeURIComponent` でエンコードするが `parseCookieHeader` がデコードしない → RFC 6265 に従い Cookie 名はエンコードしない |
+| 5 | 中程度 | `context.ts` | `sendFile` の Content-Disposition filename にダブルクォートが含まれるとヘッダー破損 → RFC 6266 に従い `"` と `\` をエスケープ |
+| 6 | 中程度 | `server.ts` | SIGTERM+SIGINT 連続受信で `handleStop` が二重実行 → `stopping` フラグで防止 |
+| 7 | 中程度 | `builtin_middleware.ts` | `jwtAuth` の `algorithms` オプションが無視され HS256 以外を指定しても検証に反映されない → HS256 以外を指定した場合に起動時エラー |
+| 8 | 軽微 | `env_schema.ts` | `Number("")` が 0 を返すため空文字列が数値 0 に暗黙変換 → 空文字列を明示的にエラーとして拒否 |
+| 9 | 軽微 | `context.ts` | `formData()` で同名フィールドが最後の値で上書きされデータ損失 → `ctx.query` と同様に最初の値を保持 |
+| 10 | 軽微 | `builtin_middleware.ts` | `compress()` が `Content-Encoding` 既存のレスポンスを二重圧縮 → 既存 Content-Encoding チェックを追加 |
+
+---
+
 ## Ver.1.11-13 — onStart / onStop フック + WebSocketRoom
 
 **リリース日**: 2026-04-10

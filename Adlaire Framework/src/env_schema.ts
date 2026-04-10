@@ -40,6 +40,11 @@ function toBoolean(raw: string): boolean {
 /** raw 文字列を EnvFieldDef.type に従い変換する */
 function convertValue(raw: string, type: EnvFieldDef["type"]): string | number | boolean {
   if (type === "number") {
+    if (raw === "") {
+      throw new Error(
+        `Environment variable value "" cannot be converted to number`,
+      );
+    }
     const n = Number(raw);
     if (isNaN(n)) {
       throw new Error(

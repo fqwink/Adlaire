@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.11-13 | 2026-04-10 | 実装済み |
+| **Adlaire Framework** | Ver.1.12-14 | 2026-04-10 | 実装済み |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,7 +1320,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.11-13**（2026-04-10 実装済み）
+**Ver.1.12-14**（2026-04-10 実装済み）
 
 ### VII-2. リリース計画
 
@@ -1499,6 +1499,27 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
+#### Ver.1.12-14 — バグ修正（56件精査・10件修正）
+
+- **種別**: バグ修正
+- **状態**: 実装済み
+- **精査**: 全12ファイル56項目精査（重大3件・中程度4件・軽微3件）
+
+| # | 深刻度 | 対象 | 概要 | 状態 |
+|:-:|:------:|------|------|:----:|
+| 1 | 重大 | `builtin_middleware.ts` | CORS credentials + wildcard origin RFC 違反 | 実装済 |
+| 2 | 重大 | `builtin_middleware.ts` | rateLimit Map メモリリーク | 実装済 |
+| 3 | 重大 | `context.ts` | SSE data マルチライン未対応（RFC 8895 違反） | 実装済 |
+| 4 | 中程度 | `cookies.ts` | Cookie name の不正な encodeURIComponent | 実装済 |
+| 5 | 中程度 | `context.ts` | sendFile Content-Disposition filename 未エスケープ | 実装済 |
+| 6 | 中程度 | `server.ts` | handleStop 二重呼び出し | 実装済 |
+| 7 | 中程度 | `builtin_middleware.ts` | jwtAuth algorithms オプション未使用 | 実装済 |
+| 8 | 軽微 | `env_schema.ts` | 空文字列が number 0 に暗黙変換 | 実装済 |
+| 9 | 軽微 | `context.ts` | formData 同名フィールド上書き | 実装済 |
+| 10 | 軽微 | `builtin_middleware.ts` | compress 二重圧縮 | 実装済 |
+
+---
+
 #### Ver.1.2-3（旧計画 → 組み替え）— Phase 3: デプロイ対応
 
 - **種別**: 追加機能
@@ -1518,6 +1539,13 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | バージョン | リリース日 | 種別 | 概要 |
 |-----------|-----------|------|------|
+| **Ver.1.12-14** | 2026-04-10 | バグ修正 | 56件精査・10件修正（CORS RFC違反・rateLimit メモリリーク・SSE マルチライン等） |
+| **Ver.1.11-13** | 2026-04-10 | 追加機能 | `onStart`/`onStop` ライフサイクルフック・`WebSocketRoom` 接続マネージャー |
+| **Ver.1.10-12** | 2026-04-10 | 追加機能 | `ctx.formData<T>()` フォームデータパース・`defineEnvSchema()` 環境変数スキーマ |
+| **Ver.1.9-11** | 2026-04-10 | 追加機能 | `ctx.sendFile()` ファイル配信・`ctx.negotiate()` コンテンツネゴシエーション |
+| **Ver.1.8-10** | 2026-04-10 | 機能改良+追加 | `logger(format)` JSON Lines 出力・`cache()` Cache-Control ヘッダー |
+| **Ver.1.7-9** | 2026-04-10 | 追加機能 | `securityHeaders()` セキュリティヘッダー・`requestId()` リクエスト ID |
+| **Ver.1.6-8** | 2026-04-10 | 追加機能 | `jwtAuth()` JWT 認証・`csrf()` CSRF 保護 |
 | **Ver.1.5-7** | 2026-04-10 | 追加機能 | ルートグループ（`(group)`）・`getEnv()` 型安全環境変数アクセサ |
 | **Ver.1.4-6** | 2026-04-10 | 追加機能 | SSE（`ctx.sse()`）・`adlaire deploy` CLI |
 | **Ver.1.3-5** | 2026-04-10 | 追加機能 | 組み込みミドルウェア（cors/logger/rateLimit/compress）・WebSocket サポート |
