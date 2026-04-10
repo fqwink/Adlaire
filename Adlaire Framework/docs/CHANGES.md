@@ -4,6 +4,22 @@
 
 ---
 
+## Ver.1.10-12 — ctx.formData<T>() + defineEnvSchema()
+
+**リリース日**: 2026-04-10
+**種別**: 追加機能
+
+### 追加機能
+
+- **`ctx.formData<T>(guard?)`**（§6.12）: `multipart/form-data` および `application/x-www-form-urlencoded` を型安全にパースする。`req.formData()` を呼び出し `FormData` を `Record<string, string | File>` に変換する。`guard` 型ガードで検証失敗時は `ValidationError` をスロー（400 Bad Request）。サポート外の `Content-Type` も `ValidationError` をスロー。
+- **`defineEnvSchema(schema)`**（§10.8）: 複数の環境変数をスキーマ定義に基づいて一括検証・型変換する関数。`EnvFieldDef` インターフェース（`required` / `default` / `type`）でスキーマを定義する。`type: "number"` → `Number()` 変換（非数値時エラー）、`type: "boolean"` → `"true"` / `"1"` / `"yes"` を `true` に変換。必須フィールドが未設定の場合は `Error: Missing required environment variable: KEY` をスロー。戻り値はフリーズ済みオブジェクト（型推論で各フィールドの型が確定）。
+- `src/env_schema.ts` を新規作成（`EnvFieldDef` / `EnvSchemaResult` / `defineEnvSchema()` の実装）。
+- `mod.ts`: `defineEnvSchema` 関数と `EnvFieldDef` / `EnvSchemaResult` 型をエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.29 準拠（§6.12 / §10.8）
+
+---
+
 ## Ver.1.9-11 — ctx.sendFile() + ctx.negotiate()
 
 **リリース日**: 2026-04-10

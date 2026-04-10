@@ -14,6 +14,7 @@ export { serve } from "./server.ts";
 
 // --- 環境変数 ---
 export { getEnv } from "./env.ts";
+export { defineEnvSchema } from "./env_schema.ts";
 
 // --- エラークラス ---
 export { ValidationError } from "./error.ts";
@@ -28,6 +29,7 @@ export { defineHandler, defineErrorHandler, defineNotFoundHandler } from "./hand
 export { defineMiddleware } from "./middleware.ts";
 
 // --- 型 ---
+export type { EnvFieldDef, EnvSchemaResult } from "./env_schema.ts";
 export type {
   AdlaireConfig,
   Context,

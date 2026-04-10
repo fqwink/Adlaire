@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.9-11 | 2026-04-10 | 実装済み |
+| **Adlaire Framework** | Ver.1.10-12 | 2026-04-10 | 実装済み |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,7 +1320,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.9-11**（2026-04-10 実装済み）
+**Ver.1.10-12**（2026-04-10 実装済み）
 
 ### VII-2. リリース計画
 
@@ -1478,12 +1478,12 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 #### Ver.1.10-12 — ctx.formData<T>() + defineEnvSchema()
 
 - **種別**: 追加機能
-- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.29）
+- **状態**: 実装済み
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 32 | 追加機能 | `ctx.formData<T>(guard?)` — multipart/form-data・urlencoded 型安全パース | §6.12 | 計画 |
-| 33 | 追加機能 | `defineEnvSchema(schema)` — 複数環境変数の一括スキーマ定義・型変換・バリデーション | §10.8 | 計画 |
+| 32 | 追加機能 | `ctx.formData<T>(guard?)` — multipart/form-data・urlencoded 型安全パース | §6.12 | 実装済 |
+| 33 | 追加機能 | `defineEnvSchema(schema)` — 複数環境変数の一括スキーマ定義・型変換・バリデーション | §10.8 | 実装済 |
 
 ---
 

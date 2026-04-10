@@ -60,6 +60,8 @@ export interface Context<
   sendFile(path: string, options?: SendFileOptions): Promise<Response>;
   /** Accept ヘッダーによるコンテンツネゴシエーション（§6.11） */
   negotiate(handlers: NegotiateHandlers): Promise<Response>;
+  /** フォームデータのパース + 型ガード（§6.12） */
+  formData<T>(guard?: (data: unknown) => data is T): Promise<T>;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;

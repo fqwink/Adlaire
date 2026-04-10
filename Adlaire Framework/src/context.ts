@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — 型付きリクエストコンテキスト
- * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §6.10 / §6.11 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §6.10 / §6.11 / §6.12 準拠
  */
 
 import type {
@@ -284,6 +284,39 @@ export function createContext<
       }
 
       return withCookies(new Response(file.readable, { headers }));
+    },
+
+    // §6.12: フォームデータのパース + 型ガード
+    async formData<T>(guard?: (data: unknown) => data is T): Promise<T> {
+      const contentType = req.headers.get("Content-Type") ?? "";
+
+      // multipart/form-data または application/x-www-form-urlencoded のみ受け付ける
+      if (
+        !contentType.includes("multipart/form-data") &&
+        !contentType.includes("application/x-www-form-urlencoded")
+      ) {
+        throw new ValidationError(
+          "Unsupported Content-Type: expected multipart/form-data or application/x-www-form-urlencoded",
+        );
+      }
+
+      let formData: FormData;
+      try {
+        formData = await req.formData();
+      } catch {
+        throw new ValidationError("Failed to parse form data");
+      }
+
+      // FormData → Record<string, string | File> に変換
+      const data: Record<string, string | File> = {};
+      for (const [key, value] of formData.entries()) {
+        data[key] = value;
+      }
+
+      if (guard !== undefined && !guard(data)) {
+        throw new ValidationError("Form data validation failed");
+      }
+      return data as T;
     },
 
     // §6.11: コンテンツネゴシエーション
