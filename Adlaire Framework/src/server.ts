@@ -16,9 +16,10 @@ import type {
 import { createContext } from "./context.ts";
 import { isMethodHandlers, isSingleHandler, SUPPORTED_METHODS } from "./handler.ts";
 import { executeMiddlewareChain } from "./middleware.ts";
+import { ValidationError } from "./error.ts";
 import { Router } from "./router.ts";
 import { serveStaticFile } from "./static.ts";
-import { notFoundResponse } from "./response.ts";
+import { badRequestResponse, notFoundResponse } from "./response.ts";
 
 /** デフォルト設定 */
 const DEFAULT_CONFIG: Required<AdlaireConfig> = {
@@ -146,6 +147,10 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
 
       return await invokeHandler(match.handler, req.method, ctx);
     } catch (error) {
+      // §6.6: ValidationError は 400 に変換し _error.ts には渡さない
+      if (error instanceof ValidationError) {
+        return badRequestResponse(error.message);
+      }
       console.error("Unhandled error:", error);
       // §5.5: _error.ts ハンドラーが存在すれば呼び出す
       const errorHandler = router.getErrorHandler(url.pathname);

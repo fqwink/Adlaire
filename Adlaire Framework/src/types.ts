@@ -1,7 +1,10 @@
 /**
  * Adlaire Framework — 共通型定義
- * FRAMEWORK_RULEBOOK §6.3 / §7 / §8 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §7 / §8 準拠
  */
+
+import type { CookieOptions, Cookies } from "./cookies.ts";
+export type { CookieOptions, Cookies };
 
 /** ルートパラメータの基底型 */
 export type RouteParams = Record<string, string | string[]>;
@@ -45,6 +48,10 @@ export interface Context<
   readonly url: URL;
   /** クエリパラメータ（§6.5）— 同名キーは最初の値のみ保持 */
   readonly query: Readonly<Record<string, string>>;
+  /** Cookie の読み書き（§6.7） */
+  readonly cookies: Cookies;
+  /** リクエストボディの JSON パース + 型ガード（§6.6） */
+  body<T>(guard?: (data: unknown) => data is T): Promise<T>;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;

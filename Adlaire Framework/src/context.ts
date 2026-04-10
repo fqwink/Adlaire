@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — 型付きリクエストコンテキスト
- * FRAMEWORK_RULEBOOK §6.3 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 準拠
  */
 
 import type {
@@ -21,6 +21,8 @@ import {
   textResponse,
   unauthorizedResponse,
 } from "./response.ts";
+import { applySetCookies, createCookieStore } from "./cookies.ts";
+import { ValidationError } from "./error.ts";
 
 /**
  * Context の実体を生成する。
@@ -44,39 +46,65 @@ export function createContext<
     }
   }
 
+  // §6.7: Cookie ストアを初期化
+  const { cookies, getEntries } = createCookieStore(
+    req.headers.get("Cookie") ?? "",
+  );
+
+  /** Set-Cookie を適用したレスポンスを返す共通ラッパー */
+  function withCookies(res: Response): Response {
+    return applySetCookies(res, getEntries());
+  }
+
   return {
     req,
     params: Object.freeze({ ...params }),
     state,
     url,
     query: Object.freeze(query),
+    cookies,
 
+    // §6.6: リクエストボディの JSON パース + 型ガード
+    async body<T>(guard?: (data: unknown) => data is T): Promise<T> {
+      let data: unknown;
+      try {
+        data = await req.json();
+      } catch {
+        throw new ValidationError("Invalid JSON body");
+      }
+      if (guard !== undefined && !guard(data)) {
+        throw new ValidationError("Request body validation failed");
+      }
+      return data as T;
+    },
+
+    // §7.2 レスポンスヘルパー — Set-Cookie を自動適用
     json<T>(data: T, init?: ResponseInit): Response {
-      return jsonResponse(data, init);
+      return withCookies(jsonResponse(data, init));
     },
     text(data: string, init?: ResponseInit): Response {
-      return textResponse(data, init);
+      return withCookies(textResponse(data, init));
     },
     html(data: string, init?: ResponseInit): Response {
-      return htmlResponse(data, init);
+      return withCookies(htmlResponse(data, init));
     },
     redirect(redirectUrl: string, status?: RedirectStatus): Response {
-      return redirectResponse(redirectUrl, status);
+      return withCookies(redirectResponse(redirectUrl, status));
     },
     notFound(): Response {
-      return notFoundResponse();
+      return withCookies(notFoundResponse());
     },
     unauthorized(): Response {
-      return unauthorizedResponse();
+      return withCookies(unauthorizedResponse());
     },
     forbidden(): Response {
-      return forbiddenResponse();
+      return withCookies(forbiddenResponse());
     },
     badRequest(message?: string): Response {
-      return badRequestResponse(message);
+      return withCookies(badRequestResponse(message));
     },
     internalError(message?: string): Response {
-      return internalErrorResponse(message);
+      return withCookies(internalErrorResponse(message));
     },
   };
 }

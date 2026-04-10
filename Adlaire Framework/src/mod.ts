@@ -12,6 +12,9 @@
 // --- サーバー ---
 export { serve } from "./server.ts";
 
+// --- エラークラス ---
+export { ValidationError } from "./error.ts";
+
 // --- ハンドラー ---
 export { defineHandler, defineErrorHandler, defineNotFoundHandler } from "./handler.ts";
 
@@ -22,6 +25,8 @@ export { defineMiddleware } from "./middleware.ts";
 export type {
   AdlaireConfig,
   Context,
+  CookieOptions,
+  Cookies,
   ErrorHandler,
   Handler,
   HttpMethod,

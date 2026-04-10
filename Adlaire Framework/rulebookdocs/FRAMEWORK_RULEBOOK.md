@@ -145,6 +145,8 @@ Adlaire Framework/
 │   ├── middleware.ts           # ミドルウェア実行チェーン
 │   ├── handler.ts              # defineHandler ヘルパー
 │   ├── response.ts             # レスポンスヘルパー
+│   ├── cookies.ts              # Cookie ユーティリティ（§6.7）
+│   ├── error.ts                # フレームワーク提供エラークラス（§6.6）
 │   └── types.ts                # 共通型定義
 ├── cli/
 │   └── main.ts                 # CLI ツール（§12 参照）
@@ -351,6 +353,8 @@ interface Context<
   state: State;
   url: URL;
   query: Readonly<Record<string, string>>; // §6.5
+  cookies: Cookies;                        // §6.7
+  body<T>(guard?: (data: unknown) => data is T): Promise<T>; // §6.6
   // レスポンスヘルパー（§7 参照）
   json<T>(data: T, init?: ResponseInit): Response;
   text(data: string, init?: ResponseInit): Response;
@@ -411,6 +415,92 @@ export const handler = defineHandler({
 | 型 | `Readonly<Record<string, string>>` |
 | 同名キーが複数ある場合 | 最初の値のみを保持する |
 | 複数値が必要な場合 | `ctx.url.searchParams.getAll(key)` を使用する |
+
+## 6.6 リクエストボディ検証 — ctx.body\<T\>()
+
+`ctx.body<T>(guard?)` でリクエストボディを JSON としてパースし、オプションで型ガードを適用する。
+
+```typescript
+// 型定義
+ctx.body<T>(guard?: (data: unknown) => data is T): Promise<T>
+```
+
+### 動作
+
+| 条件 | 動作 |
+|------|------|
+| `guard` あり・検証成功 | パース済みデータを `T` 型として返す |
+| `guard` あり・検証失敗 | `ValidationError` をスロー → フレームワークが 400 Bad Request に変換 |
+| `guard` なし | JSON をパースして `T` として返す（開発者が型安全性に責任を持つ） |
+| JSON パース失敗 | `ValidationError` をスロー → 400 Bad Request |
+
+### ValidationError
+
+フレームワーク提供のエラークラス。`ctx.body()` がスローし、`server.ts` がキャッチして 400 Bad Request に変換する。`_error.ts` ハンドラーには渡されない。
+
+```typescript
+// 使用例
+export const handler = defineHandler({
+  async POST(ctx) {
+    const body = await ctx.body(
+      (d): d is { name: string; age: number } =>
+        typeof d === "object" && d !== null &&
+        typeof (d as Record<string, unknown>).name === "string" &&
+        typeof (d as Record<string, unknown>).age === "number",
+    );
+    return ctx.json({ created: body.name });
+  },
+});
+```
+
+## 6.7 Cookie ヘルパー — ctx.cookies
+
+`ctx.cookies` で Cookie の読み書きを行う。
+
+```typescript
+// インターフェース定義
+interface CookieOptions {
+  maxAge?: number;                        // 有効期限（秒）
+  expires?: Date;                         // 有効期限（Date）
+  httpOnly?: boolean;                     // JavaScript からのアクセスを禁止
+  secure?: boolean;                       // HTTPS のみで送信
+  sameSite?: "Strict" | "Lax" | "None";  // SameSite ポリシー
+  path?: string;                          // Cookie パス（デフォルト: "/"）
+  domain?: string;                        // Cookie ドメイン
+}
+
+interface Cookies {
+  get(name: string): string | undefined;
+  set(name: string, value: string, options?: CookieOptions): void;
+  delete(name: string, options?: Omit<CookieOptions, "maxAge" | "expires">): void;
+}
+```
+
+### 動作規則
+
+| 操作 | 内容 |
+|------|------|
+| `cookies.get(name)` | リクエストの `Cookie` ヘッダーから値を取得する |
+| `cookies.set(name, value, options?)` | `Set-Cookie` を予約する |
+| `cookies.delete(name, options?)` | `maxAge: 0` で上書きし Cookie を削除する |
+
+`cookies.set()` / `cookies.delete()` で予約した Cookie は、`ctx.json()` / `ctx.html()` / `ctx.text()` 等の**レスポンスヘルパー呼び出し時に自動で `Set-Cookie` ヘッダーに反映**される。
+
+```typescript
+// 使用例
+export const handler = defineHandler({
+  async POST(ctx) {
+    const token = generateToken();
+    ctx.cookies.set("session", token, { httpOnly: true, secure: true });
+    return ctx.json({ ok: true });
+  },
+  GET(ctx) {
+    const session = ctx.cookies.get("session");
+    if (!session) return ctx.unauthorized();
+    return ctx.json({ session });
+  },
+});
+```
 
 ---
 
