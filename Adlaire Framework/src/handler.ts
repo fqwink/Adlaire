@@ -6,10 +6,12 @@
  */
 
 import type {
+  ErrorHandler,
   Handler,
   HttpMethod,
   MethodHandlers,
   MiddlewareState,
+  NotFoundHandler,
   RouteParams,
   SingleHandler,
 } from "./types.ts";
@@ -63,6 +65,34 @@ export function isSingleHandler<
   handler: Handler<Params, State>,
 ): handler is SingleHandler<Params, State> {
   return typeof handler === "function";
+}
+
+/**
+ * 型安全な Not Found ハンドラーを定義する（§5.5）。
+ * `routes/_404.ts` から `notFoundHandler` としてエクスポートする。
+ *
+ * ```typescript
+ * export const notFoundHandler = defineNotFoundHandler((ctx) => {
+ *   return ctx.html("<h1>404 Not Found</h1>", { status: 404 });
+ * });
+ * ```
+ */
+export function defineNotFoundHandler(fn: NotFoundHandler): NotFoundHandler {
+  return fn;
+}
+
+/**
+ * 型安全なエラーハンドラーを定義する（§5.5）。
+ * `routes/_error.ts` から `errorHandler` としてエクスポートする。
+ *
+ * ```typescript
+ * export const errorHandler = defineErrorHandler((error, ctx) => {
+ *   return ctx.json({ error: "Internal Server Error" }, { status: 500 });
+ * });
+ * ```
+ */
+export function defineErrorHandler(fn: ErrorHandler): ErrorHandler {
+  return fn;
 }
 
 /** サポートされる HTTP メソッド一覧 */

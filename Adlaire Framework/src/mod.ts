@@ -13,7 +13,7 @@
 export { serve } from "./server.ts";
 
 // --- ハンドラー ---
-export { defineHandler } from "./handler.ts";
+export { defineHandler, defineErrorHandler, defineNotFoundHandler } from "./handler.ts";
 
 // --- ミドルウェア ---
 export { defineMiddleware } from "./middleware.ts";
@@ -22,12 +22,14 @@ export { defineMiddleware } from "./middleware.ts";
 export type {
   AdlaireConfig,
   Context,
+  ErrorHandler,
   Handler,
   HttpMethod,
   MethodHandlers,
   MiddlewareFunction,
   MiddlewareState,
   NextFunction,
+  NotFoundHandler,
   RedirectStatus,
   RouteParams,
   SingleHandler,

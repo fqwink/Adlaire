@@ -36,11 +36,20 @@ export function createContext<
 ): Context<Params, State> {
   const url = new URL(req.url);
 
+  // §6.5: クエリパラメータを Record<string, string> に変換（同名キーは最初の値のみ）
+  const query: Record<string, string> = {};
+  for (const [key, value] of url.searchParams) {
+    if (!(key in query)) {
+      query[key] = value;
+    }
+  }
+
   return {
     req,
     params: Object.freeze({ ...params }),
     state,
     url,
+    query: Object.freeze(query),
 
     json<T>(data: T, init?: ResponseInit): Response {
       return jsonResponse(data, init);

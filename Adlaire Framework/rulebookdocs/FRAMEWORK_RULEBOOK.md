@@ -1,7 +1,7 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.1.19**
-> **最終更新: 2026-04-06**
+> **文書バージョン: Ver.1.20**
+> **最終更新: 2026-04-10**
 
 ---
 
@@ -256,6 +256,63 @@ export const handler = defineHandler({
 });
 ```
 
+## 5.5 エラーハンドラー / Not Found ハンドラー
+
+`_error.ts` と `_404.ts` はルーターに組み込まれ、実際に呼び出される。
+
+### エクスポート名
+
+| ファイル | エクスポート名 | 型 |
+|---------|-------------|-----|
+| `_404.ts` | `notFoundHandler` | `NotFoundHandler` |
+| `_error.ts` | `errorHandler` | `ErrorHandler` |
+
+### `_404.ts` — Not Found ハンドラー
+
+ルートが見つからない場合に呼び出される。ルートディレクトリに配置した `_404.ts` は全ルートに適用される。サブディレクトリに配置した場合は当該プレフィックス以下のリクエストに適用され、最も特定的なもの（最長プレフィックス）が優先される。
+
+```typescript
+import { defineNotFoundHandler } from "adlaire-framework/mod.ts";
+
+export const notFoundHandler = defineNotFoundHandler((ctx) => {
+  return ctx.html("<h1>404 Not Found</h1>", { status: 404 });
+});
+```
+
+### `_error.ts` — エラーハンドラー
+
+ハンドラーまたはミドルウェアで未捕捉の例外が発生した場合に呼び出される。スコープルールは `_404.ts` と同様。
+
+```typescript
+import { defineErrorHandler } from "adlaire-framework/mod.ts";
+
+export const errorHandler = defineErrorHandler((error, ctx) => {
+  console.error(error);
+  return ctx.json({ error: "Internal Server Error" }, { status: 500 });
+});
+```
+
+### ErrorHandler / NotFoundHandler 型定義
+
+```typescript
+type NotFoundHandler = (
+  ctx: Context<RouteParams, MiddlewareState>,
+) => Response | Promise<Response>;
+
+type ErrorHandler = (
+  error: unknown,
+  ctx: Context<RouteParams, MiddlewareState>,
+) => Response | Promise<Response>;
+```
+
+### フォールバック動作
+
+| ケース | 動作 |
+|--------|------|
+| `_404.ts` が存在しない | フレームワーク標準の JSON 404 レスポンス |
+| `_error.ts` が存在しない | フレームワーク標準の JSON 500 レスポンス |
+| `_error.ts` 自身が例外を出した | フレームワーク標準の JSON 500 レスポンスにフォールバック |
+
 ---
 
 # 6. 型安全システム
@@ -293,6 +350,7 @@ interface Context<
   params: Readonly<Params>;
   state: State;
   url: URL;
+  query: Readonly<Record<string, string>>; // §6.5
   // レスポンスヘルパー（§7 参照）
   json<T>(data: T, init?: ResponseInit): Response;
   text(data: string, init?: ResponseInit): Response;
@@ -330,6 +388,29 @@ export const handler = defineHandler<Record<string, never>, { user: User | null 
   },
 });
 ```
+
+## 6.5 クエリパラメータアクセス
+
+`ctx.query` でクエリパラメータに型安全にアクセスできる。`Record<string, string>` 型であり、キーを文字列で指定する。
+
+```typescript
+// GET /users?page=2&limit=10
+export const handler = defineHandler({
+  GET(ctx) {
+    const page = ctx.query["page"];    // string | undefined
+    const limit = ctx.query["limit"]; // string | undefined
+    return ctx.json({ page, limit });
+  },
+});
+```
+
+### 仕様
+
+| 項目 | 内容 |
+|------|------|
+| 型 | `Readonly<Record<string, string>>` |
+| 同名キーが複数ある場合 | 最初の値のみを保持する |
+| 複数値が必要な場合 | `ctx.url.searchParams.getAll(key)` を使用する |
 
 ---
 

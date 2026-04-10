@@ -7,9 +7,11 @@
  */
 
 import type {
+  ErrorHandler,
   Handler,
   MiddlewareFunction,
   MiddlewareState,
+  NotFoundHandler,
   RouteParams,
 } from "./types.ts";
 
@@ -47,9 +49,23 @@ export interface RouteMatch {
 /**
  * ルーター本体
  */
+/** Not Found ハンドラーエントリ（内部用） */
+interface NotFoundHandlerEntry {
+  prefix: string;
+  fn: NotFoundHandler;
+}
+
+/** エラーハンドラーエントリ（内部用） */
+interface ErrorHandlerEntry {
+  prefix: string;
+  fn: ErrorHandler;
+}
+
 export class Router {
   private routes: RouteEntry[] = [];
   private middlewares: MiddlewareEntry[] = [];
+  private notFoundHandlers: NotFoundHandlerEntry[] = [];
+  private errorHandlers: ErrorHandlerEntry[] = [];
 
   /**
    * routes/ ディレクトリを探索してルートを登録する。
@@ -57,6 +73,8 @@ export class Router {
   async scanRoutes(routesDir: string): Promise<void> {
     this.routes = [];
     this.middlewares = [];
+    this.notFoundHandlers = [];
+    this.errorHandlers = [];
 
     await this.scanDirectory(routesDir, "/");
 
@@ -101,9 +119,19 @@ export class Router {
 
       if (!entry.name.endsWith(".ts")) continue;
 
-      // §5.3 特殊ファイル（_ プレフィックス）
+      // §5.3 / §5.5 特殊ファイル（_ プレフィックス）
       if (entry.name === "_middleware.ts") {
         await this.loadMiddleware(fullPath, urlPrefix);
+        continue;
+      }
+
+      if (entry.name === "_404.ts") {
+        await this.loadNotFoundHandler(fullPath, urlPrefix);
+        continue;
+      }
+
+      if (entry.name === "_error.ts") {
+        await this.loadErrorHandler(fullPath, urlPrefix);
         continue;
       }
 
@@ -111,6 +139,32 @@ export class Router {
 
       // 通常ルートファイル
       await this.loadRoute(fullPath, urlPrefix, entry.name);
+    }
+  }
+
+  /**
+   * Not Found ハンドラーファイルをロードする（§5.5）。
+   */
+  private async loadNotFoundHandler(
+    filePath: string,
+    prefix: string,
+  ): Promise<void> {
+    const mod = await import(this.toFileUrl(filePath));
+    if (typeof mod.notFoundHandler === "function") {
+      this.notFoundHandlers.push({ prefix, fn: mod.notFoundHandler });
+    }
+  }
+
+  /**
+   * エラーハンドラーファイルをロードする（§5.5）。
+   */
+  private async loadErrorHandler(
+    filePath: string,
+    prefix: string,
+  ): Promise<void> {
+    const mod = await import(this.toFileUrl(filePath));
+    if (typeof mod.errorHandler === "function") {
+      this.errorHandlers.push({ prefix, fn: mod.errorHandler });
     }
   }
 
@@ -260,6 +314,44 @@ export class Router {
     }
 
     return null;
+  }
+
+  /**
+   * パスに対して最も特定的な Not Found ハンドラーを返す（§5.5）。
+   * 最長プレフィックスマッチ優先。
+   */
+  getNotFoundHandler(pathname: string): NotFoundHandler | null {
+    return this.getBestScopedHandler(this.notFoundHandlers, pathname);
+  }
+
+  /**
+   * パスに対して最も特定的なエラーハンドラーを返す（§5.5）。
+   * 最長プレフィックスマッチ優先。
+   */
+  getErrorHandler(pathname: string): ErrorHandler | null {
+    return this.getBestScopedHandler(this.errorHandlers, pathname);
+  }
+
+  /**
+   * プレフィックス付きハンドラー一覧から最長プレフィックスマッチを選択する。
+   */
+  private getBestScopedHandler<T>(
+    entries: Array<{ prefix: string; fn: T }>,
+    pathname: string,
+  ): T | null {
+    let best: { prefix: string; fn: T } | null = null;
+    for (const entry of entries) {
+      const matches =
+        entry.prefix === "/" ||
+        pathname === entry.prefix ||
+        pathname.startsWith(entry.prefix + "/");
+      if (matches) {
+        if (!best || entry.prefix.length > best.prefix.length) {
+          best = entry;
+        }
+      }
+    }
+    return best?.fn ?? null;
   }
 
   /**

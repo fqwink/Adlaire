@@ -43,6 +43,8 @@ export interface Context<
   state: State;
   /** パース済み URL */
   readonly url: URL;
+  /** クエリパラメータ（§6.5）— 同名キーは最初の値のみ保持 */
+  readonly query: Readonly<Record<string, string>>;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;
@@ -114,6 +116,23 @@ export interface ResolvedRoute {
   /** 適用されるミドルウェアチェーン */
   middleware: MiddlewareFunction[];
 }
+
+/**
+ * Not Found ハンドラー（§5.5）
+ * `routes/_404.ts` から `notFoundHandler` としてエクスポートする。
+ */
+export type NotFoundHandler = (
+  ctx: Context<RouteParams, MiddlewareState>,
+) => Response | Promise<Response>;
+
+/**
+ * エラーハンドラー（§5.5）
+ * `routes/_error.ts` から `errorHandler` としてエクスポートする。
+ */
+export type ErrorHandler = (
+  error: unknown,
+  ctx: Context<RouteParams, MiddlewareState>,
+) => Response | Promise<Response>;
 
 /**
  * フレームワーク設定（§4）

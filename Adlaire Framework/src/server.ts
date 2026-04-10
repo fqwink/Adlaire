@@ -114,6 +114,16 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
     // ルートマッチング
     const match = router.match(url);
     if (!match) {
+      // §5.5: _404.ts ハンドラーが存在すれば呼び出す
+      const notFoundHandler = router.getNotFoundHandler(url.pathname);
+      if (notFoundHandler) {
+        try {
+          const ctx404 = createContext<RouteParams, MiddlewareState>(req, {}, {});
+          return await notFoundHandler(ctx404);
+        } catch (_e) {
+          // _404.ts 自体がエラーを出した場合はデフォルトにフォールバック
+        }
+      }
       return notFoundResponse();
     }
 
@@ -137,6 +147,15 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
       return await invokeHandler(match.handler, req.method, ctx);
     } catch (error) {
       console.error("Unhandled error:", error);
+      // §5.5: _error.ts ハンドラーが存在すれば呼び出す
+      const errorHandler = router.getErrorHandler(url.pathname);
+      if (errorHandler) {
+        try {
+          return await errorHandler(error, ctx);
+        } catch (_e) {
+          // _error.ts 自体がエラーを出した場合はデフォルトにフォールバック
+        }
+      }
       return new Response(
         JSON.stringify({ error: "Internal Server Error" }),
         {
