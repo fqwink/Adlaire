@@ -4,6 +4,22 @@
 
 ---
 
+## Ver.1.7-9 — securityHeaders() + requestId()
+
+**リリース日**: 2026-04-10
+**種別**: 追加機能
+
+### 追加機能
+
+- **`securityHeaders(options?)`**（§8.8）: セキュリティヘッダーを一括付与するミドルウェア。デフォルトで `X-Content-Type-Options: nosniff` / `X-Frame-Options: SAMEORIGIN` / `Referrer-Policy: strict-origin-when-cross-origin` を全レスポンスに付与する。`xFrameOptions: false` でヘッダーを無効化可能。`permissionsPolicy` が空文字でない場合は `Permissions-Policy` ヘッダーも付与する。
+- **`requestId(options?)`**（§8.9）: リクエスト ID ミドルウェア。`X-Request-ID` リクエストヘッダーが存在する場合はその値を使用し、なければ `crypto.randomUUID()` で新規生成する。生成した ID を `ctx.state["requestId"]` に注入し、レスポンスにも `X-Request-ID` ヘッダーとして付与する。`generate` オプションで ID 生成関数を差し替え可能。
+- `builtin_middleware.ts`: `SecurityHeadersOptions` / `RequestIdOptions` インターフェースを追加。
+- `mod.ts`: `securityHeaders` / `requestId` 関数と `SecurityHeadersOptions` / `RequestIdOptions` 型をエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.26 準拠（§8.8 / §8.9）
+
+---
+
 ## Ver.1.6-8 — jwtAuth() + csrf()
 
 **リリース日**: 2026-04-10

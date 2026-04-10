@@ -372,3 +372,91 @@ export function csrf(options: CsrfOptions = {}): MiddlewareFunction<MiddlewareSt
     return next();
   };
 }
+
+// ─── SECURITY HEADERS ────────────────────────────────────────────────────────
+
+/** securityHeaders() オプション（§8.8） */
+export interface SecurityHeadersOptions {
+  /** X-Content-Type-Options: nosniff を付与するか（デフォルト: true） */
+  xContentTypeOptions?: boolean;
+  /** X-Frame-Options の値。false で付与しない（デフォルト: "SAMEORIGIN"） */
+  xFrameOptions?: "DENY" | "SAMEORIGIN" | false;
+  /** Referrer-Policy の値（デフォルト: "strict-origin-when-cross-origin"） */
+  referrerPolicy?: string;
+  /** Permissions-Policy の値（空文字でヘッダーなし、デフォルト: ""） */
+  permissionsPolicy?: string;
+}
+
+/**
+ * セキュリティヘッダーを一括付与するミドルウェア（§8.8）。
+ * デフォルトで X-Content-Type-Options / X-Frame-Options / Referrer-Policy を設定する。
+ */
+export function securityHeaders(
+  options: SecurityHeadersOptions = {},
+): MiddlewareFunction<MiddlewareState> {
+  const {
+    xContentTypeOptions = true,
+    xFrameOptions = "SAMEORIGIN",
+    referrerPolicy = "strict-origin-when-cross-origin",
+    permissionsPolicy = "",
+  } = options;
+
+  return async (_ctx, next) => {
+    const res = await next();
+    const headers = new Headers(res.headers);
+
+    if (xContentTypeOptions) headers.set("X-Content-Type-Options", "nosniff");
+    if (xFrameOptions !== false) headers.set("X-Frame-Options", xFrameOptions);
+    if (referrerPolicy) headers.set("Referrer-Policy", referrerPolicy);
+    if (permissionsPolicy) headers.set("Permissions-Policy", permissionsPolicy);
+
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  };
+}
+
+// ─── REQUEST ID ──────────────────────────────────────────────────────────────
+
+/** requestId() オプション（§8.9） */
+export interface RequestIdOptions {
+  /** リクエスト ID ヘッダー名（デフォルト: "X-Request-ID"） */
+  headerName?: string;
+  /** ctx.state への注入キー（デフォルト: "requestId"） */
+  stateKey?: string;
+  /** ID 生成関数（デフォルト: crypto.randomUUID()） */
+  generate?: () => string;
+}
+
+/**
+ * リクエスト ID ミドルウェア（§8.9）。
+ * リクエストヘッダーに X-Request-ID が存在すればその値を使用し、
+ * なければ generate() で新規生成する。
+ * ctx.state[stateKey] に注入し、レスポンスヘッダーにも付与する。
+ */
+export function requestId(
+  options: RequestIdOptions = {},
+): MiddlewareFunction<MiddlewareState> {
+  const {
+    headerName = "X-Request-ID",
+    stateKey = "requestId",
+    generate = () => crypto.randomUUID(),
+  } = options;
+
+  return async (ctx, next) => {
+    const id = ctx.req.headers.get(headerName) ?? generate();
+    ctx.state[stateKey] = id;
+
+    const res = await next();
+    const headers = new Headers(res.headers);
+    headers.set(headerName, id);
+
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  };
+}
