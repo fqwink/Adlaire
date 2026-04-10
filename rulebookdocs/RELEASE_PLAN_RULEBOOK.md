@@ -1327,7 +1327,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 #### Ver.1.0-0 — Phase 0: ルールブック策定
 
 - **種別**: Phase 0
-- **状態**: 実装済み（FRAMEWORK_RULEBOOK.md Ver.1.24）
+- **状態**: 実装済み（FRAMEWORK_RULEBOOK.md Ver.1.30）
 
 ---
 
@@ -1427,6 +1427,78 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
+#### Ver.1.6-8 — jwtAuth() + csrf()
+
+- **種別**: 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.25）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 24 | 追加機能 | `jwtAuth(options)` — JWT Bearer 認証ミドルウェア（WebCrypto API / HS256 / RS256） | §8.6 | 計画 |
+| 25 | 追加機能 | `csrf(options?)` — CSRF 二重送信 Cookie 保護ミドルウェア | §8.7 | 計画 |
+
+---
+
+#### Ver.1.7-9 — securityHeaders() + requestId()
+
+- **種別**: 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.26）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 26 | 追加機能 | `securityHeaders(options?)` — セキュリティヘッダー一括付与ミドルウェア | §8.8 | 計画 |
+| 27 | 追加機能 | `requestId(options?)` — リクエスト ID 生成・ctx.state 注入・レスポンスヘッダー付与 | §8.9 | 計画 |
+
+---
+
+#### Ver.1.8-10 — logger format 拡張 + cache()
+
+- **種別**: 機能改良 + 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.27）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 28 | 機能改良 | `logger(options?)` — `format: "json"` オプション追加（JSON Lines 出力） | §8.5 | 計画 |
+| 29 | 追加機能 | `cache(options?)` — `Cache-Control` ヘッダー設定ミドルウェア | §8.10 | 計画 |
+
+---
+
+#### Ver.1.9-11 — ctx.sendFile() + ctx.negotiate()
+
+- **種別**: 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.28）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 30 | 追加機能 | `ctx.sendFile(path, options?)` — 任意ファイル配信（MIME 自動判定・Range 未対応） | §6.10 | 計画 |
+| 31 | 追加機能 | `ctx.negotiate(handlers)` — Accept ヘッダーによるコンテンツネゴシエーション | §6.11 | 計画 |
+
+---
+
+#### Ver.1.10-12 — ctx.formData<T>() + defineEnvSchema()
+
+- **種別**: 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.29）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 32 | 追加機能 | `ctx.formData<T>(guard?)` — multipart/form-data・urlencoded 型安全パース | §6.12 | 計画 |
+| 33 | 追加機能 | `defineEnvSchema(schema)` — 複数環境変数の一括スキーマ定義・型変換・バリデーション | §10.8 | 計画 |
+
+---
+
+#### Ver.1.11-13 — onStart / onStop フック + WebSocketRoom
+
+- **種別**: 追加機能
+- **状態**: 計画（仕様策定済み — FRAMEWORK_RULEBOOK.md Ver.1.30）
+
+| # | 種別 | 概要 | 仕様参照 | 状態 |
+|:-:|------|------|---------|:----:|
+| 34 | 追加機能 | `onStart(port)` / `onStop()` ライフサイクルフック（`adlaire.config.ts` 設定） | §4.2 | 計画 |
+| 35 | 追加機能 | `WebSocketRoom` — WebSocket 接続グループ管理・ブロードキャスト | §6.13 | 計画 |
+
+---
+
 #### Ver.1.2-3（旧計画 → 組み替え）— Phase 3: デプロイ対応
 
 - **種別**: 追加機能
@@ -1434,7 +1506,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 24 | 追加機能 | デュアルデプロイ対応（Deno Deploy / Adlaire Deploy 自動判定） | §10.5 / §10.6 | 計画 |
+| 36 | 追加機能 | デュアルデプロイ対応（Deno Deploy / Adlaire Deploy 自動判定） | §10.5 / §10.6 | 計画 |
 
 ---
 
