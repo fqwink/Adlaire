@@ -12,6 +12,9 @@
 // --- サーバー ---
 export { serve } from "./server.ts";
 
+// --- 環境変数 ---
+export { getEnv } from "./env.ts";
+
 // --- エラークラス ---
 export { ValidationError } from "./error.ts";
 

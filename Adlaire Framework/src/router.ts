@@ -109,10 +109,11 @@ export class Router {
       const fullPath = `${dir}/${entry.name}`;
 
       if (entry.isDirectory) {
-        // サブディレクトリを再帰探索
-        const subPrefix = urlPrefix === "/"
-          ? `/${entry.name}`
-          : `${urlPrefix}/${entry.name}`;
+        // §5.6: ルートグループ（(group-name) 形式）は URL プレフィックスに含めない
+        const isGroup = /^\(.*\)$/.test(entry.name);
+        const subPrefix = isGroup
+          ? urlPrefix
+          : (urlPrefix === "/" ? `/${entry.name}` : `${urlPrefix}/${entry.name}`);
         await this.scanDirectory(fullPath, subPrefix);
         continue;
       }

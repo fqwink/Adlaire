@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.1.23**
+> **文書バージョン: Ver.1.24**
 > **最終更新: 2026-04-10**
 
 ---
@@ -148,6 +148,7 @@ Adlaire Framework/
 │   ├── cookies.ts              # Cookie ユーティリティ（§6.7）
 │   ├── error.ts                # フレームワーク提供エラークラス（§6.6）
 │   ├── builtin_middleware.ts   # 組み込みミドルウェア（§8.5）
+│   ├── env.ts                  # 環境変数アクセサ（§10.7）
 │   └── types.ts                # 共通型定義
 ├── cli/
 │   └── main.ts                 # CLI ツール（§12 参照）
@@ -315,6 +316,42 @@ type ErrorHandler = (
 | `_404.ts` が存在しない | フレームワーク標準の JSON 404 レスポンス |
 | `_error.ts` が存在しない | フレームワーク標準の JSON 500 レスポンス |
 | `_error.ts` 自身が例外を出した | フレームワーク標準の JSON 500 レスポンスにフォールバック |
+
+## 5.6 ルートグループ
+
+`(group-name)` 形式のディレクトリは **URL パスに影響しない**（透過的）。ルートを論理的にまとめるために使用し、`_middleware.ts` をグループ内のルートにスコープすることができる。
+
+### 命名規則
+
+- 丸括弧で囲んだ名前: `(group-name)` — URL に含まれない
+- 丸括弧なし: `admin/` — URL に含まれる（通常のサブディレクトリ）
+
+### URL マッピング例
+
+```
+routes/
+├── (marketing)/         ← ルートグループ（URL には含まれない）
+│   ├── index.ts         → /
+│   └── about.ts         → /about
+└── (app)/
+    ├── _middleware.ts   → /dashboard、/profile に適用
+    ├── dashboard.ts     → /dashboard
+    └── profile.ts       → /profile
+```
+
+### ミドルウェアのスコープ
+
+ルートグループ内の `_middleware.ts` は、グループ内のすべてのルートに適用される。ただし URL プレフィックスはグループ親ディレクトリのプレフィックスを引き継ぐ。
+
+### 仕様
+
+| 項目 | 内容 |
+|------|------|
+| ディレクトリ名パターン | `^\(.*\)$`（正規表現） |
+| URL への影響 | なし（親ディレクトリのプレフィックスを継承） |
+| `_middleware.ts` | グループ内ルートに適用（プレフィックスは親継承） |
+| `_404.ts` / `_error.ts` | グループ内ルートに適用（プレフィックスは親継承） |
+| ネスト | 可能（ルートグループ内にルートグループを配置できる） |
 
 ---
 
@@ -838,6 +875,53 @@ if (Deno.env.get("ADLAIRE_DEPLOY")) {
 // 許可: フレームワーク API 経由でのアクセス
 import { getEnv } from "adlaire-framework/mod.ts";
 const value = getEnv("KEY"); // フレームワークがターゲット差異を吸収
+```
+
+## 10.7 型安全な環境変数アクセサ — getEnv()
+
+`getEnv()` は環境変数を型安全に取得するフレームワーク提供の関数。`Deno.env.get()` を直接使用せず、`getEnv()` を介することでターゲット差異を吸収する。
+
+```typescript
+// シグネチャ（オーバーロード）
+function getEnv(key: string): string;
+function getEnv(key: string, fallback: string): string;
+```
+
+### 動作
+
+| 呼び出し形式 | 動作 |
+|-------------|------|
+| `getEnv("KEY")` | 環境変数 `KEY` の値を返す。未設定の場合は `Error` をスロー |
+| `getEnv("KEY", "default")` | 環境変数 `KEY` の値を返す。未設定の場合は `"default"` を返す |
+
+### エラーメッセージ
+
+未設定の環境変数を fallback なしで取得しようとした場合、次のメッセージで `Error` をスローする。
+
+```
+Missing required environment variable: KEY
+```
+
+### 使用例
+
+```typescript
+import { getEnv } from "adlaire-framework/mod.ts";
+
+// 必須の環境変数（未設定時はエラー）
+const dbUrl = getEnv("DATABASE_URL");
+
+// オプションの環境変数（未設定時はデフォルト値）
+const port = getEnv("PORT", "8000");
+```
+
+### 禁止事項
+
+```typescript
+// 禁止: Deno.env.get() の直接使用（アプリケーションコード内）
+const key = Deno.env.get("MY_KEY"); // 未設定時 undefined — 型エラーが発生しない
+
+// 許可: getEnv() を使用する
+const key = getEnv("MY_KEY"); // 未設定時に明示的な Error をスロー
 ```
 
 ---
