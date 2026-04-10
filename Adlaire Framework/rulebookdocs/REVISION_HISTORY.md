@@ -8,6 +8,14 @@
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| Ver.1.24 | 2026-04-10 | **ルートグループ + `getEnv()` 型安全環境変数アクセサ策定**。§5.6「ルートグループ」を新設（`(group-name)` 形式ディレクトリの透過的 URL マッピング・ミドルウェアスコープ継承・ネスト対応・正規表現パターン `^\(.*\)$` を規定）。§10.7「型安全な環境変数アクセサ — `getEnv()`」を新設（2 オーバーロード・未設定時エラーメッセージ・`Deno.env.get()` 直接使用禁止を規定）。§3.1 ディレクトリ構成に `env.ts` を追加。 |
+| Ver.1.23 | 2026-04-10 | **SSE サポート + `adlaire deploy` CLI コマンド策定**。§6.9「SSE（Server-Sent Events）サポート」を新設（`SSEStream` / `SSEEvent` インターフェース・`ctx.sse()` の型定義・レスポンスヘッダー・SSE フォーマット・動作規則を規定）。§6.3 Context 型定義に `sse()` を追加。§11.1 コマンド一覧に `adlaire deploy` を追加。§11.3 `adlaire deploy` 仕様を新設（`--host` / `--project` オプション・管理 API 呼び出し仕様・終了コード規則を規定）。 |
+| Ver.1.22 | 2026-04-10 | **WebSocket サポート + 組み込みミドルウェア群策定**。§6.8「WebSocket サポート」を新設（`WebSocketHandlers` 型・`ctx.upgradeWebSocket()` の仕様を規定）。§8.5「組み込みミドルウェア」を新設（`cors()` / `logger()` / `rateLimit()` / `compress()` の各オプション・動作を規定）。§6.3 Context 型定義に `upgradeWebSocket` を追加。§3.1 ディレクトリ構成に `builtin_middleware.ts` を追加。 |
+| Ver.1.21 | 2026-04-10 | **`ctx.body<T>()` + `ctx.cookies` 策定**。§6.6「リクエストボディ検証」を新設（ValidationError・型ガード引数・guard なし時の動作・JSON パース失敗時の動作を規定）。§6.7「Cookie ヘルパー」を新設（CookieOptions・Cookies インターフェース・レスポンスヘルパーへの自動反映ルールを規定）。§6.3 Context 型定義に `body<T>()` / `cookies` を追加。§3.1 ディレクトリ構成に `cookies.ts` / `error.ts` を追加。 |
+| Ver.1.20 | 2026-04-10 | **`_error.ts` / `_404.ts` ルーター組み込み + `ctx.query` 策定**。§5.5「エラーハンドラー / Not Found ハンドラー」を新設（`defineNotFoundHandler` / `defineErrorHandler` の型定義・エクスポート名・スコープ規則・フォールバック動作を規定）。§6.3 Context 型定義に `query: Readonly<Record<string, string>>` を追加。§6.5「クエリパラメータアクセス」を新設（`ctx.query` の型・同名キー挙動・複数値取得方法を規定）。 |
+| Ver.1.19 | 2026-04-09 | **UI レンダリング層を「計画なし（仕様策定・実装ともに対象外）」に変更**。§1.6・§5.3 を更新。 |
+| Ver.1.18 | 2026-04-09 | **UI レンダリング層を「不要」に確定**。§1.6 保留事項の「UI レンダリング層」を「計画なし（対象外）」から「不要」に変更。§5.3 の `_layout.ts` 注記を「UI レンダリング層は不要のため対象外」に更新。 |
+| Ver.1.17 | 2026-04-09 | **コンパイル済み JS 出力の SPA モードを廃止**。§10.3 からブラウザ SPA 出力モード（`--mode=spa`）を削除し、共用サーバ出力のみに整理。§11 CLI の `--mode=spa` / `--mode=server` を `--target=js` 単一コマンドに統合。§1.4 注記・§2 ビルド出力・デプロイターゲット・§10.4・§1.6 からブラウザ SPA 関連記述を除去。 |
 | Ver.1.16 | 2026-04-06 | **Adlaire Static CMS への採用計画を全面白紙**。§1.5 を「採用計画なし」に変更。§10.3 ブラウザ SPA 出力から Static CMS 固有の記述を削除。 |
 | Ver.1.15 | 2026-04-06 | Static CMS バックエンド（PHP）移行計画を白紙。フロントエンド採用は維持（後に Ver.1.16 で全面白紙）。 |
 | Ver.1.14 | 2026-04-06 | **Adlaire Static CMS への採用計画を白紙**。§1.5 適用範囲の「Adlaire Static CMS 管理画面 TypeScript SPA（採用対象）」を「採用計画なし」に変更。§10.3 ブラウザ SPA 出力から Static CMS 固有の記述を削除。 |
