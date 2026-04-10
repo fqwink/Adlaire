@@ -4,6 +4,22 @@
 
 ---
 
+## Ver.1.6-8 — jwtAuth() + csrf()
+
+**リリース日**: 2026-04-10
+**種別**: 追加機能
+
+### 追加機能
+
+- **`jwtAuth(options)`**（§8.6）: JWT Bearer 認証ミドルウェア。`Authorization: Bearer <token>` ヘッダーから JWT を取得し、WebCrypto API（HMAC-SHA-256）でHS256 署名を検証する。検証成功時はペイロードを `ctx.state[stateKey]` に注入して `next()` を呼び出す。トークン未設定・署名不一致・`exp` 期限切れのいずれかで 401 Unauthorized を返す。外部ライブラリ依存なし（`crypto.subtle` のみ使用）。カスタム `getToken` 関数でトークン取得方法を差し替え可能。
+- **`csrf(options?)`**（§8.7）: CSRF 二重送信 Cookie 保護ミドルウェア。すべてのリクエストで `_csrf` Cookie が未設定の場合は `crypto.getRandomValues(32bytes)` で hex トークンを生成して `SameSite=Strict` で設定する。`ignoreMethods`（デフォルト: GET/HEAD/OPTIONS）以外のメソッドでは `X-CSRF-Token` ヘッダーと Cookie の値を照合し、不一致時は 403 Forbidden を返す。
+- `builtin_middleware.ts`: `JwtAuthOptions` / `CsrfOptions` インターフェースを追加。`base64urlDecode()` / `verifyJwt()` / `generateCsrfToken()` をモジュール内部ヘルパーとして実装。
+- `mod.ts`: `jwtAuth` / `csrf` 関数と `JwtAuthOptions` / `CsrfOptions` 型をエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.25 準拠（§8.6 / §8.7）
+
+---
+
 ## Ver.1.5-7 — ルートグループ + getEnv()
 
 **リリース日**: 2026-04-10

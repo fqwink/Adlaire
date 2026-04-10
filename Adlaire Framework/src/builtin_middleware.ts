@@ -1,9 +1,14 @@
 /**
  * Adlaire Framework — 組み込みミドルウェア
- * FRAMEWORK_RULEBOOK §8.5 準拠
+ * FRAMEWORK_RULEBOOK §8.5〜§8.10 準拠
  */
 
-import type { MiddlewareFunction, MiddlewareState } from "./types.ts";
+import type {
+  Context,
+  MiddlewareFunction,
+  MiddlewareState,
+  RouteParams,
+} from "./types.ts";
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
 
@@ -186,5 +191,184 @@ export function compress(): MiddlewareFunction<MiddlewareState> {
       statusText: res.statusText,
       headers,
     });
+  };
+}
+
+// ─── JWT AUTH ─────────────────────────────────────────────────────────────────
+
+/** jwtAuth() オプション（§8.6） */
+export interface JwtAuthOptions {
+  /** HS256 署名シークレット */
+  secret: string;
+  /** 許可アルゴリズム（デフォルト: ["HS256"]） */
+  algorithms?: Array<"HS256" | "RS256">;
+  /** ctx.state への注入キー（デフォルト: "jwtPayload"） */
+  stateKey?: string;
+  /** トークン取得関数（デフォルト: Authorization: Bearer ヘッダー） */
+  getToken?: (ctx: Context<RouteParams, MiddlewareState>) => string | undefined;
+}
+
+/** base64url → Uint8Array */
+function base64urlDecode(input: string): Uint8Array {
+  const pad = "=".repeat((4 - (input.length % 4)) % 4);
+  const base64 = input.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * JWT を HS256 で検証し、ペイロードを返す。
+ * 検証失敗（形式不正・署名不一致・期限切れ）時は null を返す。
+ */
+async function verifyJwt(
+  token: string,
+  secret: string,
+): Promise<Record<string, unknown> | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];
+
+  // アルゴリズム確認
+  try {
+    const headerJson = new TextDecoder().decode(base64urlDecode(headerB64));
+    const header = JSON.parse(headerJson) as Record<string, unknown>;
+    if (header["alg"] !== "HS256") return null;
+  } catch {
+    return null;
+  }
+
+  // 署名検証
+  const encoder = new TextEncoder();
+  let key: CryptoKey;
+  try {
+    key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+  } catch {
+    return null;
+  }
+  const sigInput = encoder.encode(`${headerB64}.${payloadB64}`);
+  const signature = base64urlDecode(signatureB64);
+  const valid = await crypto.subtle.verify("HMAC", key, signature, sigInput);
+  if (!valid) return null;
+
+  // ペイロード解析
+  try {
+    const payloadJson = new TextDecoder().decode(base64urlDecode(payloadB64));
+    const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+    // exp クレーム検証
+    if (typeof payload["exp"] === "number" && Date.now() / 1000 > payload["exp"]) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+const JSON_CONTENT_TYPE = { "Content-Type": "application/json; charset=utf-8" };
+
+/**
+ * JWT Bearer 認証ミドルウェア（§8.6）。
+ * Authorization: Bearer <token> ヘッダーを検証し、ペイロードを ctx.state[stateKey] に注入する。
+ * 検証失敗時は 401 Unauthorized を返す。
+ */
+export function jwtAuth(options: JwtAuthOptions): MiddlewareFunction<MiddlewareState> {
+  const { secret, stateKey = "jwtPayload", getToken } = options;
+
+  return async (ctx, next) => {
+    // トークン取得
+    let token: string | undefined;
+    if (getToken) {
+      token = getToken(ctx);
+    } else {
+      const auth = ctx.req.headers.get("Authorization");
+      if (auth?.startsWith("Bearer ")) token = auth.slice(7);
+    }
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: JSON_CONTENT_TYPE },
+      );
+    }
+
+    const payload = await verifyJwt(token, secret);
+    if (!payload) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: JSON_CONTENT_TYPE },
+      );
+    }
+
+    ctx.state[stateKey] = payload;
+    return next();
+  };
+}
+
+// ─── CSRF ─────────────────────────────────────────────────────────────────────
+
+/** csrf() オプション（§8.7） */
+export interface CsrfOptions {
+  /** CSRF Cookie 名（デフォルト: "_csrf"） */
+  cookieName?: string;
+  /** CSRF ヘッダー名（デフォルト: "X-CSRF-Token"） */
+  headerName?: string;
+  /** 検証をスキップする HTTP メソッド（デフォルト: ["GET", "HEAD", "OPTIONS"]） */
+  ignoreMethods?: string[];
+}
+
+/** 暗号学的に安全な hex トークンを生成する */
+function generateCsrfToken(): string {
+  return Array.from(
+    crypto.getRandomValues(new Uint8Array(32)),
+    (b) => b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/**
+ * CSRF 保護ミドルウェア（§8.7）。
+ * Double-submit Cookie パターンにより CSRF 攻撃を防ぐ。
+ * すべてのリクエストで Cookie が未設定の場合はトークンを生成して設定する。
+ * ignoreMethods 以外のメソッドでは X-CSRF-Token ヘッダーと Cookie を照合する。
+ */
+export function csrf(options: CsrfOptions = {}): MiddlewareFunction<MiddlewareState> {
+  const {
+    cookieName = "_csrf",
+    headerName = "X-CSRF-Token",
+    ignoreMethods = ["GET", "HEAD", "OPTIONS"],
+  } = options;
+
+  return async (ctx, next) => {
+    // Cookie が未設定の場合は新規生成して設定
+    let cookieToken = ctx.cookies.get(cookieName);
+    if (!cookieToken) {
+      cookieToken = generateCsrfToken();
+      ctx.cookies.set(cookieName, cookieToken, { sameSite: "Strict", path: "/" });
+    }
+
+    // 安全メソッドは検証をスキップ
+    if (ignoreMethods.includes(ctx.req.method)) {
+      return next();
+    }
+
+    // ヘッダーと Cookie を照合
+    const headerToken = ctx.req.headers.get(headerName);
+    if (!headerToken || headerToken !== cookieToken) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403, headers: JSON_CONTENT_TYPE },
+      );
+    }
+
+    return next();
   };
 }

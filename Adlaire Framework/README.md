@@ -19,7 +19,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 
 ## 状態
 
-**Ver.1.5-7**（実装済み）
+**Ver.1.6-8**（実装済み）
 
 | バージョン | 内容 |
 |-----------|------|
@@ -30,6 +30,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 | Ver.1.3-5 | 組み込みミドルウェア（cors / logger / rateLimit / compress）・WebSocket サポート |
 | Ver.1.4-6 | SSE（`ctx.sse()`）・`adlaire deploy` CLI |
 | Ver.1.5-7 | ルートグループ（`(group)`）・`getEnv()` 型安全環境変数アクセサ |
+| Ver.1.6-8 | `jwtAuth()` JWT Bearer 認証・`csrf()` CSRF 二重送信 Cookie 保護 |
 
 ## 仕様
 
