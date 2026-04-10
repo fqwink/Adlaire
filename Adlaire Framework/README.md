@@ -19,7 +19,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 
 ## 状態
 
-**Ver.1.10-12**（実装済み）
+**Ver.1.11-13**（実装済み）
 
 | バージョン | 内容 |
 |-----------|------|
@@ -35,6 +35,7 @@ Deno の Web フレームワーク Fresh にインスパイアされつつ、Adl
 | Ver.1.8-10 | `logger(format)` JSON Lines 出力対応・`cache()` Cache-Control ヘッダー設定 |
 | Ver.1.9-11 | `ctx.sendFile()` 任意ファイル配信・`ctx.negotiate()` コンテンツネゴシエーション |
 | Ver.1.10-12 | `ctx.formData<T>()` フォームデータ型安全パース・`defineEnvSchema()` 環境変数スキーマ |
+| Ver.1.11-13 | `onStart`/`onStop` ライフサイクルフック・`WebSocketRoom` 接続マネージャー |
 
 ## 仕様
 

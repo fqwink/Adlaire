@@ -4,6 +4,24 @@
 
 ---
 
+## Ver.1.11-13 — onStart / onStop フック + WebSocketRoom
+
+**リリース日**: 2026-04-10
+**種別**: 追加機能
+
+### 追加機能
+
+- **`onStart(port)` / `onStop()` ライフサイクルフック**（§4.2）: `adlaire.config.ts` の `onStart` / `onStop` フィールドにコールバックを設定することでサーバーのライフサイクルに処理をフックできる。`onStart` はサーバー起動後・最初のリクエストより前に呼び出される。例外発生時はシャットダウンして終了コード 1。`SIGTERM` / `SIGINT` 受信時に `onStop` を呼び出してから `server.shutdown()` を実行する（シグナルリスナー非対応環境では無視）。`server.finished` を `await` してサーバープロセスを保持する。
+- **`WebSocketRoom`**（§6.13）: WebSocket 接続をグループ管理するクラス。`join(id, ws)` / `leave(id)` / `send(id, data)` / `broadcast(data, excludeId?)` / `count` / `has(id)` を実装。`CLOSED` / `CLOSING` 状態の接続は自動削除。`object` 型データは `JSON.stringify()` して送信。`#connections` プライベートフィールドによりカプセル化。
+- `types.ts`: `AdlaireConfig` に `onStart` / `onStop` フィールドを追加。
+- `server.ts`: `Deno.serve()` の戻り値をキャプチャして `onStart` 呼び出し・シグナルリスナー登録・`server.finished` 待機を実装。`mergeConfig` の戻り値型を `ResolvedBaseConfig`（ライフサイクルフックを除く）に変更。
+- `src/ws_room.ts` を新規作成。
+- `mod.ts`: `WebSocketRoom` クラスをエクスポート追加。
+
+**仕様**: FRAMEWORK_RULEBOOK.md Ver.1.30 準拠（§4.2 / §6.13）
+
+---
+
 ## Ver.1.10-12 — ctx.formData<T>() + defineEnvSchema()
 
 **リリース日**: 2026-04-10

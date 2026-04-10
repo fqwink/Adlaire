@@ -221,4 +221,14 @@ export interface AdlaireConfig {
   };
   /** デプロイターゲット */
   deploy?: "deno-deploy" | "adlaire-deploy" | "js" | "auto";
+  /**
+   * サーバー起動後に呼び出されるライフサイクルフック（§4.2）。
+   * 例外発生時はサーバーを起動せず終了コード 1 で終了する。
+   */
+  onStart?: (port: number) => void | Promise<void>;
+  /**
+   * サーバー停止時に呼び出されるライフサイクルフック（§4.2）。
+   * 例外発生時はエラーをログ出力してシャットダウンを続行する。
+   */
+  onStop?: () => void | Promise<void>;
 }

@@ -12,6 +12,9 @@
 // --- サーバー ---
 export { serve } from "./server.ts";
 
+// --- WebSocket 接続マネージャー ---
+export { WebSocketRoom } from "./ws_room.ts";
+
 // --- 環境変数 ---
 export { getEnv } from "./env.ts";
 export { defineEnvSchema } from "./env_schema.ts";

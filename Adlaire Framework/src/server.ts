@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — HTTP サーバー
- * FRAMEWORK_RULEBOOK §1.4 / §10 準拠
+ * FRAMEWORK_RULEBOOK §1.4 / §4.2 / §10 準拠
  *
  * Deno.serve ベースの HTTP サーバー起動・リクエスト処理。
  */
@@ -21,8 +21,17 @@ import { Router } from "./router.ts";
 import { serveStaticFile } from "./static.ts";
 import { badRequestResponse, notFoundResponse } from "./response.ts";
 
+/** ライフサイクルフックを除く解決済み設定型 */
+interface ResolvedBaseConfig {
+  port: number;
+  routes_dir: string;
+  static_dir: string | null;
+  style: { adlaire_style: boolean };
+  deploy: "deno-deploy" | "adlaire-deploy" | "js" | "auto";
+}
+
 /** デフォルト設定 */
-const DEFAULT_CONFIG: Required<AdlaireConfig> = {
+const DEFAULT_CONFIG: ResolvedBaseConfig = {
   port: 8000,
   routes_dir: "./routes",
   static_dir: "./static",
@@ -31,9 +40,9 @@ const DEFAULT_CONFIG: Required<AdlaireConfig> = {
 };
 
 /**
- * 設定をマージする。
+ * 設定をマージする（ライフサイクルフックを除く）。
  */
-function mergeConfig(userConfig: AdlaireConfig): Required<AdlaireConfig> {
+function mergeConfig(userConfig: AdlaireConfig): ResolvedBaseConfig {
   return {
     port: userConfig.port ?? DEFAULT_CONFIG.port,
     routes_dir: userConfig.routes_dir ?? DEFAULT_CONFIG.routes_dir,
@@ -85,6 +94,7 @@ function invokeHandler(
  */
 export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
   const config = mergeConfig(userConfig);
+  const { onStart, onStop } = userConfig;
   const router = new Router();
 
   // ルート探索
@@ -101,9 +111,7 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
       : `${Deno.cwd()}/${config.static_dir}`)
     : null;
 
-  console.log(`Adlaire Framework listening on http://localhost:${config.port}`);
-
-  Deno.serve({ port: config.port }, async (req: Request): Promise<Response> => {
+  const server = Deno.serve({ port: config.port }, async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
 
     // §9: 静的ファイルはルートマッチングより優先
@@ -170,4 +178,38 @@ export async function serve(userConfig: AdlaireConfig = {}): Promise<void> {
       );
     }
   });
+
+  console.log(`Adlaire Framework listening on http://localhost:${config.port}`);
+
+  // §4.2: onStart フック
+  if (onStart) {
+    try {
+      await onStart(config.port);
+    } catch (err) {
+      console.error("onStart hook failed:", err);
+      await server.shutdown();
+      Deno.exit(1);
+    }
+  }
+
+  // §4.2: シグナル受信時の onStop フック + シャットダウン
+  const handleStop = async () => {
+    if (onStop) {
+      try {
+        await onStop();
+      } catch (err) {
+        console.error("onStop hook error:", err);
+      }
+    }
+    await server.shutdown();
+  };
+
+  try {
+    Deno.addSignalListener("SIGTERM", handleStop);
+    Deno.addSignalListener("SIGINT", handleStop);
+  } catch {
+    // シグナルリスナー非対応環境（Deno Deploy 等）では無視する
+  }
+
+  await server.finished;
 }
