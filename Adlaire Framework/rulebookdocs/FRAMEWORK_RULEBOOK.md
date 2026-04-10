@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.1.20**
+> **文書バージョン: Ver.1.23**
 > **最終更新: 2026-04-10**
 
 ---
@@ -357,6 +357,7 @@ interface Context<
   cookies: Cookies;                        // §6.7
   body<T>(guard?: (data: unknown) => data is T): Promise<T>; // §6.6
   upgradeWebSocket(handlers: WebSocketHandlers): Response;   // §6.8
+  sse(callback: (stream: SSEStream) => void | Promise<void>): Response; // §6.9
   // レスポンスヘルパー（§7 参照）
   json<T>(data: T, init?: ResponseInit): Response;
   text(data: string, init?: ResponseInit): Response;
@@ -541,6 +542,71 @@ export const handler = defineHandler({
 ```
 
 WebSocket アップグレードリクエストではない通常リクエストに対して `ctx.upgradeWebSocket()` を呼び出すと、Deno がエラーをスローする。
+
+## 6.9 SSE（Server-Sent Events）サポート
+
+`ctx.sse(callback)` で Server-Sent Events レスポンスを生成する。コールバック関数が `SSEStream` オブジェクトを受け取り、イベントを送信する。
+
+```typescript
+// 型定義
+interface SSEEvent {
+  data: string | object; // object の場合は JSON.stringify される
+  event?: string;        // イベント名（省略時は無名イベント）
+  id?: string;           // イベント ID
+  retry?: number;        // 再接続間隔（ミリ秒）
+}
+
+interface SSEStream {
+  send(event: SSEEvent): void; // イベントを送信する
+  close(): void;               // ストリームを閉じる
+}
+
+ctx.sse(callback: (stream: SSEStream) => void | Promise<void>): Response
+```
+
+### レスポンスヘッダー
+
+| ヘッダー | 値 |
+|---------|---|
+| `Content-Type` | `text/event-stream; charset=utf-8` |
+| `Cache-Control` | `no-cache` |
+| `Connection` | `keep-alive` |
+
+### SSE フォーマット
+
+各イベントは RFC 8895 に従い以下の形式で送信される。
+
+```
+id: <id>\n           （省略可）
+event: <event>\n     （省略可）
+retry: <ms>\n        （省略可）
+data: <data>\n\n
+```
+
+`data` フィールドが `object` 型の場合は `JSON.stringify()` して文字列に変換する。
+
+### 動作規則
+
+| 規則 | 内容 |
+|------|------|
+| ストリーム | `ReadableStream<Uint8Array>` を内部で生成し `Response` に渡す |
+| コールバック非同期 | `callback` が `Promise` を返す場合、エラーはキャッチしてストリームを閉じる |
+| Cookie 反映 | `ctx.sse()` はレスポンスヘルパーではないため Set-Cookie は**反映されない** |
+
+```typescript
+// 使用例
+export const handler = defineHandler({
+  async GET(ctx) {
+    return ctx.sse(async (stream) => {
+      for (let i = 0; i < 5; i++) {
+        stream.send({ data: { count: i }, event: "tick" });
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      stream.close();
+    });
+  },
+});
+```
 
 ---
 
@@ -789,6 +855,30 @@ const value = getEnv("KEY"); // フレームワークがターゲット差異を
 | `adlaire build --target=js` | TypeScript → 共用サーバ向け JavaScript 出力（`build/js/`） |
 | `adlaire check` | ルート型整合性・設定ファイルのバリデーション |
 | `adlaire routes` | 登録済みルート一覧を表示 |
+| `adlaire deploy --host=<URL> --project=<ID>` | Adlaire Deploy 管理 API にデプロイをトリガーする |
+
+## 11.3 `adlaire deploy` — Adlaire Deploy トリガー
+
+Adlaire Deploy の管理 API（`POST /api/projects/{id}/deploy`）を呼び出してデプロイをトリガーする。
+
+### オプション
+
+| オプション | 必須 | 説明 |
+|-----------|:----:|------|
+| `--host=<URL>` | ✓ | Adlaire Deploy 管理 API のベース URL（例: `http://localhost:8001`） |
+| `--project=<ID>` | ✓ | プロジェクト ID |
+
+### 動作
+
+1. `{host}/api/projects/{project}/deploy` に `POST` リクエストを送信する。
+2. レスポンスが 2xx の場合、成功メッセージを表示して終了コード 0 で終了する。
+3. レスポンスが 2xx 以外の場合、エラーメッセージ（ステータスコード含む）を表示して終了コード 1 で終了する。
+4. ネットワークエラーの場合、エラーメッセージを表示して終了コード 1 で終了する。
+
+```sh
+# 使用例
+adlaire deploy --host=http://localhost:8001 --project=my-app
+```
 
 ## 11.2 `adlaire new` テンプレート
 

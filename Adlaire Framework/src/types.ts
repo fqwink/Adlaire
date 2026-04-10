@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — 共通型定義
- * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §7 / §8 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 / §7 / §8 準拠
  */
 
 import type { CookieOptions, Cookies } from "./cookies.ts";
@@ -54,6 +54,8 @@ export interface Context<
   body<T>(guard?: (data: unknown) => data is T): Promise<T>;
   /** WebSocket へのアップグレード（§6.8） */
   upgradeWebSocket(handlers: WebSocketHandlers): Response;
+  /** SSE レスポンスの生成（§6.9） */
+  sse(callback: (stream: SSEStream) => void | Promise<void>): Response;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;
@@ -124,6 +126,30 @@ export interface ResolvedRoute {
   handler: Handler;
   /** 適用されるミドルウェアチェーン */
   middleware: MiddlewareFunction[];
+}
+
+/**
+ * SSE イベント（§6.9）
+ */
+export interface SSEEvent {
+  /** 送信データ。object の場合は JSON.stringify される */
+  data: string | object;
+  /** イベント名（省略時は無名イベント） */
+  event?: string;
+  /** イベント ID */
+  id?: string;
+  /** 再接続間隔（ミリ秒） */
+  retry?: number;
+}
+
+/**
+ * SSE ストリーム操作インターフェース（§6.9）
+ */
+export interface SSEStream {
+  /** イベントを送信する */
+  send(event: SSEEvent): void;
+  /** ストリームを閉じる */
+  close(): void;
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Adlaire Framework — 型付きリクエストコンテキスト
- * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 準拠
+ * FRAMEWORK_RULEBOOK §6.3 / §6.6 / §6.7 / §6.8 / §6.9 準拠
  */
 
 import type {
@@ -9,6 +9,8 @@ import type {
   RedirectStatus,
   ResponseInit,
   RouteParams,
+  SSEEvent,
+  SSEStream,
   WebSocketHandlers,
 } from "./types.ts";
 import {
@@ -130,6 +132,60 @@ export function createContext<
         );
       }
       return response;
+    },
+
+    // §6.9: SSE レスポンスの生成
+    sse(callback: (stream: SSEStream) => void | Promise<void>): Response {
+      const encoder = new TextEncoder();
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+
+      const readable = new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          controller = ctrl;
+        },
+      });
+
+      const sseStream: SSEStream = {
+        send(event: SSEEvent): void {
+          let chunk = "";
+          if (event.id !== undefined) chunk += `id: ${event.id}\n`;
+          if (event.event !== undefined) chunk += `event: ${event.event}\n`;
+          if (event.retry !== undefined) chunk += `retry: ${event.retry}\n`;
+          const data =
+            typeof event.data === "string"
+              ? event.data
+              : JSON.stringify(event.data);
+          chunk += `data: ${data}\n\n`;
+          controller.enqueue(encoder.encode(chunk));
+        },
+        close(): void {
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        },
+      };
+
+      const result = callback(sseStream);
+      if (result instanceof Promise) {
+        result.catch((err) => {
+          console.error("SSE callback error:", err);
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        });
+      }
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      });
     },
   };
 }

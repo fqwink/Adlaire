@@ -8,6 +8,7 @@
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| Ver.1.23 | 2026-04-10 | **SSE サポート + `adlaire deploy` CLI コマンド策定**。§6.9「SSE（Server-Sent Events）サポート」を新設（`SSEStream` / `SSEEvent` インターフェース・`ctx.sse()` の型定義・レスポンスヘッダー・SSE フォーマット・動作規則を規定）。§6.3 Context 型定義に `sse()` を追加。§11.1 コマンド一覧に `adlaire deploy` を追加。§11.3 `adlaire deploy` 仕様を新設（`--host` / `--project` オプション・管理 API 呼び出し仕様・終了コード規則を規定）。 |
 | Ver.1.22 | 2026-04-10 | **WebSocket サポート + 組み込みミドルウェア群策定**。§6.8「WebSocket サポート」を新設（`WebSocketHandlers` 型・`ctx.upgradeWebSocket()` の仕様を規定）。§8.5「組み込みミドルウェア」を新設（`cors()` / `logger()` / `rateLimit()` / `compress()` の各オプション・動作を規定）。§6.3 Context 型定義に `upgradeWebSocket` を追加。§3.1 ディレクトリ構成に `builtin_middleware.ts` を追加。 |
 | Ver.1.21 | 2026-04-10 | **`ctx.body<T>()` + `ctx.cookies` 策定**。§6.6「リクエストボディ検証」を新設（ValidationError・型ガード引数・guard なし時の動作・JSON パース失敗時の動作を規定）。§6.7「Cookie ヘルパー」を新設（CookieOptions・Cookies インターフェース・レスポンスヘルパーへの自動反映ルールを規定）。§6.3 Context 型定義に `body<T>()` / `cookies` を追加。§3.1 ディレクトリ構成に `cookies.ts` / `error.ts` を追加。 |
 | Ver.1.20 | 2026-04-10 | **`_error.ts` / `_404.ts` ルーター組み込み + `ctx.query` 策定**。§5.5「エラーハンドラー / Not Found ハンドラー」を新設（`defineNotFoundHandler` / `defineErrorHandler` の型定義・エクスポート名・スコープ規則・フォールバック動作を規定）。§6.3 Context 型定義に `query: Readonly<Record<string, string>>` を追加。§6.5「クエリパラメータアクセス」を新設（`ctx.query` の型・同名キー挙動・複数値取得方法を規定）。 |

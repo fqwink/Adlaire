@@ -41,6 +41,8 @@ export type {
   RedirectStatus,
   RouteParams,
   SingleHandler,
+  SSEEvent,
+  SSEStream,
   WebSocketHandlers,
 } from "./types.ts";
 export type { CorsOptions, RateLimitOptions } from "./builtin_middleware.ts";

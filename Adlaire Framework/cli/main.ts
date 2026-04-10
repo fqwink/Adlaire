@@ -11,6 +11,7 @@
  *   build [--target=deno|js] 本番ビルドを生成
  *   check                   ルート型整合性・設定ファイルのバリデーション
  *   routes                  登録済みルート一覧を表示
+ *   deploy --host=<URL> --project=<ID>  Adlaire Deploy にデプロイをトリガー
  */
 
 import { commandNew } from "./cmd_new.ts";
@@ -18,6 +19,7 @@ import { commandDev } from "./cmd_dev.ts";
 import { commandCheck } from "./cmd_check.ts";
 import { commandRoutes } from "./cmd_routes.ts";
 import { commandBuild } from "./cmd_build.ts";
+import { commandDeploy } from "./cmd_deploy.ts";
 
 const HELP = `
 Adlaire Framework CLI
@@ -33,6 +35,7 @@ Commands:
   build --target=js           共用サーバ向け JavaScript 出力
   check                       ルート型整合性・設定ファイルのバリデーション
   routes                      登録済みルート一覧を表示
+  deploy --host=<URL> --project=<ID>  Adlaire Deploy にデプロイをトリガー
 `.trim();
 
 async function main(): Promise<void> {
@@ -61,6 +64,9 @@ async function main(): Promise<void> {
       break;
     case "routes":
       await commandRoutes(restArgs);
+      break;
+    case "deploy":
+      await commandDeploy(restArgs);
       break;
     default:
       console.error(`Unknown command: ${command}`);
