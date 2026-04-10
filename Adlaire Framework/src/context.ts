@@ -9,6 +9,7 @@ import type {
   RedirectStatus,
   ResponseInit,
   RouteParams,
+  WebSocketHandlers,
 } from "./types.ts";
 import {
   badRequestResponse,
@@ -105,6 +106,30 @@ export function createContext<
     },
     internalError(message?: string): Response {
       return withCookies(internalErrorResponse(message));
+    },
+
+    // §6.8: WebSocket へのアップグレード
+    upgradeWebSocket(handlers: WebSocketHandlers): Response {
+      const { socket, response } = Deno.upgradeWebSocket(req);
+      if (handlers.onOpen) {
+        socket.addEventListener("open", () => handlers.onOpen!(socket));
+      }
+      if (handlers.onMessage) {
+        socket.addEventListener("message", (e) =>
+          handlers.onMessage!(socket, e as MessageEvent)
+        );
+      }
+      if (handlers.onClose) {
+        socket.addEventListener("close", (e) =>
+          handlers.onClose!(socket, e as CloseEvent)
+        );
+      }
+      if (handlers.onError) {
+        socket.addEventListener("error", (e) =>
+          handlers.onError!(socket, e)
+        );
+      }
+      return response;
     },
   };
 }

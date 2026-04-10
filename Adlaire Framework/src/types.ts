@@ -52,6 +52,8 @@ export interface Context<
   readonly cookies: Cookies;
   /** リクエストボディの JSON パース + 型ガード（§6.6） */
   body<T>(guard?: (data: unknown) => data is T): Promise<T>;
+  /** WebSocket へのアップグレード（§6.8） */
+  upgradeWebSocket(handlers: WebSocketHandlers): Response;
 
   // --- レスポンスヘルパー（§7.2） ---
   json<T>(data: T, init?: ResponseInit): Response;
@@ -122,6 +124,16 @@ export interface ResolvedRoute {
   handler: Handler;
   /** 適用されるミドルウェアチェーン */
   middleware: MiddlewareFunction[];
+}
+
+/**
+ * WebSocket イベントハンドラー（§6.8）
+ */
+export interface WebSocketHandlers {
+  onOpen?: (ws: WebSocket) => void;
+  onMessage?: (ws: WebSocket, event: MessageEvent) => void;
+  onClose?: (ws: WebSocket, event: CloseEvent) => void;
+  onError?: (ws: WebSocket, event: Event | ErrorEvent) => void;
 }
 
 /**

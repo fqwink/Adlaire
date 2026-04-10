@@ -15,6 +15,9 @@ export { serve } from "./server.ts";
 // --- エラークラス ---
 export { ValidationError } from "./error.ts";
 
+// --- 組み込みミドルウェア ---
+export { compress, cors, logger, rateLimit } from "./builtin_middleware.ts";
+
 // --- ハンドラー ---
 export { defineHandler, defineErrorHandler, defineNotFoundHandler } from "./handler.ts";
 
@@ -38,4 +41,6 @@ export type {
   RedirectStatus,
   RouteParams,
   SingleHandler,
+  WebSocketHandlers,
 } from "./types.ts";
+export type { CorsOptions, RateLimitOptions } from "./builtin_middleware.ts";

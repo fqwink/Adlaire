@@ -147,6 +147,7 @@ Adlaire Framework/
 │   ├── response.ts             # レスポンスヘルパー
 │   ├── cookies.ts              # Cookie ユーティリティ（§6.7）
 │   ├── error.ts                # フレームワーク提供エラークラス（§6.6）
+│   ├── builtin_middleware.ts   # 組み込みミドルウェア（§8.5）
 │   └── types.ts                # 共通型定義
 ├── cli/
 │   └── main.ts                 # CLI ツール（§12 参照）
@@ -355,6 +356,7 @@ interface Context<
   query: Readonly<Record<string, string>>; // §6.5
   cookies: Cookies;                        // §6.7
   body<T>(guard?: (data: unknown) => data is T): Promise<T>; // §6.6
+  upgradeWebSocket(handlers: WebSocketHandlers): Response;   // §6.8
   // レスポンスヘルパー（§7 参照）
   json<T>(data: T, init?: ResponseInit): Response;
   text(data: string, init?: ResponseInit): Response;
@@ -502,6 +504,44 @@ export const handler = defineHandler({
 });
 ```
 
+## 6.8 WebSocket サポート
+
+`ctx.upgradeWebSocket(handlers)` で HTTP リクエストを WebSocket にアップグレードする。Deno 標準の `Deno.upgradeWebSocket` を型安全にラップする。
+
+```typescript
+// 型定義
+interface WebSocketHandlers {
+  onOpen?: (ws: WebSocket) => void;
+  onMessage?: (ws: WebSocket, event: MessageEvent) => void;
+  onClose?: (ws: WebSocket, event: CloseEvent) => void;
+  onError?: (ws: WebSocket, event: Event | ErrorEvent) => void;
+}
+
+ctx.upgradeWebSocket(handlers: WebSocketHandlers): Response
+```
+
+```typescript
+// 使用例
+export const handler = defineHandler({
+  GET(ctx) {
+    return ctx.upgradeWebSocket({
+      onOpen(ws) {
+        ws.send(JSON.stringify({ type: "connected" }));
+      },
+      onMessage(ws, event) {
+        const data = JSON.parse(event.data as string);
+        ws.send(JSON.stringify({ echo: data }));
+      },
+      onClose() {
+        console.log("WebSocket closed");
+      },
+    });
+  },
+});
+```
+
+WebSocket アップグレードリクエストではない通常リクエストに対して `ctx.upgradeWebSocket()` を呼び出すと、Deno がエラーをスローする。
+
 ---
 
 # 7. ハンドラー仕様
@@ -586,6 +626,57 @@ export const middleware = defineMiddleware(async (ctx, next) => {
 ```typescript
 export const middleware = [authMiddleware, logMiddleware];
 ```
+
+## 8.5 組み込みミドルウェア
+
+フレームワーク提供の組み込みミドルウェア。`adlaire-framework/mod.ts` からインポートして使用する。
+
+| 関数 | 説明 |
+|------|------|
+| `cors(options?)` | CORS ヘッダー設定 |
+| `logger()` | リクエストログ（メソッド・パス・ステータス・応答時間） |
+| `rateLimit(options?)` | IP ベースのレートリミット |
+| `compress()` | gzip / deflate 圧縮（テキスト系コンテンツのみ） |
+
+```typescript
+// 使用例: routes/_middleware.ts
+import { cors, logger, rateLimit } from "adlaire-framework/mod.ts";
+
+export const middleware = [
+  cors({ origins: ["https://example.com"], credentials: true }),
+  rateLimit({ max: 100, window: 60 }),
+  logger(),
+];
+```
+
+### cors(options?)
+
+| オプション | 型 | デフォルト | 説明 |
+|-----------|------|:----------:|------|
+| `origins` | `string \| string[]` | `"*"` | 許可オリジン（`"*"` で全許可） |
+| `methods` | `string[]` | 主要 HTTP メソッド | 許可メソッド |
+| `allowedHeaders` | `string[]` | `["Content-Type", "Authorization"]` | 許可ヘッダー |
+| `credentials` | `boolean` | `false` | 認証情報の送信を許可 |
+| `maxAge` | `number` | — | Preflight キャッシュ秒数 |
+
+Preflight（OPTIONS）リクエストは 204 で即時応答する。
+
+### logger()
+
+`${METHOD} ${PATH} ${STATUS} — ${ms}ms` 形式でコンソールに出力する。
+
+### rateLimit(options?)
+
+| オプション | 型 | デフォルト | 説明 |
+|-----------|------|:----------:|------|
+| `max` | `number` | `100` | ウィンドウ内の最大リクエスト数 |
+| `window` | `number` | `60` | レートリミットウィンドウ（秒） |
+
+`X-Forwarded-For` / `CF-Connecting-IP` ヘッダーから IP を取得する。制限超過時は 429 Too Many Requests を返す。
+
+### compress()
+
+`Accept-Encoding` ヘッダーに応じて gzip または deflate でレスポンスを圧縮する。テキスト系（`text/*` / `application/json` / `application/javascript`）のみ圧縮対象。
 
 ---
 
