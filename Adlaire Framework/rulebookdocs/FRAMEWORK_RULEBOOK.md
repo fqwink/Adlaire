@@ -211,9 +211,13 @@ type Handler<
   S extends Record<string, unknown> = Record<string, unknown>,
 > = (ctx: Context<P, B, Q, S>) => Response | Promise<Response>;
 
-// Middleware は next() の結果を返す
-type Middleware =
-  (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
+// Middleware は next() の結果を返す。S で state の型を宣言する
+type Middleware<
+  S extends Record<string, unknown> = Record<string, unknown>,
+> = (
+  ctx: Context<Record<string, string>, unknown, Record<string, string>, S>,
+  next: () => Promise<Response>,
+) => Promise<Response>;
 
 // ErrorHandler はエラーを Response に変換する
 type ErrorHandler =
@@ -222,18 +226,19 @@ type ErrorHandler =
 
 ### state 型安全化の使用例
 
-ミドルウェアで `ctx.state` に値を書き込み、ハンドラーで `S` 型引数を指定して型付きで参照する。
+`Middleware<S>` で state の書き込み型を宣言し、`Handler<P,B,Q,S>` で同じ `S` を指定して型付きで参照する。
 
 ```typescript
-// ミドルウェアで state に書き込む（Middleware 型は Context のデフォルト S を使用）
-server.use(async (ctx, next) => {
-  ctx.state.userId = "user-123";
-  return next();
-});
-
-// ハンドラーで S 型引数を指定して型付きで参照する
 type AuthState = { userId: string };
 
+// Middleware<S> で state の書き込み型を宣言する
+const authMiddleware: Middleware<AuthState> = async (ctx, next) => {
+  ctx.state.userId = "user-123"; // string として代入可能
+  return next();
+};
+server.use(authMiddleware);
+
+// ハンドラーで同じ S を指定して型付きで参照する
 server.router.get<Record<string, string>, unknown, Record<string, string>, AuthState>(
   "/profile",
   (ctx) => {
@@ -255,6 +260,7 @@ interface ValidationError {
 interface RuleBase {
   required?: boolean;   // デフォルト: false
   nullable?: boolean;   // null 値を許可するか（デフォルト: false）
+  message?: string;     // カスタムエラーメッセージ（省略時はフレームワーク標準メッセージ）
 }
 
 // Rule — Discriminated Union（type フィールドで判別）
@@ -274,6 +280,16 @@ type Schema = Record<string, Rule>;
 ## 5.4 ErrorResponse / HTTPError
 
 ```typescript
+// 有効な HTTP ステータスコード（100〜599）
+type HttpStatus =
+  | 100 | 101
+  | 200 | 201 | 202 | 203 | 204 | 205 | 206
+  | 300 | 301 | 302 | 303 | 304 | 307 | 308
+  | 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409
+  | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 422
+  | 423 | 424 | 425 | 426 | 428 | 429 | 431 | 451
+  | 500 | 501 | 502 | 503 | 504 | 505 | 506 | 507 | 508 | 510 | 511;
+
 // すべてのエラーレスポンスのボディ形式（統一）
 interface ErrorResponse {
   error: string;
@@ -283,7 +299,7 @@ interface ErrorResponse {
 // ハンドラーから任意の HTTP ステータスをスローするためのエラークラス
 class HTTPError extends Error {
   constructor(
-    public readonly status: number,
+    public readonly status: HttpStatus,
     message?: string,
     public readonly detail?: unknown,
   ) {
@@ -302,6 +318,29 @@ interface Route {
 }
 
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS";
+```
+
+## 5.6 EnvRule / EnvSchema / EnvResult
+
+`loadEnv()` のスキーマ検証・型変換に使用する型（§6.2 参照）。
+
+```typescript
+// 環境変数の型変換ルール
+type EnvRule =
+  | { type: "string";  required?: boolean; default?: string }
+  | { type: "number";  required?: boolean; default?: number }
+  | { type: "boolean"; required?: boolean; default?: boolean }
+  | { type: "port";    required?: boolean; default?: number };  // 1〜65535 の整数
+
+type EnvSchema = Record<string, EnvRule>;
+
+// スキーマから変換された値の型を導出する Mapped Type
+type EnvResult<S extends EnvSchema> = {
+  readonly [K in keyof S]:
+    S[K]["type"] extends "number" | "port" ? number :
+    S[K]["type"] extends "boolean" ? boolean :
+    string;
+};
 ```
 
 ---
@@ -330,10 +369,41 @@ const server = createServer();
 `.env` ファイルを読み込み `Deno.env.set` で展開する。Adlaire Deploy 専用。
 
 ```typescript
-function loadEnv(path?: string): Promise<void>
+// スキーマなし: .env を読み込み Deno.env に展開するだけ
+function loadEnv(path?: string): Promise<void>;
+
+// スキーマあり: 型変換・バリデーション済みの値オブジェクトを返す
+function loadEnv<S extends EnvSchema>(options: {
+  path?: string;
+  schema: S;
+}): Promise<EnvResult<S>>;
 ```
 
 - `path` 省略時は実行ディレクトリの `.env` を読み込む
+- スキーマあり呼び出し時: 各値を `EnvRule.type` に従い型変換する
+  - `"number"` / `"port"`: `Number()` で変換。`"port"` は 1〜65535 の範囲を検証する
+  - `"boolean"`: `"true"` → `true`、それ以外 → `false`
+  - `"string"`: そのまま
+- `required: true` の変数が未設定かつ `default` もない場合は `Error` を throw する
+
+### 使用例
+
+```typescript
+import { loadEnv } from "@adlaire/fw";
+
+// スキーマなし
+await loadEnv(".env");
+
+// スキーマあり
+const env = await loadEnv({
+  schema: {
+    PORT:     { type: "port",    required: true, default: 8000 },
+    DB_URL:   { type: "string",  required: true },
+    DEBUG:    { type: "boolean", default: false },
+  },
+});
+// env.PORT は number、env.DB_URL は string、env.DEBUG は boolean
+```
 
 | 環境 | loadEnv() | 設定方法 |
 |------|-----------|---------|
@@ -353,6 +423,7 @@ function loadEnv(path?: string): Promise<void>
 | `get / post / put / delete / patch / head / options(path, handler)` | ルートを登録（メソッドチェーン対応） |
 | `group(prefix)` | プレフィクス付き `RouteGroup` を返す |
 | `match(method, url)` | ハンドラーと `params` を返す。未一致は `null` |
+| `routes()` | 登録済みルートの一覧を返す（`ReadonlyArray<Route>`） |
 
 ## 7.2 パスマッチングルール
 
@@ -385,14 +456,14 @@ function loadEnv(path?: string): Promise<void>
 
 | 型 | 共通オプション | 固有オプション |
 |----|--------------|--------------|
-| `string` | `required` / `nullable` | `min` / `max`（文字数）/ `pattern`（正規表現）/ `enum`（列挙値） |
-| `number` | `required` / `nullable` | `min` / `max`（値域）/ `integer`（整数チェック） |
-| `boolean` | `required` / `nullable` | — |
-| `email` | `required` / `nullable` | — |
-| `url`   | `required` / `nullable` | `allowedProtocols`（デフォルト: `["http", "https"]`）|
-| `object` | `required` / `nullable` | `fields`（サブスキーマ） |
-| `array` | `required` / `nullable` | `items`（要素ルール）/ `min` / `max`（要素数） |
-| `custom` | `required` / `nullable` | `validate(v: unknown): true \| string` |
+| `string` | `required` / `nullable` / `message` | `min` / `max`（文字数）/ `pattern`（正規表現）/ `enum`（列挙値） |
+| `number` | `required` / `nullable` / `message` | `min` / `max`（値域）/ `integer`（整数チェック） |
+| `boolean` | `required` / `nullable` / `message` | — |
+| `email`  | `required` / `nullable` / `message` | — |
+| `url`    | `required` / `nullable` / `message` | `allowedProtocols`（デフォルト: `["http", "https"]`）|
+| `object` | `required` / `nullable` / `message` | `fields`（サブスキーマ） |
+| `array`  | `required` / `nullable` / `message` | `items`（要素ルール）/ `min` / `max`（要素数） |
+| `custom` | `required` / `nullable` / `message` | `validate(v: unknown): true \| string` |
 
 ### 使用例
 
@@ -521,7 +592,7 @@ server.use(cors({
 | `text` | `text(body, status?)` | プレーンテキスト（`Content-Type: text/plain; charset=UTF-8`） |
 | `html` | `html(body, status?)` | HTML レスポンス（`Content-Type: text/html; charset=UTF-8`、デフォルト 200） |
 | `send` | `send(status, body?)` | 任意ステータスと生テキスト |
-| `redirect` | `redirect(url, status?)` | リダイレクト（デフォルト 302。`status` は `301 \| 302 \| 307 \| 308` のみ許可） |
+| `redirect` | `redirect(url, status?)` | リダイレクト（`url` は `string \| URL`、デフォルト 302。`status` は `301 \| 302 \| 307 \| 308` のみ許可） |
 
 ### 使用例
 
