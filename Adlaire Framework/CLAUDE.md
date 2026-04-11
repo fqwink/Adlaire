@@ -37,7 +37,7 @@
 
 - **Deno 2.x / TypeScript 5.x**（ランタイム・実装言語）
 - **明示的 Router API**（`createServer()` / `server.router.get()` / `server.router.group()`）
-- **標準 API**（`Request` / `Response` / `URL` / `ReadableStream` / `crypto.subtle`）
+- **Web 標準 API**（`Request` / `Response` / `URL` / `ReadableStream` / `crypto.subtle`）
 - **Deno 標準ライブラリ**（`jsr:@std/*` のみ許可）
 
 ### 型安全方針（絶対原則）
@@ -62,7 +62,7 @@
 
 ### その他禁止事項（絶対原則）
 
-- `npm:` スペシャライザーのインポートを全面禁止（`jsr:@std/*` と 標準 API のみ）
+- `npm:` スペシャライザーのインポートを全面禁止（`jsr:@std/*` と Web 標準 API のみ）
 - `node:` スペシャライザー（Node.js 互換レイヤー）の使用禁止
 - サードパーティ製 HTTP フレームワークへの依存禁止
 - `eval()`・`Function()` 等の動的コード実行禁止

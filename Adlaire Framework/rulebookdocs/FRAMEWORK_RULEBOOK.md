@@ -27,7 +27,7 @@
 
 ## 0.3 npm 禁止
 
-`npm:` スペシャライザーの使用を禁止する。依存は Deno 標準ライブラリ（`jsr:@std/*`）と 標準 API のみ。
+`npm:` スペシャライザーの使用を禁止する。依存は Deno 標準ライブラリ（`jsr:@std/*`）と Web 標準 API のみ。
 
 ## 0.4 any 使用禁止
 
@@ -53,9 +53,9 @@ Adlaire Group の全プロジェクトで共通利用する TypeScript 製フル
 | **言語** | TypeScript 5.x（strict モード必須） |
 | **ランタイム** | Deno 2.x |
 | **配備環境** | Deno Deploy / Adlaire Deploy |
-| **外部依存** | Deno 標準ライブラリ（`jsr:@std/*`）・標準 API のみ |
+| **外部依存** | Deno 標準ライブラリ（`jsr:@std/*`）・Web 標準 API のみ |
 | **npm 利用** | 禁止 |
-| **対象用途** | 社内ツール・アプリケーション |
+| **対象用途** | 社内ツール・Web アプリケーション |
 
 ---
 
@@ -66,11 +66,11 @@ Adlaire Group の全プロジェクトで共通利用する TypeScript 製フル
 本フレームワークは Deno の組み込み HTTP サーバー（`Deno.serve`）を使用する。
 Node.js 互換レイヤー（`node:` スペシャライザー）は使用しない。
 
-| Deno / 標準 API | 用途 |
+| Deno / Web API | 用途 |
 |----------------|------|
 | `Deno.serve()` | HTTP サーバー起動 |
 | `Deno.readTextFile()` | `.env` 読み込み |
-| `crypto.subtle` | 暗号処理（署名・検証等）（Crypto API） |
+| `crypto.subtle` | 暗号処理（署名・検証等）（Web Crypto API） |
 | `Request` / `Response` | HTTP リクエスト・レスポンス |
 | `URL` / `URLSearchParams` | URL パース |
 | `ReadableStream` | ストリームレスポンス |
@@ -181,7 +181,7 @@ interface Context<
   B = unknown,
   Q extends Record<string, string> = Record<string, string>,
 > {
-  req: Request;                    // 標準 Request
+  req: Request;                    // Web 標準 Request
   params: P;                       // URL パスパラメータ
   query: Q;                        // クエリストリング
   body: B;                         // パース済みボディ
@@ -454,9 +454,9 @@ server.router.get("/admin", (ctx) => {
 | **外部変更禁止（絶対原則）** | Adlaire Group のみがフレームワークの実装・設計方針を決定する。`Core/` への直接アクセスをパッケージ構造で封鎖する |
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
-| **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と 標準 API のみ |
+| **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
 | **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。バックエンド・フロントエンドのファイルを問わず同階層に配置する |
-| **標準 API ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
+| **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
 
