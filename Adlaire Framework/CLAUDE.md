@@ -28,24 +28,25 @@
 
 ### 使用技術
 
-- **Deno / TypeScript**（ランタイム・実装言語）
-- **ファイルベースルーティング**（`routes/` ディレクトリ探索）
-- **型安全ファースト**（`defineHandler` / `Context<Params>` / 型ガード）
-- **WebCrypto API**（JWT 署名・CSRF 等の暗号処理）
+- **Deno 2.x / TypeScript 5.x**（ランタイム・実装言語）
+- **明示的 Router API**（`createServer()` / `server.get()` / `server.group()`）
+- **Web 標準 API**（`Request` / `Response` / `URL` / `ReadableStream` / `crypto.subtle`）
+- **Deno 標準ライブラリ**（`jsr:@std/*` のみ許可）
 
-### 禁止事項
+### 禁止事項（絶対原則）
 
-- `npm:` プレフィックスのインポートを全面禁止（共通規約）
+- `npm:` スペシャライザーのインポートを全面禁止（`jsr:@std/*` と Web 標準 API のみ）
+- `any` 型の使用禁止（`unknown` を使用し型ガードで絞り込む）
+- `// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
+- `node:` スペシャライザー（Node.js 互換レイヤー）の使用禁止
 - サードパーティ製 HTTP フレームワークへの依存禁止
 - `eval()`・`Function()` 等の動的コード実行禁止
-- `any` 型の多用禁止（やむを得ない場合はコメントで理由を明記）
 
 ### TypeScript 実装規則
 
-- `strict: true` を必須とする（`deno.json` 設定）
-- パブリック API は明示的な型注釈を付与する
-- 型ガード関数（`guard?` パラメータ）は `unknown` を受け取り `boolean` を返す純粋関数とする
-- `any` を返す関数は原則禁止。`unknown` または具体的な型を使用する
+- `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
+- すべての公開 API に明示的な型注釈を付与する
+- `Handler` は必ず `Response` を返す（`void` 禁止）
 
 ---
 
