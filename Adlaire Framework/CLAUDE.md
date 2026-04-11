@@ -35,11 +35,13 @@
 
 ### 型安全方針（絶対原則）
 
-型安全は**フレームワーク自身の実装が決定・保証する**。Core 5 ファイルの実装において以下を遵守する。
+型安全は**フレームワークのアーキテクチャが構造的に保証する**。利用者がフレームワーク経由で型を破る手段を API 設計上存在させない。
 
-- `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
+- 公開 API（`mod.ts` エクスポート）に `any` 型を含めない
+- すべての公開 API の戻り値・引数は具体的な型を持ち、型推論が十分に効く設計とする
+- エスケープハッチ（`any` を返す関数・型アサーションを強いる設計）を提供しない
+- Core 実装: `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
 - 動的な値には `unknown` を使用し、型ガードで絞り込む
-- 公開 API は型推論ファーストで設計し、利用者が型引数を省略できることを目標とする
 - `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
 - `Handler` は必ず `Response` を返す（`void` 禁止）
 
