@@ -270,3 +270,193 @@ export function cors(options?: CorsOptions): Middleware {
     });
   };
 }
+
+// ------------------------------------------------------------
+// §8.3 ロガーミドルウェア
+// ------------------------------------------------------------
+
+export interface LoggerOptions {
+  level?: "silent" | "info" | "debug";
+}
+
+export function logger(options?: LoggerOptions): Middleware {
+  const level = options?.level ?? "info";
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    if (level === "silent") return await next();
+
+    const start = performance.now();
+    const method = ctx.req.method;
+    const url = new URL(ctx.req.url);
+    const path = url.pathname;
+
+    if (level === "debug") {
+      const headers: Record<string, string> = {};
+      ctx.req.headers.forEach((v, k) => { headers[k] = v; });
+      console.log(`→ ${method} ${path}`, headers);
+    }
+
+    const response = await next();
+    const duration = Math.round(performance.now() - start);
+    console.log(`${method} ${path} ${response.status} ${duration}ms`);
+
+    return response;
+  };
+}
+
+// ------------------------------------------------------------
+// §8.4 レートリミッター
+// ------------------------------------------------------------
+
+export interface RateLimitOptions {
+  windowMs: number;
+  max: number;
+  key?: (ctx: Context) => string;
+  message?: string;
+}
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+export function rateLimit(options: RateLimitOptions): Middleware {
+  const store = new Map<string, RateLimitEntry>();
+  const keyFn = options.key ?? ((ctx: Context) =>
+    ctx.req.headers.get("x-forwarded-for") ?? "unknown"
+  );
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const clientKey = keyFn(ctx);
+    const now = Date.now();
+    let entry = store.get(clientKey);
+
+    if (!entry || now >= entry.resetAt) {
+      entry = { count: 0, resetAt: now + options.windowMs };
+      store.set(clientKey, entry);
+    }
+
+    entry.count++;
+
+    if (entry.count > options.max) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      return new Response(
+        JSON.stringify({ error: options.message ?? "Too Many Requests" }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8",
+            "Retry-After": String(retryAfter),
+          },
+        },
+      );
+    }
+
+    return await next();
+  };
+}
+
+// ------------------------------------------------------------
+// §8.5 ETag ミドルウェア
+// ------------------------------------------------------------
+
+export function etag(): Middleware {
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const response = await next();
+    const body = response.clone().body;
+    if (body === null) return response;
+
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let done = false;
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+      if (result.value) chunks.push(result.value);
+    }
+
+    if (chunks.length === 0) return response;
+
+    // 全チャンクを結合してハッシュ算出
+    let totalLength = 0;
+    for (const chunk of chunks) totalLength += chunk.length;
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
+    const hashArray = new Uint8Array(hashBuffer);
+    let hashHex = "";
+    for (const b of hashArray) hashHex += b.toString(16).padStart(2, "0");
+    const etagValue = `W/"${hashHex.slice(0, 16)}"`;
+
+    // If-None-Match チェック
+    const ifNoneMatch = ctx.req.headers.get("If-None-Match");
+    if (ifNoneMatch === etagValue) {
+      return new Response(null, { status: 304, headers: { "ETag": etagValue } });
+    }
+
+    const headers = new Headers(response.headers);
+    headers.set("ETag", etagValue);
+
+    return new Response(combined, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
+// ------------------------------------------------------------
+// §8.6 応答圧縮ミドルウェア
+// ------------------------------------------------------------
+
+export interface CompressOptions {
+  threshold?: number;
+}
+
+export function compress(options?: CompressOptions): Middleware {
+  const threshold = options?.threshold ?? 1024;
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const response = await next();
+    const body = response.clone().body;
+    if (body === null) return response;
+
+    const acceptEncoding = ctx.req.headers.get("Accept-Encoding") ?? "";
+
+    let encoding: string | null = null;
+    let format: CompressionFormat | null = null;
+
+    if (acceptEncoding.includes("gzip")) {
+      encoding = "gzip";
+      format = "gzip";
+    } else if (acceptEncoding.includes("deflate")) {
+      encoding = "deflate";
+      format = "deflate";
+    }
+
+    if (format === null) return response;
+
+    // Content-Length チェック（ヘッダーがある場合）
+    const contentLength = response.headers.get("Content-Length");
+    if (contentLength !== null && parseInt(contentLength, 10) < threshold) {
+      return response;
+    }
+
+    const compressedStream = body.pipeThrough(new CompressionStream(format));
+    const headers = new Headers(response.headers);
+    headers.set("Content-Encoding", encoding);
+    headers.append("Vary", "Accept-Encoding");
+    headers.delete("Content-Length");
+
+    return new Response(compressedStream, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}

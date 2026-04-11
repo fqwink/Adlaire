@@ -25,16 +25,34 @@ export { HTTPError } from "./Core/types.ts";
 
 // Server
 export { App, createServer, loadEnv } from "./Core/server.ts";
+export type { TestRequestOptions } from "./Core/server.ts";
 
-// Router (型のみ公開。インスタンスは createServer() 経由で取得)
-export type { RouteGroup } from "./Core/router.ts";
+// Router
+export type { RouteGroup, RouteOptions } from "./Core/router.ts";
 
 // Response helpers
-export { html, json, redirect, send, text } from "./Core/response.ts";
+export {
+  accepts,
+  deleteCookie,
+  getCookie,
+  html,
+  json,
+  redirect,
+  send,
+  serveStatic,
+  setCookie,
+  text,
+} from "./Core/response.ts";
+export type { CookieOptions, StaticOptions } from "./Core/response.ts";
 
 // Middleware
-export { cors } from "./Core/middleware.ts";
-export type { CorsOptions } from "./Core/middleware.ts";
+export { compress, cors, etag, logger, rateLimit } from "./Core/middleware.ts";
+export type {
+  CompressOptions,
+  CorsOptions,
+  LoggerOptions,
+  RateLimitOptions,
+} from "./Core/middleware.ts";
 
 // Validator
 export { validate } from "./Core/middleware.ts";

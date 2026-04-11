@@ -31,10 +31,16 @@ function isMethod(s: string): s is Method {
 // §6.1 App クラス
 // ------------------------------------------------------------
 
+export interface TestRequestOptions {
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
 export class App {
   readonly router: Router;
   readonly #middlewares: Middleware[] = [];
   readonly #errorHandlers: ErrorHandler[] = [];
+  #server: Deno.HttpServer | null = null;
 
   constructor() {
     this.router = new Router();
@@ -94,7 +100,9 @@ export class App {
     // ミドルウェアチェーン + ハンドラー実行
     let response: Response;
     try {
-      response = await runChain(ctx, this.#middlewares, () => matched.handler(ctx));
+      // グローバルミドルウェア → ルートレベルミドルウェア → ハンドラー
+      const allMiddlewares = [...this.#middlewares, ...matched.routeMiddlewares];
+      response = await runChain(ctx, allMiddlewares, () => matched.handler(ctx));
     } catch (err) {
       return await this.#handleError(err, ctx);
     }
@@ -129,9 +137,35 @@ export class App {
     return json({ error: "Internal Server Error" }, 500);
   };
 
-  listen(port: number, cb?: () => void): void {
-    Deno.serve({ port }, this.fetch);
+  listen(port: number, cb?: () => void): Deno.HttpServer {
+    this.#server = Deno.serve({ port }, this.fetch);
     cb?.();
+    return this.#server;
+  }
+
+  async close(): Promise<void> {
+    if (this.#server !== null) {
+      await this.#server.shutdown();
+      this.#server = null;
+    }
+  }
+
+  async testRequest(
+    method: string,
+    path: string,
+    options?: TestRequestOptions,
+  ): Promise<Response> {
+    const url = `http://localhost${path}`;
+    const headers = new Headers(options?.headers);
+    let body: BodyInit | null = null;
+    if (options?.body !== undefined) {
+      body = JSON.stringify(options.body);
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+    }
+    const req = new Request(url, { method, headers, body });
+    return this.fetch(req);
   }
 }
 
