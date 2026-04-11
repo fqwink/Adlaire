@@ -18,11 +18,9 @@
 
 | パス | 内容 |
 |------|------|
-| `rulebookdocs/FRAMEWORK_RULEBOOK.md` | **正式仕様書**（唯一の仕様管理文書）— **文書バージョン Ver.1.0 固定** |
+| `rulebookdocs/FRAMEWORK_RULEBOOK.md` | **正式仕様書**（唯一の仕様管理文書） |
 | `rulebookdocs/REVISION_HISTORY.md` | ルールブック改訂履歴 |
 | `docs/CHANGES.md` | 変更履歴 |
-
-> `FRAMEWORK_RULEBOOK.md` の文書バージョンは **Ver.1.0 で固定**する。仕様を変更・追記しても文書バージョンをインクリメントしない。
 
 ---
 
@@ -42,7 +40,7 @@
 ### 使用技術
 
 - **Deno 2.x / TypeScript 5.x**（ランタイム・実装言語）
-- **明示的 Router API**（`createServer()` / `server.get()` / `server.group()`）
+- **明示的 Router API**（`createServer()` / `server.router.get()` / `server.router.group()`）
 - **Web 標準 API**（`Request` / `Response` / `URL` / `ReadableStream` / `crypto.subtle`）
 - **Deno 標準ライブラリ**（`jsr:@std/*` のみ許可）
 
@@ -53,8 +51,6 @@
 - 公開 API（`mod.ts` エクスポート）に `any` 型を含めない
 - すべての公開 API の戻り値・引数は具体的な型を持ち、型推論が十分に効く設計とする
 - エスケープハッチ（`any` を返す関数・型アサーションを強いる設計）を提供しない
-- Core 実装: `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
-- 動的な値には `unknown` を使用し、型ガードで絞り込む
 - `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
 - `Handler` は必ず `Response` を返す（`void` 禁止）
 
