@@ -142,11 +142,37 @@ export type QueryRule =
 
 export type QuerySchema = Record<string, QueryRule>;
 
+// ルール単体から値の TypeScript 型を導出するヘルパー型
+// enum は values の要素リテラル Union 型を生成する
+type QueryValueOf<R extends QueryRule> =
+  R extends { type: "number" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
+  string;
+
 export type QueryResult<S extends QuerySchema> = {
   readonly [K in keyof S]:
-    S[K]["type"] extends "number" ?
-      (S[K] extends ({ required: true } | { default: number }) ? number : number | undefined) :
-    S[K]["type"] extends "boolean" ?
-      (S[K] extends ({ required: true } | { default: boolean }) ? boolean : boolean | undefined) :
-      (S[K] extends ({ required: true } | { default: string }) ? string : string | undefined)
+    S[K] extends ({ required: true } | { default: unknown })
+      ? QueryValueOf<S[K]>
+      : QueryValueOf<S[K]> | undefined
 };
+
+// ------------------------------------------------------------
+// §8.10 ContentSecurityPolicy（secureHeaders 用）
+// ------------------------------------------------------------
+
+export interface ContentSecurityPolicy {
+  defaultSrc?: string[];
+  scriptSrc?: string[];
+  styleSrc?: string[];
+  imgSrc?: string[];
+  connectSrc?: string[];
+  fontSrc?: string[];
+  objectSrc?: string[];
+  frameSrc?: string[];
+  frameAncestors?: string[];
+  formAction?: string[];
+  baseUri?: string[];
+  upgradeInsecureRequests?: boolean;
+  reportUri?: string;
+}

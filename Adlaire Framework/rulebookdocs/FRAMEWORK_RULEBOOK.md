@@ -367,15 +367,21 @@ type QueryRule =
 
 type QuerySchema = Record<string, QueryRule>;
 
+// ルール単体から値の TypeScript 型を導出するヘルパー型
+// enum は values の要素リテラル Union 型を生成する（例: values: ["asc","desc"] → "asc" | "desc"）
+type QueryValueOf<R extends QueryRule> =
+  R extends { type: "number" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
+  string;
+
 // スキーマから変換された値の型を導出する Mapped Type
 // required: true または default 指定があれば非 undefined。それ以外は T | undefined
 type QueryResult<S extends QuerySchema> = {
   readonly [K in keyof S]:
-    S[K]["type"] extends "number" ?
-      (S[K] extends ({ required: true } | { default: number }) ? number : number | undefined) :
-    S[K]["type"] extends "boolean" ?
-      (S[K] extends ({ required: true } | { default: boolean }) ? boolean : boolean | undefined) :
-      (S[K] extends ({ required: true } | { default: string }) ? string : string | undefined)
+    S[K] extends ({ required: true } | { default: unknown })
+      ? QueryValueOf<S[K]>
+      : QueryValueOf<S[K]> | undefined
 };
 ```
 
@@ -823,6 +829,22 @@ function secureHeaders(options?: SecureHeadersOptions): Middleware
 ```
 
 ```typescript
+interface ContentSecurityPolicy {
+  defaultSrc?: string[];
+  scriptSrc?: string[];
+  styleSrc?: string[];
+  imgSrc?: string[];
+  connectSrc?: string[];
+  fontSrc?: string[];
+  objectSrc?: string[];
+  frameSrc?: string[];
+  frameAncestors?: string[];
+  formAction?: string[];
+  baseUri?: string[];
+  upgradeInsecureRequests?: boolean;
+  reportUri?: string;
+}
+
 interface SecureHeadersOptions {
   /** X-Content-Type-Options: nosniff（デフォルト: true） */
   xContentTypeOptions?: boolean;
@@ -834,6 +856,8 @@ interface SecureHeadersOptions {
   referrerPolicy?: string | false;
   /** Permissions-Policy（デフォルト: false） */
   permissionsPolicy?: string | false;
+  /** Content-Security-Policy（デフォルト: false） */
+  contentSecurityPolicy?: ContentSecurityPolicy | false;
 }
 ```
 
@@ -846,8 +870,10 @@ interface SecureHeadersOptions {
 | `X-XSS-Protection` | `0`（旧式フィルター無効化） |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Permissions-Policy` | （付与しない） |
+| `Content-Security-Policy` | （付与しない） |
 
 - 各オプションで `false` を設定したヘッダーは付与しない
+- `ContentSecurityPolicy` のプロパティは camelCase。ビルダー関数が対応する CSP ディレクティブ文字列に変換する
 
 ### 使用例
 
@@ -857,8 +883,94 @@ import { createServer, secureHeaders } from "@adlaire/fw";
 const server = createServer();
 server.use(secureHeaders());
 
-// X-Frame-Options を DENY に変更
-server.use(secureHeaders({ xFrameOptions: "DENY" }));
+// X-Frame-Options を DENY に変更 + CSP を設定
+server.use(secureHeaders({
+  xFrameOptions: "DENY",
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'nonce-abc123'"],
+    styleSrc: ["'self'", "https://fonts.googleapis.com"],
+    upgradeInsecureRequests: true,
+  },
+}));
+```
+
+## 8.11 CSRF 保護ミドルウェア
+
+Double Submit Cookie パターンを用いて CSRF 攻撃を防止する。
+
+```typescript
+function csrfProtection(options?: CsrfOptions): Middleware
+```
+
+```typescript
+interface CsrfOptions {
+  /** CSRF トークンを格納するクッキー名（デフォルト: "csrf_token"） */
+  cookie?: string;
+  /** リクエストから CSRF トークンを読み取るヘッダー名（デフォルト: "X-CSRF-Token"） */
+  header?: string;
+  /** 保護対象の HTTP メソッド（デフォルト: ["POST","PUT","PATCH","DELETE"]） */
+  methods?: Method[];
+  /** クッキーの Secure フラグ（デフォルト: false） */
+  secure?: boolean;
+}
+```
+
+### 動作仕様
+
+| フェーズ | 動作 |
+|---------|------|
+| **セーフメソッド**（GET / HEAD / OPTIONS）| トークンが未設定の場合、新規トークンを生成して Set-Cookie で付与する |
+| **保護対象メソッド**（POST / PUT 等）| リクエストのクッキートークンとヘッダートークンを照合する |
+| トークン不一致 | `403 Forbidden` (`{ error: "CSRF token mismatch" }`) を返す |
+| クッキー未設定 | `403 Forbidden` (`{ error: "CSRF token missing" }`) を返す |
+
+- トークンは `crypto.getRandomValues()` で生成する 64 文字の 16 進文字列（256 bit）
+- クッキーは `HttpOnly: false`（JavaScript から読み取り可能）、`SameSite: Strict`、`Path: /` を設定する
+- `secure: true` の場合、クッキーに `Secure` フラグを付与する
+
+### 使用例
+
+```typescript
+import { createServer, csrfProtection } from "@adlaire/fw";
+
+const server = createServer();
+server.use(csrfProtection());
+
+// クライアント側: GET 時に取得した csrf_token クッキーを
+// X-CSRF-Token ヘッダーに付与して POST 等を送信する
+```
+
+## 8.12 型付きボディアサーション
+
+バリデーション済みのボディを型付きで返す。
+
+```typescript
+function assertBody<T>(body: unknown, schema: Schema): T
+```
+
+- `validate(body, schema)` を内部で呼び出す
+- バリデーションエラーが存在する場合: `HTTPError(400, "Validation Failed", errors)` を throw する
+- エラーがない場合: 実行時バリデーション済みとして `T` にキャストして返す
+- `as T` は実行時バリデーション後の正当な型アサーション（`any` 使用禁止原則の例外）
+
+### 使用例
+
+```typescript
+import { assertBody, createServer, HTTPError, json } from "@adlaire/fw";
+
+type CreateUserBody = { name: string; age: number };
+
+const schema = {
+  name: { type: "string" as const, required: true, min: 1 },
+  age:  { type: "number" as const, required: true, min: 0, integer: true },
+};
+
+server.router.post("/users", (ctx) => {
+  const body = assertBody<CreateUserBody>(ctx.body, schema);
+  // body.name: string、body.age: number（型付き）
+  return json({ created: body.name });
+});
 ```
 
 ---
@@ -1036,6 +1148,34 @@ server.router.get("/users/:id", (ctx) => {
 server.router.get("/items/:uuid", (ctx) => {
   const uuid = parseParam(ctx.params.uuid, "uuid");  // string（UUID 形式保証）
   return json({ uuid });
+});
+```
+
+## 9.7 HTML サニタイズ
+
+```typescript
+function sanitizeHtml(input: string): string
+```
+
+- HTML 特殊文字を HTML エンティティにエスケープする
+- `html()` レスポンスで動的コンテンツを出力する際の XSS 防御に使用する
+
+| 文字 | エスケープ後 |
+|------|------------|
+| `&` | `&amp;` |
+| `<` | `&lt;` |
+| `>` | `&gt;` |
+| `"` | `&quot;` |
+| `'` | `&#x27;` |
+
+### 使用例
+
+```typescript
+import { html, sanitizeHtml } from "@adlaire/fw";
+
+server.router.get("/greet", (ctx) => {
+  const name = sanitizeHtml(ctx.query.name ?? "");
+  return html(`<h1>Hello, ${name}!</h1>`);
 });
 ```
 

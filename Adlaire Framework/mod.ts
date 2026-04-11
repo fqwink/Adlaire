@@ -5,6 +5,7 @@
 
 // Types
 export type {
+  ContentSecurityPolicy,
   Context,
   EnvResult,
   EnvRule,
@@ -43,6 +44,7 @@ export {
   parseParam,
   parseQuery,
   redirect,
+  sanitizeHtml,
   send,
   serveStatic,
   setCookie,
@@ -52,9 +54,11 @@ export type { CookieOptions, StaticOptions } from "./Core/response.ts";
 
 // Middleware
 export {
+  assertBody,
   bodyLimit,
   compress,
   cors,
+  csrfProtection,
   etag,
   logger,
   rateLimit,
@@ -66,6 +70,7 @@ export type {
   BodyLimitOptions,
   CompressOptions,
   CorsOptions,
+  CsrfOptions,
   LoggerOptions,
   RateLimitOptions,
   RequestIdOptions,

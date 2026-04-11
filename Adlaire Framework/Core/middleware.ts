@@ -1,9 +1,10 @@
 // ============================================================
 // Adlaire Framework — middleware.ts
-// バリデーター・CORS ミドルウェア
+// バリデーター・各種ミドルウェア
 // ============================================================
 
 import type {
+  ContentSecurityPolicy,
   Context,
   Method,
   Middleware,
@@ -11,6 +12,7 @@ import type {
   Schema,
   ValidationError,
 } from "./types.ts";
+import { HTTPError } from "./types.ts";
 
 // ------------------------------------------------------------
 // §8.1 バリデーター
@@ -510,6 +512,28 @@ export interface SecureHeadersOptions {
   xXssProtection?: boolean;
   referrerPolicy?: string | false;
   permissionsPolicy?: string | false;
+  contentSecurityPolicy?: ContentSecurityPolicy | false;
+}
+
+function buildCsp(csp: ContentSecurityPolicy): string {
+  const parts: string[] = [];
+  const list = (name: string, values: string[] | undefined): void => {
+    if (values && values.length > 0) parts.push(`${name} ${values.join(" ")}`);
+  };
+  list("default-src", csp.defaultSrc);
+  list("script-src", csp.scriptSrc);
+  list("style-src", csp.styleSrc);
+  list("img-src", csp.imgSrc);
+  list("connect-src", csp.connectSrc);
+  list("font-src", csp.fontSrc);
+  list("object-src", csp.objectSrc);
+  list("frame-src", csp.frameSrc);
+  list("frame-ancestors", csp.frameAncestors);
+  list("form-action", csp.formAction);
+  list("base-uri", csp.baseUri);
+  if (csp.upgradeInsecureRequests) parts.push("upgrade-insecure-requests");
+  if (csp.reportUri) parts.push(`report-uri ${csp.reportUri}`);
+  return parts.join("; ");
 }
 
 export function secureHeaders(options?: SecureHeadersOptions): Middleware {
@@ -521,6 +545,8 @@ export function secureHeaders(options?: SecureHeadersOptions): Middleware {
     ? opts.referrerPolicy
     : "strict-origin-when-cross-origin";
   const permissionsPolicy = opts.permissionsPolicy ?? false;
+  const csp = opts.contentSecurityPolicy ?? false;
+  const cspValue = csp !== false ? buildCsp(csp) : false;
 
   return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const response = await next();
@@ -540,6 +566,9 @@ export function secureHeaders(options?: SecureHeadersOptions): Middleware {
     }
     if (permissionsPolicy !== false) {
       headers.set("Permissions-Policy", permissionsPolicy);
+    }
+    if (cspValue !== false && cspValue.length > 0) {
+      headers.set("Content-Security-Policy", cspValue);
     }
 
     return new Response(response.body, {
@@ -599,4 +628,103 @@ export function compress(options?: CompressOptions): Middleware {
       headers,
     });
   };
+}
+
+// ------------------------------------------------------------
+// §8.11 CSRF 保護ミドルウェア
+// ------------------------------------------------------------
+
+export interface CsrfOptions {
+  cookie?: string;
+  header?: string;
+  methods?: Method[];
+  secure?: boolean;
+}
+
+function generateCsrfToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
+function readCsrfCookie(req: Request, cookieName: string): string | null {
+  const cookieHeader = req.headers.get("Cookie");
+  if (cookieHeader === null) return null;
+  for (const pair of cookieHeader.split(";")) {
+    const trimmed = pair.trim();
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    if (trimmed.slice(0, eqIdx).trim() === cookieName) {
+      return trimmed.slice(eqIdx + 1);
+    }
+  }
+  return null;
+}
+
+export function csrfProtection(options?: CsrfOptions): Middleware {
+  const cookieName = options?.cookie ?? "csrf_token";
+  const headerName = options?.header ?? "X-CSRF-Token";
+  const protectedMethods: ReadonlySet<string> = new Set(
+    options?.methods ?? ["POST", "PUT", "PATCH", "DELETE"],
+  );
+  const secureCookie = options?.secure ?? false;
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const method = ctx.req.method;
+
+    if (protectedMethods.has(method)) {
+      // 保護対象メソッド: トークン照合
+      const cookieToken = readCsrfCookie(ctx.req, cookieName);
+      if (cookieToken === null) {
+        return new Response(
+          JSON.stringify({ error: "CSRF token missing" }),
+          { status: 403, headers: { "Content-Type": "application/json; charset=UTF-8" } },
+        );
+      }
+      const requestToken = ctx.req.headers.get(headerName);
+      if (requestToken === null || requestToken !== cookieToken) {
+        return new Response(
+          JSON.stringify({ error: "CSRF token mismatch" }),
+          { status: 403, headers: { "Content-Type": "application/json; charset=UTF-8" } },
+        );
+      }
+      return await next();
+    }
+
+    // セーフメソッド: トークン未設定の場合のみ新規生成して Set-Cookie
+    const response = await next();
+    const existingToken = readCsrfCookie(ctx.req, cookieName);
+    if (existingToken !== null) return response;
+
+    const token = generateCsrfToken();
+    const cookieParts = [
+      `${cookieName}=${token}`,
+      "Path=/",
+      "SameSite=Strict",
+    ];
+    if (secureCookie) cookieParts.push("Secure");
+
+    const headers = new Headers(response.headers);
+    headers.append("Set-Cookie", cookieParts.join("; "));
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
+// ------------------------------------------------------------
+// §8.12 型付きボディアサーション
+// ------------------------------------------------------------
+
+export function assertBody<T>(body: unknown, schema: Schema): T {
+  const errors: ValidationError[] = validate(body, schema);
+  if (errors.length > 0) {
+    throw new HTTPError(400, "Validation Failed", errors);
+  }
+  // 実行時バリデーション済みのため型アサーションを使用する（§8.12 仕様に定める例外）
+  return body as T;
 }

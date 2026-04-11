@@ -314,3 +314,16 @@ export function parseParam(
     }
   }
 }
+
+// ------------------------------------------------------------
+// §9.7 HTML サニタイズ
+// ------------------------------------------------------------
+
+export function sanitizeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}

@@ -5,6 +5,26 @@
 
 ---
 
+## Ver.1.1-3 — セキュリティ強化・型安全強化
+
+**日付**: 2026-04-11
+**種別**: 追加機能・機能改良
+
+### セキュリティ強化
+
+- `secureHeaders()` に `contentSecurityPolicy` オプション追加（`ContentSecurityPolicy` 型 / camelCase ディレクティブ定義 / CSP 文字列ビルダー）
+- `csrfProtection()`: Double Submit Cookie パターンによる CSRF 保護ミドルウェア（256bit トークン / `X-CSRF-Token` ヘッダー照合）
+- `sanitizeHtml()`: HTML 特殊文字エスケープヘルパー（`& < > " '` → エンティティ変換）
+
+### 型安全強化
+
+- `QueryResult<S>` の `enum` 型推論を強化：`values: readonly string[]` から要素リテラル Union 型を導出（例: `["asc","desc"]` → `"asc" | "desc"`）
+- `QueryValueOf<R>` ヘルパー型を追加（内部使用）
+- `assertBody<T>(body, schema)`: バリデーション後に型付きボディを返す関数（失敗時 HTTPError(400)）
+- `ContentSecurityPolicy` インターフェースを `types.ts` / `mod.ts` に追加
+
+---
+
 ## Ver.1.1-2 — Phase 2: ミドルウェア強化・CLI・型安全強化
 
 **日付**: 2026-04-11
