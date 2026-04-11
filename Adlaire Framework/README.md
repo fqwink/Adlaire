@@ -28,11 +28,11 @@ import { json } from "adlaire-fw/response";
 
 const server = createServer();
 
-server.get("/", (ctx) => {
+server.router.get("/", (ctx) => {
   return json({ message: "Hello, Adlaire Framework!" });
 });
 
-server.post("/users", async (ctx) => {
+server.router.post("/users", async (ctx) => {
   const body = ctx.body as { name: string };
   return json({ created: body }, 201);
 });
@@ -49,7 +49,7 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ## ルートグループ
 
 ```typescript
-const api = server.group("/api");
+const api = server.router.group("/api");
 
 api.get("/users", (ctx) => json({ users: [] }));
 api.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
@@ -69,7 +69,7 @@ server.use(async (ctx, next) => {
 ```typescript
 import { validate } from "adlaire-fw/middleware";
 
-server.post("/submit", async (ctx) => {
+server.router.post("/submit", async (ctx) => {
   const errors = validate(ctx.body, {
     name: { type: "string", required: true, min: 1, max: 50 },
     age:  { type: "number", min: 0, max: 150 },
