@@ -88,7 +88,10 @@ export function serveStatic(options: StaticOptions): Handler {
     const filePath = ctx.params.path ?? "";
 
     // ディレクトリトラバーサル防御
-    const normalized = new URL(filePath, "file:///").pathname;
+    if (filePath.includes("..") || filePath.startsWith("/")) {
+      return json({ error: "Forbidden" }, 403);
+    }
+    const normalized = filePath.replace(/\\/g, "/");
     if (normalized.includes("..")) {
       return json({ error: "Forbidden" }, 403);
     }
@@ -131,7 +134,11 @@ export function getCookie(req: Request, name: string): string | null {
     const eqIdx = trimmed.indexOf("=");
     if (eqIdx === -1) continue;
     if (trimmed.slice(0, eqIdx) === name) {
-      return decodeURIComponent(trimmed.slice(eqIdx + 1));
+      try {
+        return decodeURIComponent(trimmed.slice(eqIdx + 1));
+      } catch {
+        return trimmed.slice(eqIdx + 1);
+      }
     }
   }
   return null;
@@ -195,7 +202,10 @@ export function accepts(req: Request, ...types: string[]): string | null {
     for (const t of types) {
       if (entry.type === t || entry.type === "*/*") return t;
       // サブタイプワイルドカード: text/* → text/html にマッチ
-      if (entry.type.endsWith("/*") && t.startsWith(entry.type.slice(0, -1))) return t;
+      if (entry.type.endsWith("/*")) {
+        const baseType = entry.type.slice(0, entry.type.indexOf("/"));
+        if (t.startsWith(baseType + "/")) return t;
+      }
     }
   }
   return null;

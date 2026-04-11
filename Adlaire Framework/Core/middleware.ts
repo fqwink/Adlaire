@@ -332,6 +332,10 @@ export function rateLimit(options: RateLimitOptions): Middleware {
     let entry = store.get(clientKey);
 
     if (!entry || now >= entry.resetAt) {
+      // 期限切れエントリを清掃（メモリリーク防止）
+      for (const [k, v] of store) {
+        if (now >= v.resetAt) store.delete(k);
+      }
       entry = { count: 0, resetAt: now + options.windowMs };
       store.set(clientKey, entry);
     }
@@ -363,31 +367,18 @@ export function rateLimit(options: RateLimitOptions): Middleware {
 export function etag(): Middleware {
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const response = await next();
-    const body = response.clone().body;
-    if (body === null) return response;
 
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let done = false;
-    while (!done) {
-      const result = await reader.read();
-      done = result.done;
-      if (result.value) chunks.push(result.value);
+    // arrayBuffer でボディ全体を一度だけ読み取る
+    const bodyBytes = new Uint8Array(await response.arrayBuffer());
+    if (bodyBytes.length === 0) {
+      return new Response(bodyBytes, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
     }
 
-    if (chunks.length === 0) return response;
-
-    // 全チャンクを結合してハッシュ算出
-    let totalLength = 0;
-    for (const chunk of chunks) totalLength += chunk.length;
-    const combined = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", bodyBytes);
     const hashArray = new Uint8Array(hashBuffer);
     let hashHex = "";
     for (const b of hashArray) hashHex += b.toString(16).padStart(2, "0");
@@ -402,7 +393,7 @@ export function etag(): Middleware {
     const headers = new Headers(response.headers);
     headers.set("ETag", etagValue);
 
-    return new Response(combined, {
+    return new Response(bodyBytes, {
       status: response.status,
       statusText: response.statusText,
       headers,
@@ -423,8 +414,7 @@ export function compress(options?: CompressOptions): Middleware {
 
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const response = await next();
-    const body = response.clone().body;
-    if (body === null) return response;
+    if (response.body === null) return response;
 
     const acceptEncoding = ctx.req.headers.get("Accept-Encoding") ?? "";
 
@@ -443,11 +433,12 @@ export function compress(options?: CompressOptions): Middleware {
 
     // Content-Length チェック（ヘッダーがある場合）
     const contentLength = response.headers.get("Content-Length");
-    if (contentLength !== null && parseInt(contentLength, 10) < threshold) {
-      return response;
+    if (contentLength !== null) {
+      const len = parseInt(contentLength, 10);
+      if (!Number.isNaN(len) && len < threshold) return response;
     }
 
-    const compressedStream = body.pipeThrough(new CompressionStream(format));
+    const compressedStream = response.body.pipeThrough(new CompressionStream(format));
     const headers = new Headers(response.headers);
     headers.set("Content-Encoding", encoding);
     headers.append("Vary", "Accept-Encoding");

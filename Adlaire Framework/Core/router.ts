@@ -57,14 +57,22 @@ function matchPath(
   for (let si = 0; si < segments.length; si++) {
     const seg = segments[si];
     if (seg.kind === "wildcard") {
-      params[seg.name] = pathParts.slice(pi).map(decodeURIComponent).join("/");
+      try {
+        params[seg.name] = pathParts.slice(pi).map(decodeURIComponent).join("/");
+      } catch {
+        return null;
+      }
       return params;
     }
     if (pi >= pathParts.length) return null;
     if (seg.kind === "static") {
       if (seg.value !== pathParts[pi]) return null;
     } else {
-      params[seg.name] = decodeURIComponent(pathParts[pi]);
+      try {
+        params[seg.name] = decodeURIComponent(pathParts[pi]);
+      } catch {
+        return null;
+      }
     }
     pi++;
   }
@@ -189,8 +197,16 @@ export class Router {
     const p = params ?? {};
     return "/" + route.segments.map((seg) => {
       if (seg.kind === "static") return seg.value;
-      if (seg.kind === "param") return encodeURIComponent(p[seg.name] ?? "");
-      if (seg.kind === "wildcard") return p[seg.name] ?? "";
+      if (seg.kind === "param") {
+        const v = p[seg.name];
+        if (v === undefined) throw new Error(`パラメータ "${seg.name}" が指定されていません`);
+        return encodeURIComponent(v);
+      }
+      if (seg.kind === "wildcard") {
+        const v = p[seg.name];
+        if (v === undefined) throw new Error(`パラメータ "${seg.name}" が指定されていません`);
+        return v;
+      }
       return "";
     }).join("/");
   }
@@ -204,14 +220,18 @@ export class Router {
   }
 }
 
+function isRouteOptions(v: unknown): v is RouteOptions {
+  return typeof v === "object" && v !== null && typeof (v as Record<string, unknown>).name === "string";
+}
+
 function splitArgs(
   args: (Middleware | Handler | RouteOptions)[],
 ): { fnArgs: (Middleware | Handler)[]; options?: RouteOptions } {
   const last = args[args.length - 1];
-  if (typeof last === "object" && last !== null && !("length" in last) && "name" in last) {
+  if (isRouteOptions(last)) {
     return {
       fnArgs: args.slice(0, -1) as (Middleware | Handler)[],
-      options: last as RouteOptions,
+      options: { name: last.name },
     };
   }
   return { fnArgs: args as (Middleware | Handler)[] };
