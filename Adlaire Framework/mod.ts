@@ -17,6 +17,7 @@ export type {
   Middleware,
   Route,
   Rule,
+  RuleBase,
   Schema,
   ValidationError,
 } from "./Core/types.ts";

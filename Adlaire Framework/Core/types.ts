@@ -52,7 +52,7 @@ export interface ValidationError {
   message: string;
 }
 
-interface RuleBase {
+export interface RuleBase {
   required?: boolean;
   nullable?: boolean;
   message?: string;

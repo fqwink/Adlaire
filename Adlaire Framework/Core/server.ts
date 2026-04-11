@@ -141,12 +141,18 @@ async function runChain(
   handler: () => Promise<Response> | Response,
 ): Promise<Response> {
   let index = 0;
+  let handlerCalled = false;
 
   const next = (): Promise<Response> => {
     if (index < middlewares.length) {
       const mw = middlewares[index++];
       return mw(ctx, next);
     }
+    // ハンドラーが二重に呼ばれることを防ぐ
+    if (handlerCalled) {
+      throw new Error("next() は各ミドルウェアで一度だけ呼び出してください");
+    }
+    handlerCalled = true;
     return Promise.resolve(handler());
   };
 

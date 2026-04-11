@@ -83,6 +83,9 @@ export class Router {
   readonly #routes: StoredRoute[] = [];
 
   #add(method: Method, path: string, handler: Handler): this {
+    if (!path.startsWith("/")) {
+      throw new Error(`ルートパスは "/" で始まる必要があります: "${path}"`);
+    }
     const segments = parseSegments(path);
     this.#routes.push({
       method,

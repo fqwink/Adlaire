@@ -44,6 +44,9 @@ function validateValue(
       if (rule.max !== undefined && value.length > rule.max) {
         errors.push({ field, message: rule.message ?? `${field} は ${rule.max} 文字以下である必要があります` });
       }
+      if (rule.pattern !== undefined) {
+        rule.pattern.lastIndex = 0; // g フラグ付き RegExp 対策
+      }
       if (rule.pattern !== undefined && !rule.pattern.test(value)) {
         errors.push({ field, message: rule.message ?? `${field} の形式が正しくありません` });
       }
@@ -96,7 +99,8 @@ function validateValue(
       // URL.protocol には末尾コロンが付く（例: "https:"）
       const normalizedAllowed = allowed.map((p) => p.endsWith(":") ? p : `${p}:`);
       if (!normalizedAllowed.includes(parsed.protocol)) {
-        errors.push({ field, message: rule.message ?? `${field} のプロトコルは ${allowed.join(", ")} である必要があります` });
+        const displayProtocols = normalizedAllowed.map((p) => p.replace(/:$/, ""));
+        errors.push({ field, message: rule.message ?? `${field} のプロトコルは ${displayProtocols.join(", ")} である必要があります` });
       }
       break;
     }
@@ -144,9 +148,10 @@ function validateValue(
 
 export function validate(body: unknown, schema: Schema): ValidationError[] {
   const errors: ValidationError[] = [];
-  const obj = (typeof body === "object" && body !== null && !Array.isArray(body))
-    ? body as Record<string, unknown>
-    : {};
+  let obj: Record<string, unknown> = {};
+  if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+    obj = body;
+  }
   for (const [field, rule] of Object.entries(schema)) {
     validateValue(field, obj[field], rule, errors);
   }
@@ -185,8 +190,7 @@ function resolveOrigin(
 }
 
 function isRequestDependent(option: CorsOptions["origin"]): boolean {
-  if (option === undefined || option === "*" || typeof option === "string") return false;
-  return true;
+  return Array.isArray(option) || option instanceof RegExp || typeof option === "function";
 }
 
 export function cors(options?: CorsOptions): Middleware {
