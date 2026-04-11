@@ -14,7 +14,17 @@ type RedirectStatus = 301 | 302 | 307 | 308;
 // ------------------------------------------------------------
 
 export function json(data: unknown, status: HttpStatus = 200): Response {
-  return new Response(JSON.stringify(data), {
+  let body: string;
+  try {
+    body = JSON.stringify(data);
+  } catch {
+    // 循環参照・BigInt 等で stringify に失敗した場合
+    return new Response('{"error":"Internal Server Error"}', {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+    });
+  }
+  return new Response(body, {
     status,
     headers: { "Content-Type": "application/json; charset=UTF-8" },
   });
@@ -76,6 +86,13 @@ const MIME_TYPES: Record<string, string> = {
   ".map": "application/json",
   ".wasm": "application/wasm",
   ".ts": "text/typescript; charset=UTF-8",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".avif": "image/avif",
 };
 
 function getMimeType(path: string): string {
@@ -166,7 +183,7 @@ export function setCookie(
 }
 
 export function deleteCookie(headers: Headers, name: string): void {
-  headers.append("Set-Cookie", `${name}=; Max-Age=0; Path=/`);
+  headers.append("Set-Cookie", `${name}=; Max-Age=0; Path=/; SameSite=Lax`);
 }
 
 // ------------------------------------------------------------
@@ -294,8 +311,8 @@ export function parseParam(
   switch (type) {
     case "number": {
       const n = Number(value);
-      if (Number.isNaN(n)) {
-        throw new HTTPError(400, `パスパラメータが数値ではありません: "${value}"`);
+      if (!Number.isFinite(n)) {
+        throw new HTTPError(400, `パスパラメータが有限の数値ではありません: "${value}"`);
       }
       return n;
     }

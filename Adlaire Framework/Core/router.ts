@@ -93,6 +93,8 @@ interface StoredRoute {
 export class Router {
   readonly #routes: StoredRoute[] = [];
   readonly #namedRoutes: Map<string, StoredRoute> = new Map();
+  // ソート済みルートキャッシュ（ルート追加時に無効化）
+  #sortedRoutes: StoredRoute[] | null = null;
 
   #add(
     method: Method,
@@ -117,6 +119,7 @@ export class Router {
       name: options?.name,
     };
     this.#routes.push(route);
+    this.#sortedRoutes = null; // キャッシュを無効化
     if (options?.name) {
       this.#namedRoutes.set(options.name, route);
     }
@@ -179,7 +182,11 @@ export class Router {
   match(method: Method, url: string): MatchResult | null {
     const parsedUrl = new URL(url, "http://localhost");
     const pathParts = parsedUrl.pathname.split("/").filter((s) => s !== "");
-    const sorted = [...this.#routes].sort((a, b) => b.priority - a.priority);
+    // ソート済みキャッシュを使用（リクエストごとの O(n log n) ソートを回避）
+    if (this.#sortedRoutes === null) {
+      this.#sortedRoutes = [...this.#routes].sort((a, b) => b.priority - a.priority);
+    }
+    const sorted = this.#sortedRoutes;
 
     let headFallback: MatchResult | null = null;
 
@@ -262,6 +269,7 @@ export class RouteGroup {
   readonly #router: Router;
   readonly #middlewares: Middleware[];
 
+  /** @internal router.group() 経由でのみ生成すること */
   constructor(prefix: string, router: Router, middlewares: Middleware[]) {
     this.#prefix = prefix;
     this.#router = router;

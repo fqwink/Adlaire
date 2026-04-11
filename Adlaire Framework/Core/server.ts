@@ -124,8 +124,9 @@ export class App {
       try {
         const res = await handler(err, ctx);
         if (res instanceof Response) return res;
-      } catch {
-        // このエラーハンドラーが失敗した場合は次へ
+      } catch (handlerErr) {
+        // エラーハンドラー自体が失敗した場合はログに残して次へ
+        console.error("[Adlaire Framework] onError ハンドラーがエラーをスローしました:", handlerErr);
       }
     }
     // フォールバック
@@ -263,7 +264,7 @@ export async function loadEnv<S extends EnvSchema>(
     raw = "";
   }
 
-  // パース（インラインコメント対応・クォート除去）
+  // パース（インラインコメント除去・クォート除去）
   const envMap: Record<string, string> = {};
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
@@ -278,12 +279,25 @@ export async function loadEnv<S extends EnvSchema>(
       (val.startsWith("'") && val.endsWith("'"))
     ) {
       val = val.slice(1, -1);
+    } else {
+      // クォートされていない値のインラインコメントを除去（PORT=8000 # comment → 8000）
+      const commentIdx = val.indexOf(" #");
+      if (commentIdx !== -1) {
+        val = val.slice(0, commentIdx).trimEnd();
+      }
     }
     envMap[key] = val;
-    Deno.env.set(key, val);
   }
 
-  if (schema === undefined) return;
+  // スキーマバリデーション完了後に Deno.env.set を行うため、まず全キーを収集する
+  // （バリデーション失敗時に環境変数が部分的に汚染されることを防ぐ）
+  if (schema === undefined) {
+    // スキーマなし: そのまま全キーを環境変数に設定
+    for (const [k, v] of Object.entries(envMap)) {
+      Deno.env.set(k, v);
+    }
+    return;
+  }
 
   // スキーマあり: 型変換・バリデーション
   const result: Record<string, string | number | boolean | undefined> = {};
@@ -292,7 +306,7 @@ export async function loadEnv<S extends EnvSchema>(
     const rawVal = envMap[key] ?? Deno.env.get(key);
 
     if (rawVal === undefined) {
-      if (rule.required && rule.default === undefined) {
+      if (rule.required && !("default" in rule)) {
         throw new Error(`loadEnv: 必須の環境変数 "${key}" が設定されていません`);
       }
       if (rule.default !== undefined) {
@@ -339,6 +353,11 @@ export async function loadEnv<S extends EnvSchema>(
         break;
       }
     }
+  }
+
+  // バリデーション完了後に環境変数を反映する（途中失敗時の部分汚染を防ぐ）
+  for (const [k, v] of Object.entries(envMap)) {
+    Deno.env.set(k, v);
   }
 
   return result as EnvResult<S>;

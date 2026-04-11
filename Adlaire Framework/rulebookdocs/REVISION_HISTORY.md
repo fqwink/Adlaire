@@ -17,3 +17,4 @@
 | Ver.1.0 | 2026-04-11 | セキュリティ・型安全強化（§5.7 QueryResult リテラル型 / §8.10 ContentSecurityPolicy / §8.11 csrfProtection / §8.12 assertBody / §9.7 sanitizeHtml） |
 | Ver.1.0 | 2026-04-11 | セキュリティ・型安全・機能改良（§5.6 EnvResult 刷新 / §5.8 ExtractRouteParams / §5.9 InferSchema / §7.6 型付きルートパラメータ / §8.3 LogInfo・format / §8.4 RateLimitStore / §8.13 hsts / §8.14 ipFilter） |
 | Ver.1.0 | 2026-04-11 | 型安全強化・機能改良（§5.6 EnvRule enum型追加 / §5.10 TypedHandler / §5.11 Simplify / §5.12 StrictQueryResult / §7.6 RouteGroup型付きオーバーロード） |
+| Ver.1.0 | 2026-04-11 | バグ修正（全コード精査200件・致命的2件・重大12件・中程度10件・軽微14件修正 / §4.1 / §6.2 / §7 / §8.2〜§8.14 / §9 / §12） |

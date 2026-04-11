@@ -5,6 +5,55 @@
 
 ---
 
+## Ver.1.1-6 — 全コード精査・バグ修正
+
+**日付**: 2026-04-11
+**種別**: バグ修正
+**精査件数**: 200件
+
+### 致命的バグ修正（2件）
+
+- `loadEnv()`: `.env` のインラインコメント（`PORT=8000 # comment`）が除去されず、数値・ポートパースで NaN エラーが発生していた問題を修正
+- `loadEnv()`: スキーマバリデーション前に `Deno.env.set()` を呼び出していた問題を修正。バリデーション失敗時に環境変数が部分的に汚染されることを防ぐ
+
+### 重大バグ修正（12件）
+
+- `timeout()`: `next()` が reject した場合に `clearTimeout` が実行されずタイマーがリークしていた問題を修正（try/finally で保証）
+- `Router.match()`: リクエストごとにルート配列を `O(n log n)` でソートしていた問題を修正。ソート結果をキャッシュしルート追加時のみ再計算する
+- `etag()` 304: RFC 7232 で必須の `Cache-Control` / `Content-Location` / `Date` / `Expires` / `Vary` が 304 レスポンスに含まれていなかった問題を修正
+- `etag()` エラー: 4xx/5xx エラーレスポンスにも ETag を付与していた問題を修正（エラーレスポンスはスキップ）
+- `rateLimit()`: `Retry-After` ヘッダー値が 0 以下になりうる境界値バグを修正（`Math.max(1, ...)` でクランプ）
+- `compress()`: `headers.append("Vary", ...)` による重複 Vary ヘッダー生成を修正（`headers.set` に変更）
+- `compress()`: 画像・動画・音声・圧縮済みファイルを誤って圧縮しようとしていた問題を修正（MIME タイプでスキップ判定）
+- `compress()`: `Accept-Encoding` ヘッダーの文字列部分一致から正確なトークン照合に変更
+- `requestId()`: 受信 `X-Request-ID` 値の制御文字・改行を除去してヘッダーインジェクション脆弱性を修正
+- `cors()`: 通常レスポンスから `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` を削除（プリフライト専用ヘッダー）
+- `cors()`: オリジン依存設定でオリジンが拒否された場合でも `Vary: Origin` を付与するように修正（プロキシキャッシュ汚染防止）
+- `hsts()`: `preload: true` 指定時に `includeSubDomains: true` かつ `maxAge >= 31536000` の必須条件を検証するバリデーションを追加
+
+### 中程度バグ修正（10件）
+
+- `newCommand()`: `Deno.mkdir({ recursive: false })` でネスト名が失敗していた問題を修正（`recursive: true` に変更）
+- `json()`: `JSON.stringify()` の例外（循環参照・BigInt）を try/catch でキャッチして 500 レスポンスを返すように修正
+- `parseParam("number")`: `Infinity` / `-Infinity` が通過していた問題を修正（`Number.isFinite()` チェックを追加）
+- `App.#handleError`: エラーハンドラー自体がスローした場合にサイレントだった問題を修正（`console.error` でログ出力）
+- `logger()`: `new URL(ctx.req.url)` のパース失敗を try/catch で保護
+- `ipFilter()`: IPv6 アドレスが IPv4 CIDR ルールを意図せずバイパスしていた動作について動作仕様をコメントで明文化
+- `getMimeType()`: `.mp4` / `.webm` / `.mp3` / `.ogg` / `.wav` / `.flac` / `.avif` の MIME タイプを追加
+- `bodyLimit()`: チャンクエンコードによる回避が既知制限であることをコメントで明文化
+- `rateLimit()` デフォルト key: `x-forwarded-for` 偽装リスクをコメントで明文化
+- `loadEnv()` 検証条件: `rule.required && rule.default === undefined` を `rule.required && !("default" in rule)` に修正
+
+### 軽微修正（14件）
+
+- `deno.json`: バージョンを `1.1.0` → `1.1.6` に更新
+- `methodColorOf()`: `HEAD`（シアン）/ `OPTIONS`（ホワイト）のカラーを追加
+- `newCommand()` テンプレート: 生成 `deno.json` の import バージョンを `^1.1.6` に更新
+- `RouteGroup` コンストラクタ: `@internal` JSDoc を付与して `router.group()` 経由のみが正規使用であることを明示
+- `deleteCookie()`: `SameSite=Lax` 属性を付与
+
+---
+
 ## Ver.1.1-5 — 型安全強化・機能改良
 
 **日付**: 2026-04-11

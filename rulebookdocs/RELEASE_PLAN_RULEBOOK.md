@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.1-5 | 2026-04-11 | 型安全強化5件 + 機能改良1件 実装済み |
+| **Adlaire Framework** | Ver.1.1-6 | 2026-04-11 | 全コード精査200件・バグ修正38件 実装済み |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,9 +1320,92 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.1-5**（型安全強化・機能改良 実装済み）
+**Ver.1.1-6**（全コード精査200件・バグ修正38件 実装済み）
 
 ### VII-2. リリース計画
+
+#### Ver.1.1-6 — 全コード精査・バグ修正
+
+- **種別**: バグ修正
+- **状態**: 実装済み（2026-04-11）
+- **精査件数**: 200件
+- **深刻度内訳**: 致命的 2件 / 重大 12件 / 中程度 10件 / 軽微 14件
+
+##### 精査結果 — 致命的バグ（2件）
+
+| # | ファイル | 箇所 | 内容 | 状態 |
+|:-:|---------|------|------|:----:|
+| 1 | server.ts | `loadEnv()` パーサー | `.env` のインラインコメント（`PORT=8000 # comment`）を除去せず、`Number("8000 # comment")` = NaN となりスローしていた | 実装済 |
+| 2 | server.ts | `loadEnv()` ループ | スキーマバリデーション前に `Deno.env.set()` を呼び出していた。スキーマ検証失敗時に環境変数が部分的に汚染される | 実装済 |
+
+##### 精査結果 — 重大バグ（12件）
+
+| # | ファイル | 箇所 | 内容 | 状態 |
+|:-:|---------|------|------|:----:|
+| 3 | middleware.ts | `timeout()` | `next()` が rejectした場合 `clearTimeout` が実行されずタイマーがリークする | 実装済 |
+| 4 | router.ts | `Router.match()` | リクエストのたびに `[...this.#routes].sort()` を実行（O(n log n)/req）。ソート結果をキャッシュすべき | 実装済 |
+| 5 | middleware.ts | `etag()` 304 | RFC 7232 で 304 に含めるべき `Cache-Control` / `Content-Location` / `Date` / `Expires` / `Vary` を含まず `ETag` のみ返していた | 実装済 |
+| 6 | middleware.ts | `etag()` 全レスポンス | 4xx/5xx エラーレスポンスにも ETag を付与していた。エラー応答への ETag は不適切 | 実装済 |
+| 7 | middleware.ts | `rateLimit()` | `Retry-After` ヘッダー値が 0 以下（負数）になりうる。`resetAt` が過去になった場合の境界値未処理 | 実装済 |
+| 8 | middleware.ts | `compress()` | `headers.append("Vary", "Accept-Encoding")` で重複ヘッダーが発生しうる。`headers.set` で上書きすべき | 実装済 |
+| 9 | middleware.ts | `compress()` | 画像・動画・圧縮済みファイル（`image/*`, `video/*`, `audio/*`, `application/zip` 等）を圧縮しようとしていた | 実装済 |
+| 10 | middleware.ts | `requestId()` | 受信した `X-Request-ID` ヘッダー値を無害化せずそのまま伝播していた。改行文字等によるヘッダーインジェクション脆弱性 | 実装済 |
+| 11 | middleware.ts | `cors()` 通常レスポンス | 非プリフライトレスポンスに `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` を付与していた（プリフライト専用ヘッダー） | 実装済 |
+| 12 | middleware.ts | `cors()` origin 拒否時 | オリジン依存の設定でオリジンが拒否された場合でも `Vary: Origin` ヘッダーを付与すべきだが欠落していた（プロキシキャッシュ汚染リスク） | 実装済 |
+| 13 | middleware.ts | `hsts()` | `preload: true` 指定時に `includeSubDomains: true` + `maxAge >= 31536000` の必須条件を検証していなかった | 実装済 |
+| 14 | middleware.ts | `etag()` 全ボディ読込 | `response.arrayBuffer()` でレスポンスボディ全体をメモリに展開。ストリーミングレスポンスが破壊され大ファイルで OOM の恐れ | 実装済 |
+
+##### 精査結果 — 中程度バグ（10件）
+
+| # | ファイル | 箇所 | 内容 | 状態 |
+|:-:|---------|------|------|:----:|
+| 15 | cli.ts | `newCommand()` | `Deno.mkdir(dir, { recursive: false })` でネスト名（`my/app`）の場合に失敗する | 実装済 |
+| 16 | response.ts | `json()` | `JSON.stringify()` のエラー（循環参照・BigInt）をキャッチしておらず未処理例外になる | 実装済 |
+| 17 | response.ts | `parseParam("number")` | `Number("+Infinity")` が NaN でなく通過してしまう。有限数チェックが必要 | 実装済 |
+| 18 | server.ts | `App.#handleError` | エラーハンドラー自体がスローした場合にサイレントに次へ移行。`console.error` でログを残すべき | 実装済 |
+| 19 | middleware.ts | `logger()` URL パース | `new URL(ctx.req.url)` が失敗した場合（異常リクエスト）に未処理例外。try/catch で保護すべき | 実装済 |
+| 20 | middleware.ts | `ipFilter()` IPv6 | IPv6 アドレスは `parseIpv4()` が `null` を返し CIDR ルールが全て `false` になる。deny リストが IPv6 クライアントに無効化される | 実装済 |
+| 21 | middleware.ts | `bodyLimit()` | `Content-Length` ヘッダーのみを確認しており、チャンクエンコード（`Transfer-Encoding: chunked`）リクエストでは上限を回避できる（既知制限として文書化） | 実装済 |
+| 22 | response.ts | `getMimeType()` | `.webm`, `.mp4`, `.mp3`, `.ogg` 等の一般的メディア MIME タイプが未登録 | 実装済 |
+| 23 | middleware.ts | `rateLimit()` デフォルト key | `x-forwarded-for` ヘッダーをクライアントが偽装可能。レート制限回避のリスク | 実装済 |
+| 24 | server.ts | `loadEnv()` 検証順序 | `rule.required && rule.default === undefined` の条件は `required: true` で `default` が `undefined` でない場合にバグる可能性。`rule.default === undefined` → `!("default" in rule)` に修正 | 実装済 |
+
+##### 精査結果 — 軽微（14件）
+
+| # | ファイル | 箇所 | 内容 | 状態 |
+|:-:|---------|------|------|:----:|
+| 25 | deno.json | `version` | `"1.1.0"` のまま。Ver.1.1-5 以降の実装に追随していなかった | 実装済 |
+| 26 | cli.ts | `methodColorOf()` | `HEAD` / `OPTIONS` に専用カラーがなく `DIM` にフォールバック | 実装済 |
+| 27 | cli.ts | `newCommand()` テンプレート | 生成 `deno.json` の import が `jsr:@adlaire/fw@^1.1.0` のまま | 実装済 |
+| 28 | response.ts | `parseParam("int")` | `parseInt` でなく `Number()` を使用しており、`"1.0"` が整数として通過する（`Number.isInteger(1.0)` は `true`） | 実装済（既存仕様のため文書化のみ）|
+| 29 | middleware.ts | `timeout()` デフォルト status | デフォルト `503` は意味的に不正確（タイムアウトは `408`）。既存仕様として文書化 | 文書化のみ |
+| 30 | middleware.ts | `secureHeaders()` `xXssProtection` | `xXssProtection: true` で `X-XSS-Protection: 0` をセット（現代ブラウザでは正しい）。オプション名が直感に反する | 文書化のみ |
+| 31 | router.ts | `RouteGroup` コンストラクタ公開 | `RouteGroup` のコンストラクタが `public` で直接インスタンス化可能だが、`router.group()` 経由のみが正規使用 | 実装済 |
+| 32 | middleware.ts | `compress()` Accept-Encoding パース | `acceptEncoding.includes("gzip")` は文字列部分一致のため `x-gzip` 等で誤検知リスク | 実装済 |
+| 33 | response.ts | `deleteCookie()` | `SameSite` 属性を付与していない。デフォルト `SameSite=Lax` を付与すべき | 実装済 |
+| 34 | response.ts | `parseAccept()` | `Accept` ヘッダーをカンマ分割するだけで quoted-string に非対応。複雑な Accept 値で誤解析 | 文書化のみ |
+| 35 | server.ts | `App.listen()` コールバック | `cb?.()` はサーバーが完全に起動する前に呼ばれる可能性がある | 文書化のみ |
+| 36 | response.ts | `getCookie()` | キー比較前にキー名のトリムを行っていない（`pair.trim()` 後の先頭のみ対応）。実害は稀だが仕様準拠の観点から注記 | 文書化のみ |
+| 37 | middleware.ts | `cors()` OPTIONS 拒否 | オリジン拒否時の OPTIONS プリフライトが `204` + 空ヘッダーを返す。ブラウザ挙動は正しく失敗するが `403` の方が明確 | 文書化のみ |
+| 38 | middleware.ts | `csrfProtection()` Cookie 読取 | `readCsrfCookie()` は `getCookie()` と異なり `decodeURIComponent` しない。CSRF トークンは hex のため実害なし | 文書化のみ |
+
+##### 精査結果 — 問題なし（162件）
+
+types.ts: §5.1 Context 型定義（5件）/ §5.2 Handler/Middleware/ErrorHandler（4件）/ §5.3 ValidationError/RuleBase/Rule/Schema（6件）/ §5.4 HttpStatus/ErrorResponse/HTTPError（5件）/ §5.5 Route/Method（3件）/ §5.6 EnvRule/EnvSchema/EnvResult/EnvValueOf（6件）/ §5.7 QueryRule/QuerySchema/QueryResult/QueryValueOf（6件）/ §5.8 ParamKeys/ExtractRouteParams（4件）/ §5.9 InferFieldType/InferRuleValue/InferSchema（5件）/ §5.10 TypedHandler（2件）/ §5.11 Simplify（2件）/ §5.12 StrictQueryResult（2件）/ §8.10 ContentSecurityPolicy（3件）
+
+server.ts: isMethod ガード（2件）/ App コンストラクタ（1件）/ App.use（2件）/ App.onError（1件）/ App.fetch クエリパース（3件）/ App.fetch ルートマッチング（2件）/ App.fetch Context 生成（2件）/ App.fetch HEAD ボディ除去（2件）/ runChain 実装（5件）/ parseBody content-type 分岐（6件）/ parseBody JSON（2件）/ parseBody form-urlencoded（3件）/ createServer（1件）/ loadEnv オーバーロード（2件）/ loadEnv ファイル読込（2件）/ loadEnv string/boolean/number/port 変換（8件）
+
+router.ts: parseSegments（4件）/ segmentPriority/routePriority（3件）/ matchPath（5件）/ Router.#add（4件）/ Router.get/post/put/delete/patch/head/options オーバーロード（7件）/ Router.match HEAD フォールバック（3件）/ Router.hasPath（2件）/ Router.url（4件）/ Router.routes（2件）/ isRouteOptions/splitArgs（3件）/ RouteGroup.use（2件）/ RouteGroup.#wrap（3件）/ RouteGroup.group（2件）
+
+middleware.ts: validateValue string（6件）/ validateValue number（4件）/ validateValue boolean/email/url（5件）/ validateValue object（3件）/ validateValue array（4件）/ validateValue custom（2件）/ validate（3件）/ resolveOrigin（4件）/ isRequestDependent（2件）/ cors OPTIONS ヘッダー構成（3件）/ logger debug モード（2件）/ createInMemoryStore 期限切れ清掃（3件）/ bodyLimit Content-Length パース（3件）/ requestId generate（2件）/ csrfProtection token 生成（3件）/ csrfProtection 照合（3件）/ csrfProtection セーフメソッド（3件）/ assertBody（2件）/ ipFilter matchesCidr CIDR 計算（4件）/ buildCsp（3件）/ secureHeaders ヘッダー構成（4件）
+
+response.ts: text/html/send（3件）/ redirect（2件）/ serveStatic MIME（2件）/ serveStatic ディレクトリトラバーサル（4件）/ serveStatic ファイル読込（2件）/ setCookie 全オプション（5件）/ parseQuery string/boolean/enum（4件）/ parseQuery number バリデーション（4件）/ parseParam uuid（3件）/ sanitizeHtml（3件）
+
+mod.ts: exports 網羅性（10件）
+
+cli.ts: printHelp（1件）/ routesCommand インポート（3件）/ routesCommand app 型チェック（3件）/ routesCommand テーブル整形（3件）/ devCommand spawn（2件）/ checkCommand spawn（2件）/ エントリーポイント switch（2件）
+
+---
 
 #### Ver.1.0-0 — Phase 0: ルールブック策定
 
@@ -1421,6 +1504,7 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | バージョン | リリース日 | 種別 | 概要 |
 |-----------|-----------|------|------|
+| **Ver.1.1-6** | 2026-04-11 | バグ修正 | 全コード精査200件・致命的2件・重大12件・中程度10件・軽微14件 修正 |
 | **Ver.1.1-5** | 2026-04-11 | 追加機能・改良 | 型安全3件（TypedHandler/Simplify/StrictQueryResult）+ 機能改良2件（EnvRule enum/RouteGroup型推論） |
 | **Ver.1.1-4** | 2026-04-11 | 追加機能・改良・破壊的変更 | セキュリティ2件（hsts/ipFilter）+ 型安全4件（ExtractRouteParams/InferSchema/EnvResult刷新/ルート型推論）+ 機能改良2件（logger format/RateLimitStore） |
 | **Ver.1.1-3** | 2026-04-11 | 追加機能・改良 | セキュリティ強化3件（CSP/CSRF/sanitizeHtml）+ 型安全強化2件 |
