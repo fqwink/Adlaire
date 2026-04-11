@@ -3,7 +3,7 @@
 // ルート登録・グループ化・パスマッチング・名前付きルート
 // ============================================================
 
-import type { Handler, Method, Middleware, Route } from "./types.ts";
+import type { ExtractRouteParams, Handler, Method, Middleware, Route } from "./types.ts";
 
 export interface MatchResult {
   handler: Handler;
@@ -123,30 +123,50 @@ export class Router {
     return this;
   }
 
+  get<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  get<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   get(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("GET", path, fnArgs, options);
   }
+
+  post<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  post<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   post(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("POST", path, fnArgs, options);
   }
+
+  put<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  put<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   put(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("PUT", path, fnArgs, options);
   }
+
+  delete<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  delete<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   delete(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("DELETE", path, fnArgs, options);
   }
+
+  patch<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  patch<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   patch(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("PATCH", path, fnArgs, options);
   }
+
+  head<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  head<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   head(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("HEAD", path, fnArgs, options);
   }
+
+  options<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  options<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   options(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("OPTIONS", path, fnArgs, options);

@@ -277,12 +277,21 @@ export function cors(options?: CorsOptions): Middleware {
 // §8.3 ロガーミドルウェア
 // ------------------------------------------------------------
 
+export interface LogInfo {
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+}
+
 export interface LoggerOptions {
   level?: "silent" | "info" | "debug";
+  format?: (info: LogInfo) => string;
 }
 
 export function logger(options?: LoggerOptions): Middleware {
   const level = options?.level ?? "info";
+  const fmt = options?.format;
 
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     if (level === "silent") return await next();
@@ -292,15 +301,21 @@ export function logger(options?: LoggerOptions): Middleware {
     const url = new URL(ctx.req.url);
     const path = url.pathname;
 
-    if (level === "debug") {
+    if (level === "debug" && fmt === undefined) {
       const headers: Record<string, string> = {};
       ctx.req.headers.forEach((v, k) => { headers[k] = v; });
       console.log(`→ ${method} ${path}`, headers);
     }
 
     const response = await next();
-    const duration = Math.round(performance.now() - start);
-    console.log(`${method} ${path} ${response.status} ${duration}ms`);
+    const durationMs = Math.round(performance.now() - start);
+    const info: LogInfo = { method, path, status: response.status, durationMs };
+
+    if (fmt !== undefined) {
+      console.log(fmt(info));
+    } else {
+      console.log(`${method} ${path} ${response.status} ${durationMs}ms`);
+    }
 
     return response;
   };
@@ -310,42 +325,58 @@ export function logger(options?: LoggerOptions): Middleware {
 // §8.4 レートリミッター
 // ------------------------------------------------------------
 
+export interface RateLimitStore {
+  increment(key: string, windowMs: number): { count: number; resetAt: number } | Promise<{ count: number; resetAt: number }>;
+  reset(key: string): void | Promise<void>;
+}
+
 export interface RateLimitOptions {
   windowMs: number;
   max: number;
   key?: (ctx: Context) => string;
   message?: string;
+  store?: RateLimitStore;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
+// デフォルトのインメモリストア実装
+function createInMemoryStore(): RateLimitStore {
+  const map = new Map<string, { count: number; resetAt: number }>();
+
+  return {
+    increment(key: string, windowMs: number) {
+      const now = Date.now();
+      let entry = map.get(key);
+
+      if (!entry || now >= entry.resetAt) {
+        // 期限切れエントリを清掃（メモリリーク防止）
+        for (const [k, v] of map) {
+          if (now >= v.resetAt) map.delete(k);
+        }
+        entry = { count: 0, resetAt: now + windowMs };
+        map.set(key, entry);
+      }
+
+      entry.count++;
+      return { count: entry.count, resetAt: entry.resetAt };
+    },
+    reset(key: string) {
+      map.delete(key);
+    },
+  };
 }
 
 export function rateLimit(options: RateLimitOptions): Middleware {
-  const store = new Map<string, RateLimitEntry>();
+  const store = options.store ?? createInMemoryStore();
   const keyFn = options.key ?? ((ctx: Context) =>
     ctx.req.headers.get("x-forwarded-for") ?? "unknown"
   );
 
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const clientKey = keyFn(ctx);
-    const now = Date.now();
-    let entry = store.get(clientKey);
+    const { count, resetAt } = await store.increment(clientKey, options.windowMs);
 
-    if (!entry || now >= entry.resetAt) {
-      // 期限切れエントリを清掃（メモリリーク防止）
-      for (const [k, v] of store) {
-        if (now >= v.resetAt) store.delete(k);
-      }
-      entry = { count: 0, resetAt: now + options.windowMs };
-      store.set(clientKey, entry);
-    }
-
-    entry.count++;
-
-    if (entry.count > options.max) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    if (count > options.max) {
+      const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);
       return new Response(
         JSON.stringify({ error: options.message ?? "Too Many Requests" }),
         {
@@ -727,4 +758,117 @@ export function assertBody<T>(body: unknown, schema: Schema): T {
   }
   // 実行時バリデーション済みのため型アサーションを使用する（§8.12 仕様に定める例外）
   return body as T;
+}
+
+// ------------------------------------------------------------
+// §8.13 HSTS ミドルウェア
+// ------------------------------------------------------------
+
+export interface HstsOptions {
+  maxAge?: number;
+  includeSubDomains?: boolean;
+  preload?: boolean;
+}
+
+export function hsts(options?: HstsOptions): Middleware {
+  const maxAge = options?.maxAge ?? 31536000;
+  const includeSubDomains = options?.includeSubDomains !== false;
+  const preload = options?.preload ?? false;
+
+  let headerValue = `max-age=${maxAge}`;
+  if (includeSubDomains) headerValue += "; includeSubDomains";
+  if (preload) headerValue += "; preload";
+
+  return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const response = await next();
+    const headers = new Headers(response.headers);
+    headers.set("Strict-Transport-Security", headerValue);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
+// ------------------------------------------------------------
+// §8.14 IP フィルタリングミドルウェア
+// ------------------------------------------------------------
+
+export interface IpFilterOptions {
+  allow?: string[];
+  deny?: string[];
+  getIp?: (ctx: Context) => string;
+  message?: string;
+}
+
+// IPv4 アドレスを 32bit 数値に変換する
+function parseIpv4(ip: string): number | null {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  let num = 0;
+  for (const part of parts) {
+    const n = parseInt(part, 10);
+    if (Number.isNaN(n) || n < 0 || n > 255) return null;
+    num = (num * 256) + n;
+  }
+  return num;
+}
+
+// IPv4 CIDR マッチング（例: "192.168.0.0/24"）
+function matchesCidr(ip: string, cidr: string): boolean {
+  const slashIdx = cidr.indexOf("/");
+  if (slashIdx === -1) {
+    // CIDR 記法なし: 完全一致
+    return ip === cidr;
+  }
+  const network = cidr.slice(0, slashIdx);
+  const prefixLen = parseInt(cidr.slice(slashIdx + 1), 10);
+  if (Number.isNaN(prefixLen) || prefixLen < 0 || prefixLen > 32) return false;
+
+  const ipNum = parseIpv4(ip);
+  const netNum = parseIpv4(network);
+  if (ipNum === null || netNum === null) return false;
+
+  const mask = prefixLen === 0 ? 0 : (~0 << (32 - prefixLen)) >>> 0;
+  return (ipNum >>> 0 & mask) === (netNum >>> 0 & mask);
+}
+
+function matchesAnyRule(ip: string, rules: string[]): boolean {
+  return rules.some((rule) => matchesCidr(ip, rule));
+}
+
+export function ipFilter(options: IpFilterOptions): Middleware {
+  const allow = options.allow;
+  const deny = options.deny;
+  const getIpFn = options.getIp ?? ((ctx: Context) =>
+    ctx.req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown"
+  );
+  const message = options.message ?? "Forbidden";
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const ip = getIpFn(ctx);
+
+    // allow リストが指定されている場合: 一致しない場合は拒否
+    if (allow !== undefined && allow.length > 0) {
+      if (!matchesAnyRule(ip, allow)) {
+        return new Response(
+          JSON.stringify({ error: message }),
+          { status: 403, headers: { "Content-Type": "application/json; charset=UTF-8" } },
+        );
+      }
+    }
+
+    // deny リストが指定されている場合: 一致する場合は拒否
+    if (deny !== undefined && deny.length > 0) {
+      if (matchesAnyRule(ip, deny)) {
+        return new Response(
+          JSON.stringify({ error: message }),
+          { status: 403, headers: { "Content-Type": "application/json; charset=UTF-8" } },
+        );
+      }
+    }
+
+    return await next();
+  };
 }

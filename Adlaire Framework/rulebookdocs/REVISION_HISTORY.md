@@ -15,3 +15,4 @@
 | Ver.1.0 | 2026-04-11 | 新機能8+改良4項目追加（§6.1 listen/close/testRequest / §7.4 ルートレベルMW / §7.5 名前付きルート / §8.3 logger / §8.4 rateLimit / §8.5 etag / §8.6 compress / §9.2 serveStatic / §9.3 Cookie / §9.4 accepts） |
 | Ver.1.0 | 2026-04-11 | Phase 2 機能追加（§3更新 / §5.7 QueryRule/QuerySchema/QueryResult / §8.7 bodyLimit / §8.8 requestId / §8.9 timeout / §8.10 secureHeaders / §9.5 parseQuery / §9.6 parseParam / §12 CLI仕様） |
 | Ver.1.0 | 2026-04-11 | セキュリティ・型安全強化（§5.7 QueryResult リテラル型 / §8.10 ContentSecurityPolicy / §8.11 csrfProtection / §8.12 assertBody / §9.7 sanitizeHtml） |
+| Ver.1.0 | 2026-04-11 | セキュリティ・型安全・機能改良（§5.6 EnvResult 刷新 / §5.8 ExtractRouteParams / §5.9 InferSchema / §7.6 型付きルートパラメータ / §8.3 LogInfo・format / §8.4 RateLimitStore / §8.13 hsts / §8.14 ipFilter） |

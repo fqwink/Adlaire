@@ -286,7 +286,7 @@ export async function loadEnv<S extends EnvSchema>(
   if (schema === undefined) return;
 
   // スキーマあり: 型変換・バリデーション
-  const result: Record<string, string | number | boolean> = {};
+  const result: Record<string, string | number | boolean | undefined> = {};
 
   for (const [key, rule] of Object.entries(schema)) {
     const rawVal = envMap[key] ?? Deno.env.get(key);
@@ -298,18 +298,8 @@ export async function loadEnv<S extends EnvSchema>(
       if (rule.default !== undefined) {
         result[key] = rule.default;
       } else {
-        // required でなく default もない場合: 型に応じたゼロ値を設定
-        switch (rule.type) {
-          case "number":
-          case "port":
-            result[key] = 0;
-            break;
-          case "boolean":
-            result[key] = false;
-            break;
-          default:
-            result[key] = "";
-        }
+        // required でなく default もない場合: undefined を設定（T-4）
+        result[key] = undefined;
       }
       continue;
     }

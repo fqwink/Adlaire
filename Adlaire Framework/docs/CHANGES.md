@@ -5,6 +5,34 @@
 
 ---
 
+## Ver.1.1-4 — セキュリティ強化・型安全強化・機能改良
+
+**日付**: 2026-04-11
+**種別**: 追加機能・機能改良・破壊的変更
+
+### セキュリティ強化
+
+- `hsts()`: HTTP Strict Transport Security ミドルウェア（`max-age` / `includeSubDomains` / `preload` オプション対応）
+- `ipFilter()`: IP アドレスフィルタリングミドルウェア（IPv4 CIDR サポート / 許可・拒否リスト / カスタム IP 取得関数）
+
+### 型安全強化
+
+- `ExtractRouteParams<Path>`: パスリテラル型からパスパラメータオブジェクト型を自動導出する型
+- `InferSchema<S>` / `InferFieldType<R>`: Schema 定義から TypeScript 型を自動導出するユーティリティ型（`required: true` → 必須、それ以外 → optional）
+- `Router` の全ルート登録メソッド（`get / post / put / delete / patch / head / options`）が `ExtractRouteParams<Path>` を自動推論し `ctx.params` を型付け
+- `EnvResult<S>` を `EnvValueOf<R>` ヘルパー型ベースに刷新。`required` なし・`default` なしのフィールドは `T | undefined` を返す（**破壊的変更**）
+
+### 機能改良
+
+- `logger()`: `LogInfo` 型 + `format?: (info: LogInfo) => string` オプション追加。カスタムフォーマッターをサポート
+- `rateLimit()`: `RateLimitStore` インターフェース追加。`store?` オプションでカスタムストアに差し替え可能（デフォルト: インメモリ Map）
+
+### 破壊的変更
+
+- `EnvResult<S>`: `required` なし・`default` なしのフィールドの型が `string` / `number` / `boolean` から `string | undefined` / `number | undefined` / `boolean | undefined` に変更。`loadEnv()` の実装も `undefined` を返すよう更新。
+
+---
+
 ## Ver.1.1-3 — セキュリティ強化・型安全強化
 
 **日付**: 2026-04-11

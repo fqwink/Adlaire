@@ -123,11 +123,18 @@ export type EnvRule =
 
 export type EnvSchema = Record<string, EnvRule>;
 
+// ルール単体から値の TypeScript 型を導出するヘルパー型
+type EnvValueOf<R extends EnvRule> =
+  R extends { type: "number" | "port" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  string;
+
+// required: true または default 指定があれば非 undefined。それ以外は T | undefined
 export type EnvResult<S extends EnvSchema> = {
   readonly [K in keyof S]:
-    S[K]["type"] extends "number" | "port" ? number :
-    S[K]["type"] extends "boolean" ? boolean :
-    string;
+    S[K] extends ({ required: true } | { default: unknown })
+      ? EnvValueOf<S[K]>
+      : EnvValueOf<S[K]> | undefined
 };
 
 // ------------------------------------------------------------
@@ -156,6 +163,54 @@ export type QueryResult<S extends QuerySchema> = {
       ? QueryValueOf<S[K]>
       : QueryValueOf<S[K]> | undefined
 };
+
+// ------------------------------------------------------------
+// §5.8 ExtractRouteParams
+// ------------------------------------------------------------
+
+// パスリテラル型からパラメータキー名を再帰的に抽出するヘルパー型
+type ParamKeys<Path extends string> =
+  Path extends `${string}:${infer Param}/${infer Rest}`
+    ? Param | ParamKeys<`/${Rest}`>
+    : Path extends `${string}:${infer Param}`
+    ? Param
+    : Path extends `${string}*${infer WildName}`
+    ? (WildName extends "" ? "wildcard" : WildName)
+    : never;
+
+// パスリテラル型からパスパラメータオブジェクト型を導出する
+export type ExtractRouteParams<Path extends string> =
+  string extends Path ? Record<string, string> :
+  [ParamKeys<Path>] extends [never] ? Record<string, string> :
+  { [K in ParamKeys<Path>]: string };
+
+// ------------------------------------------------------------
+// §5.9 InferSchema
+// ------------------------------------------------------------
+
+// Rule 型から TypeScript 型を導出するヘルパー型（相互再帰のため interface は使用不可）
+export type InferFieldType<R extends Rule> =
+  R extends { type: "string" | "email" | "url" } ? string :
+  R extends { type: "number" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  R extends { type: "object"; fields: infer F extends Schema } ? InferSchema<F> :
+  R extends { type: "object" } ? Record<string, unknown> :
+  R extends { type: "array"; items: infer I extends Rule } ? InferFieldType<I>[] :
+  R extends { type: "array" } ? unknown[] :
+  R extends { type: "custom" } ? unknown :
+  never;
+
+// nullable: true の場合は T | null を生成する
+type InferRuleValue<R extends Rule> =
+  R extends { nullable: true }
+    ? InferFieldType<R> | null
+    : InferFieldType<R>;
+
+// Schema 全体から TypeScript 型を導出する Mapped Type
+// required: true の場合は必須フィールド（non-optional）、それ以外はオプショナルフィールド
+export type InferSchema<S extends Schema> =
+  { [K in keyof S as S[K] extends { required: true } ? K : never]-?: InferRuleValue<S[K]> } &
+  { [K in keyof S as S[K] extends { required: true } ? never : K]?: InferRuleValue<S[K]> };
 
 // ------------------------------------------------------------
 // §8.10 ContentSecurityPolicy（secureHeaders 用）

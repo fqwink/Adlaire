@@ -344,14 +344,23 @@ type EnvRule =
 
 type EnvSchema = Record<string, EnvRule>;
 
+// ルール単体から値の TypeScript 型を導出するヘルパー型
+type EnvValueOf<R extends EnvRule> =
+  R extends { type: "number" | "port" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  string;
+
 // スキーマから変換された値の型を導出する Mapped Type
+// required: true または default 指定があれば非 undefined。それ以外は T | undefined
 type EnvResult<S extends EnvSchema> = {
   readonly [K in keyof S]:
-    S[K]["type"] extends "number" | "port" ? number :
-    S[K]["type"] extends "boolean" ? boolean :
-    string;
+    S[K] extends ({ required: true } | { default: unknown })
+      ? EnvValueOf<S[K]>
+      : EnvValueOf<S[K]> | undefined
 };
 ```
+
+> **破壊的変更（Ver.1.1-4）**: `required` なし・`default` なしのフィールドは `T | undefined` を返す。以前はゼロ値（`0` / `false` / `""`）を返していた。
 
 ## 5.7 QueryRule / QuerySchema / QueryResult
 
@@ -383,6 +392,107 @@ type QueryResult<S extends QuerySchema> = {
       ? QueryValueOf<S[K]>
       : QueryValueOf<S[K]> | undefined
 };
+```
+
+## 5.8 ExtractRouteParams
+
+ルートパスのリテラル型からパスパラメータのオブジェクト型を導出するユーティリティ型。
+
+```typescript
+// パスリテラル型からパラメータキー名を抽出するヘルパー型
+// /:param セグメントと /*wildcard セグメントを再帰的に抽出する
+type ParamKeys<Path extends string> =
+  Path extends `${string}:${infer Param}/${infer Rest}`
+    ? Param | ParamKeys<`/${Rest}`>
+    : Path extends `${string}:${infer Param}`
+    ? Param
+    : Path extends `${string}*${infer WildName}`
+    ? (WildName extends "" ? "wildcard" : WildName)
+    : never;
+
+// パスリテラル型からパラメータオブジェクト型を導出する
+// string 型（リテラルでない）の場合は Record<string, string> にフォールバックする
+type ExtractRouteParams<Path extends string> =
+  string extends Path ? Record<string, string> :
+  [ParamKeys<Path>] extends [never] ? Record<string, string> :
+  { [K in ParamKeys<Path>]: string };
+```
+
+### 使用例
+
+```typescript
+import { ExtractRouteParams, Handler } from "@adlaire/fw";
+
+type UserParams = ExtractRouteParams<"/users/:id">;
+// → { id: string }
+
+type PostParams = ExtractRouteParams<"/posts/:postId/comments/:commentId">;
+// → { postId: string; commentId: string }
+
+type StaticParams = ExtractRouteParams<"/static/*path">;
+// → { path: string }
+
+// ハンドラーの型引数として使用する
+const userHandler: Handler<ExtractRouteParams<"/users/:id">> = (ctx) => {
+  const id = ctx.params.id;   // string（型付き）
+  return json({ id });
+};
+```
+
+- `Router` のルート登録メソッド（`get / post / put / delete / patch / head / options`）はパスリテラルから自動推論する（§7.6 参照）
+
+## 5.9 InferSchema
+
+`Schema` 定義から TypeScript 型を導出するユーティリティ型。`assertBody<T>()` との組み合わせで Schema と型定義の二重管理を排除する。
+
+```typescript
+// Rule 型から TypeScript 型を導出するヘルパー型
+type InferFieldType<R extends Rule> =
+  R extends { type: "string" | "email" | "url" } ? string :
+  R extends { type: "number" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  R extends { type: "object"; fields: infer F extends Schema } ? InferSchema<F> :
+  R extends { type: "object" } ? Record<string, unknown> :
+  R extends { type: "array"; items: infer I extends Rule } ? InferFieldType<I>[] :
+  R extends { type: "array" } ? unknown[] :
+  R extends { type: "custom" } ? unknown :
+  never;
+
+// nullable: true の場合は T | null を生成する
+type InferRuleValue<R extends Rule> =
+  R extends { nullable: true }
+    ? InferFieldType<R> | null
+    : InferFieldType<R>;
+
+// Schema 全体から TypeScript 型を導出する Mapped Type
+// required: true の場合は必須フィールド（non-optional）、それ以外はオプショナルフィールド
+type InferSchema<S extends Schema> =
+  { [K in keyof S as S[K] extends { required: true } ? K : never]-?: InferRuleValue<S[K]> } &
+  { [K in keyof S as S[K] extends { required: true } ? never : K]?: InferRuleValue<S[K]> };
+```
+
+### 使用例
+
+```typescript
+import { type InferSchema, assertBody, createServer, json } from "@adlaire/fw";
+import type { Schema } from "@adlaire/fw";
+
+const createUserSchema = {
+  name:  { type: "string",  required: true, min: 1, max: 50 } as const,
+  age:   { type: "number",  required: true, min: 0, integer: true } as const,
+  email: { type: "email",   required: true } as const,
+  bio:   { type: "string" } as const,  // optional
+} satisfies Schema;
+
+// Schema から型を自動導出
+type CreateUserBody = InferSchema<typeof createUserSchema>;
+// → { name: string; age: number; email: string; bio?: string }
+
+// assertBody<T>() と組み合わせることで Schema と型定義の二重管理を排除する
+server.router.post("/users", (ctx) => {
+  const body = assertBody<CreateUserBody>(ctx.body, createUserSchema);
+  return json({ name: body.name, age: body.age });
+});
 ```
 
 ---
@@ -536,6 +646,41 @@ const url = server.router.url("users.show", { id: "123" });
 |---------|------|
 | `url(name, params?)` | 名前付きルートから URL を生成する。未登録の名前は `Error` を throw |
 
+## 7.6 型付きルートパラメータ（ExtractRouteParams 連携）
+
+ルート登録メソッドはパスリテラル型から `ExtractRouteParams<Path>`（§5.8）を自動推論し、ハンドラーの `ctx.params` を型付けする。
+
+```typescript
+// get<Path extends string> のシグネチャ概念
+get<Path extends string>(
+  path: Path,
+  handler: Handler<ExtractRouteParams<Path>>,
+): this;
+```
+
+### 使用例
+
+```typescript
+import { createServer, json } from "@adlaire/fw";
+
+const server = createServer();
+
+// ctx.params.id が string として型付けされる
+server.router.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;       // string（型付き）
+  return json({ id });
+});
+
+// ctx.params.postId と ctx.params.commentId が string として型付けされる
+server.router.get("/posts/:postId/comments/:commentId", (ctx) => {
+  const { postId, commentId } = ctx.params;
+  return json({ postId, commentId });
+});
+```
+
+- ルートレベルミドルウェア付きオーバーロードでも同様に型推論が機能する
+- `{ name: "..." }` の RouteOptions を渡す場合も型推論を維持する
+
 ---
 
 # 8. middleware.ts　[Core]
@@ -680,16 +825,42 @@ function logger(options?: LoggerOptions): Middleware
 ```
 
 ```typescript
+interface LogInfo {
+  method: string;       // HTTP メソッド（"GET" / "POST" 等）
+  path: string;         // リクエストパス
+  status: number;       // レスポンスステータスコード
+  durationMs: number;   // 処理時間（ミリ秒、Math.round で整数）
+}
+
 interface LoggerOptions {
-  level?: "silent" | "info" | "debug";  // デフォルト: "info"
+  level?: "silent" | "info" | "debug";      // デフォルト: "info"
+  format?: (info: LogInfo) => string;        // カスタムフォーマット（省略時はデフォルト書式）
 }
 ```
 
 - リクエストのメソッド・パス・ステータスコード・レスポンス時間をログ出力する
 - 出力先は `console.log`（外部依存なし）
 - `level: "silent"` でログ出力を抑制
-- `level: "debug"` でヘッダー情報も出力
-- 出力形式: `GET /users 200 12ms`
+- `level: "debug"` でヘッダー情報も出力（`format` 指定時はフォーマット後の文字列のみ出力）
+- `format` 省略時のデフォルト出力形式: `GET /users 200 12ms`
+- `format` 指定時: `format(info)` の戻り値を `console.log` に出力する
+
+### 使用例
+
+```typescript
+import { createServer, logger } from "@adlaire/fw";
+
+const server = createServer();
+
+// デフォルト書式
+server.use(logger());
+
+// カスタムフォーマット
+server.use(logger({
+  format: ({ method, path, status, durationMs }) =>
+    `[${new Date().toISOString()}] ${method} ${path} → ${status} (${durationMs}ms)`,
+}));
+```
 
 ## 8.4 レートリミッター
 
@@ -698,17 +869,54 @@ function rateLimit(options: RateLimitOptions): Middleware
 ```
 
 ```typescript
+// カスタムストアのインターフェース（インメモリ以外の実装に差し替え可能）
+interface RateLimitStore {
+  /** 指定キーのカウントをインクリメントし、現在のカウントとリセット時刻を返す */
+  increment(key: string, windowMs: number): { count: number; resetAt: number } | Promise<{ count: number; resetAt: number }>;
+  /** 指定キーのカウントをリセットする */
+  reset(key: string): void | Promise<void>;
+}
+
 interface RateLimitOptions {
   windowMs: number;                                // ウィンドウ期間（ミリ秒）
   max: number;                                     // ウィンドウ内の最大リクエスト数
   key?: (ctx: Context) => string;                  // クライアント識別キー（デフォルト: IP アドレス）
   message?: string;                                // 429 レスポンスメッセージ
+  store?: RateLimitStore;                          // カスタムストア（省略時: インメモリ Map）
 }
 ```
 
-- インメモリ固定ウィンドウカウンター
+- `store` 省略時はインメモリ固定ウィンドウカウンター（`Map`）を使用する
+- `store` 指定時: `increment()` が返す `{ count, resetAt }` に基づいてレート判定を行う
 - 超過時 `429 Too Many Requests` + `Retry-After` ヘッダーを返す
 - デフォルトキー: `ctx.req.headers.get("x-forwarded-for")` → `"unknown"`
+
+### 使用例
+
+```typescript
+import { createServer, rateLimit } from "@adlaire/fw";
+
+const server = createServer();
+
+// デフォルト（インメモリ）
+server.use(rateLimit({ windowMs: 60_000, max: 100 }));
+
+// カスタムストア（例: Deno KV を使用）
+const kv = await Deno.openKv();
+const kvStore: RateLimitStore = {
+  async increment(key, windowMs) {
+    const entry = await kv.get<{ count: number; resetAt: number }>(["rl", key]);
+    const now = Date.now();
+    const data = entry.value && now < entry.value.resetAt
+      ? { count: entry.value.count + 1, resetAt: entry.value.resetAt }
+      : { count: 1, resetAt: now + windowMs };
+    await kv.set(["rl", key], data, { expireIn: windowMs });
+    return data;
+  },
+  async reset(key) { await kv.delete(["rl", key]); },
+};
+server.use(rateLimit({ windowMs: 60_000, max: 100, store: kvStore }));
+```
 
 ## 8.5 ETag ミドルウェア
 
@@ -971,6 +1179,101 @@ server.router.post("/users", (ctx) => {
   // body.name: string、body.age: number（型付き）
   return json({ created: body.name });
 });
+```
+
+## 8.13 HSTS ミドルウェア
+
+HTTP Strict Transport Security ヘッダーを付与する。HTTPS 接続を強制し、ダウングレード攻撃と Cookie ハイジャックを防止する。
+
+```typescript
+function hsts(options?: HstsOptions): Middleware
+```
+
+```typescript
+interface HstsOptions {
+  maxAge?: number;              // Strict-Transport-Security の max-age（秒）（デフォルト: 31536000 = 1年）
+  includeSubDomains?: boolean;  // サブドメインにも適用する（デフォルト: true）
+  preload?: boolean;            // ブラウザの HSTS プリロードリスト登録用（デフォルト: false）
+}
+```
+
+- レスポンスに `Strict-Transport-Security` ヘッダーを付与する
+- デフォルト値: `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- `preload: true` の場合: `; preload` を追加する
+- **注意**: HTTPS 環境でのみ使用する。HTTP 環境で付与してもブラウザは無視する
+
+### 付与するヘッダー例
+
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+```
+
+### 使用例
+
+```typescript
+import { createServer, hsts } from "@adlaire/fw";
+
+const server = createServer();
+server.use(hsts());
+
+// カスタム設定（プリロードリスト申請用）
+server.use(hsts({ maxAge: 63_072_000, includeSubDomains: true, preload: true }));
+```
+
+## 8.14 IP フィルタリングミドルウェア
+
+クライアント IP アドレスに基づいてリクエストを許可または拒否する。
+
+```typescript
+function ipFilter(options: IpFilterOptions): Middleware
+```
+
+```typescript
+interface IpFilterOptions {
+  allow?: string[];                    // 許可リスト（IPv4 アドレス / CIDR 記法）
+  deny?: string[];                     // 拒否リスト（IPv4 アドレス / CIDR 記法）
+  getIp?: (ctx: Context) => string;    // IP 取得関数（デフォルト: X-Forwarded-For ヘッダー → "unknown"）
+  message?: string;                    // 拒否時メッセージ（デフォルト: "Forbidden"）
+}
+```
+
+### 判定ルール
+
+| allow | deny | 動作 |
+|-------|------|------|
+| 指定あり | — | `allow` リストに一致する IP のみ許可。それ以外は 403 |
+| — | 指定あり | `deny` リストに一致する IP を拒否。それ以外は許可 |
+| 指定あり | 指定あり | `allow` 優先。`allow` に一致すれば許可。次に `deny` を確認し一致すれば拒否 |
+| 両方なし | — | すべて許可（パススルー） |
+
+### IPv4 CIDR サポート
+
+- `"192.168.0.0/24"` 等の CIDR 記法をサポートする（IPv4 のみ）
+- 外部ライブラリに依存せず、内部関数 `parseIpv4()` / `matchesCidr()` で実装する
+
+### 使用例
+
+```typescript
+import { createServer, ipFilter } from "@adlaire/fw";
+
+const server = createServer();
+
+// 社内 IP のみ許可
+server.use(ipFilter({
+  allow: ["192.168.0.0/24", "10.0.0.0/8"],
+}));
+
+// 既知の悪意ある IP を拒否
+server.use(ipFilter({
+  deny: ["1.2.3.4", "5.6.7.0/24"],
+}));
+
+// カスタム IP 取得（リバースプロキシ配置時）
+server.use(ipFilter({
+  deny: ["10.0.0.1"],
+  getIp: (ctx) => ctx.req.headers.get("CF-Connecting-IP") ?? "unknown",
+}));
 ```
 
 ---
