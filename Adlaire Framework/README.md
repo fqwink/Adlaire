@@ -1,16 +1,15 @@
 # Adlaire Framework
 
 Adlaire Group 全プロジェクトで共通利用する TypeScript 製フルスタックフレームワーク。
-バックエンド・フロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
 
 ## 概要
 
 - **Deno 2.x / TypeScript 5.x** — npm 依存ゼロ・型安全ファースト
-- **明示的 Router API** — `createServer()` / `server.get()` / `server.group()`
+- **明示的 Router API** — `createServer()` / `server.router.get()` / `server.router.group()`
 - **ミドルウェアチェーン** — `server.use()` による登録順処理
 - **デュアルデプロイ対応** — Deno Deploy（Fetch ハンドラー）/ Adlaire Deploy（`Deno.serve`）
 - **バリデーター** — `Schema` 型 + `validate()` によるボディ検証
-- **5 ファイル Core 構成** — `types` / `server` / `router` / `middleware` / `response`
+- **Core 構成** — `Core/` ディレクトリにフラット配置
 
 ## 状態
 
@@ -23,8 +22,7 @@ Adlaire Group 全プロジェクトで共通利用する TypeScript 製フルス
 ## 使用方法
 
 ```typescript
-import { createServer } from "adlaire-fw/server";
-import { json } from "adlaire-fw/response";
+import { createServer, json, validate } from "@adlaire/fw";
 
 const server = createServer();
 
@@ -33,8 +31,11 @@ server.router.get("/", (ctx) => {
 });
 
 server.router.post("/users", async (ctx) => {
-  const body = ctx.body as { name: string };
-  return json({ created: body }, 201);
+  const errors = validate(ctx.body, {
+    name: { type: "string", required: true, min: 1, max: 50 },
+  });
+  if (errors.length > 0) return json({ errors }, 400);
+  return json({ created: true }, 201);
 });
 
 // Deno Deploy
@@ -67,12 +68,11 @@ server.use(async (ctx, next) => {
 ## バリデーター
 
 ```typescript
-import { validate } from "adlaire-fw/middleware";
-
 server.router.post("/submit", async (ctx) => {
   const errors = validate(ctx.body, {
-    name: { type: "string", required: true, min: 1, max: 50 },
-    age:  { type: "number", min: 0, max: 150 },
+    name:   { type: "string", required: true, min: 1, max: 50 },
+    age:    { type: "number", min: 0, max: 150 },
+    active: { type: "boolean", nullable: true },
   });
   if (errors.length > 0) {
     return json({ errors }, 400);

@@ -44,7 +44,6 @@
 # 1. 概要
 
 Adlaire Group の全プロジェクトで共通利用する TypeScript 製フルスタックフレームワーク。
-バックエンド・フロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
 
 | 項目 | 内容 |
 |------|------|
@@ -108,19 +107,18 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ## 3.1 構成
 
 ```
-Adlaire Framework/        # プロジェクトルート（バックエンド・フロントエンド）
+Adlaire Framework/
 ├── mod.ts                # 【唯一の公開エントリーポイント】外部からのインポートはここのみ
 ├── deno.json             # Deno 設定（exports: "./mod.ts" のみ）
 └── Core/                 # 【Adlaire Group 専用】サブディレクトリ分割禁止・フラット配置
-    ├── types.ts          # [Backend Core] 全型定義
-    ├── server.ts         # [Backend Core] App クラス・起動・エラーハンドラー・env
-    ├── router.ts         # [Backend Core] Router
-    ├── middleware.ts     # [Backend Core] バリデーター
-    ├── response.ts       # [Backend Core] レスポンスヘルパー
-    └── ...               # [Frontend Core] 仕様策定後に追加（同階層・サブディレクトリなし）
+    ├── types.ts          # 全型定義
+    ├── server.ts         # App クラス・起動・エラーハンドラー・env
+    ├── router.ts         # Router
+    ├── middleware.ts     # バリデーター
+    └── response.ts       # レスポンスヘルパー
 ```
 
-`Core/` 内のファイルはバックエンド・フロントエンド問わず全て同格・同階層とする。サブディレクトリによる分割を禁止する。
+`Core/` 内のファイルはすべて同格・同階層とする。サブディレクトリによる分割を禁止する。
 
 ## 3.2 公開エントリーポイントの封鎖
 
@@ -455,27 +453,8 @@ server.router.get("/admin", (ctx) => {
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
-| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。バックエンド・フロントエンドのファイルを問わず同階層に配置する |
+| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
 
----
-
-# 12. フロントエンドフレームワーク
-
-Adlaire Framework はバックエンド（§1〜§11）とフロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
-
-## 12.1 構成原則
-
-ファイル配置は §3.1 の Core フラット構成に準拠する。バックエンド・フロントエンドで `Core/` を分けない。
-
-## 12.2 フロントエンド仕様
-
-フロントエンド部分の Core ファイル構成・仕様は別途本ルールブックに追記する（現在仕様策定中）。
-
-| 項目 | 内容 |
-|------|------|
-| **配置** | `Adlaire Framework/Core/`（バックエンド Core と同一ディレクトリ） |
-| **状態** | 仕様策定中 |
-| **適用原則** | §0（役割分離 / 型安全 / any 禁止 / npm 禁止）を全面適用 |
