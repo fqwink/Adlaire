@@ -1,7 +1,10 @@
 {
   "name": "@adlaire/fw",
-  "version": "1.0.0",
-  "exports": "./mod.ts",
+  "version": "1.1.0",
+  "exports": {
+    ".": "./mod.ts",
+    "./cli": "./cli.ts"
+  },
   "compilerOptions": {
     "strict": true,
     "noImplicitAny": true,

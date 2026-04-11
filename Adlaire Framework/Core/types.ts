@@ -129,3 +129,24 @@ export type EnvResult<S extends EnvSchema> = {
     S[K]["type"] extends "boolean" ? boolean :
     string;
 };
+
+// ------------------------------------------------------------
+// §5.7 QueryRule / QuerySchema / QueryResult
+// ------------------------------------------------------------
+
+export type QueryRule =
+  | { type: "string";  required?: boolean; default?: string }
+  | { type: "number";  required?: boolean; default?: number; integer?: boolean; min?: number; max?: number }
+  | { type: "boolean"; required?: boolean; default?: boolean }
+  | { type: "enum";    values: readonly string[]; required?: boolean; default?: string };
+
+export type QuerySchema = Record<string, QueryRule>;
+
+export type QueryResult<S extends QuerySchema> = {
+  readonly [K in keyof S]:
+    S[K]["type"] extends "number" ?
+      (S[K] extends ({ required: true } | { default: number }) ? number : number | undefined) :
+    S[K]["type"] extends "boolean" ?
+      (S[K] extends ({ required: true } | { default: boolean }) ? boolean : boolean | undefined) :
+      (S[K] extends ({ required: true } | { default: string }) ? string : string | undefined)
+};

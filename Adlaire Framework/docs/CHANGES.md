@@ -5,6 +5,38 @@
 
 ---
 
+## Ver.1.1-2 — Phase 2: ミドルウェア強化・CLI・型安全強化
+
+**日付**: 2026-04-11
+**種別**: 追加機能
+
+### 新規ミドルウェア
+
+- `bodyLimit()`: ボディサイズ制限ミドルウェア（Content-Length ベース / 413 Payload Too Large）
+- `requestId()`: リクエスト ID ミドルウェア（X-Request-ID 自動付与 / `ctx.state.requestId`）
+- `timeout()`: タイムアウトミドルウェア（Promise.race / デフォルト 503）
+- `secureHeaders()`: セキュリティヘッダーミドルウェア（X-Content-Type-Options / X-Frame-Options / Referrer-Policy 等）
+
+### 型安全強化
+
+- `parseQuery<S>()`: クエリ文字列スキーマパース（`QuerySchema` / `QueryResult<S>`型変換・バリデーション）
+- `parseParam()`: パスパラメータ型変換（`"number"` / `"int"` / `"uuid"`、変換失敗時 HTTPError(400)）
+- `QueryRule` / `QuerySchema` / `QueryResult<S>` 型を `types.ts` / `mod.ts` に追加
+
+### CLI ツール（`cli.ts` / `@adlaire/fw/cli`）
+
+- `adlaire-fw routes [entry]`: 登録ルート一覧をカラー表示
+- `adlaire-fw dev [entry]`: ファイル変更監視付き開発サーバー起動
+- `adlaire-fw new <name>`: プロジェクトテンプレート生成（main.ts / deno.json / .env）
+- `adlaire-fw check [entry]`: 型検証（deno check ラッパー）
+
+### その他
+
+- `deno.json` version を `1.1.0` に更新
+- `deno.json` exports を `{ ".": "./mod.ts", "./cli": "./cli.ts" }` に変更
+
+---
+
 ## Ver.1.0-1 — Phase 1: コア実装
 
 **日付**: 2026-04-11

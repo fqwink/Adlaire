@@ -402,6 +402,155 @@ export function etag(): Middleware {
 }
 
 // ------------------------------------------------------------
+// §8.7 ボディサイズ制限ミドルウェア
+// ------------------------------------------------------------
+
+export interface BodyLimitOptions {
+  maxBytes: number;
+  message?: string;
+}
+
+export function bodyLimit(options: BodyLimitOptions): Middleware {
+  const message = options.message ?? "Payload Too Large";
+
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const contentLength = ctx.req.headers.get("Content-Length");
+    if (contentLength !== null) {
+      const len = parseInt(contentLength, 10);
+      if (!Number.isNaN(len) && len > options.maxBytes) {
+        return new Response(
+          JSON.stringify({ error: message }),
+          {
+            status: 413,
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+          },
+        );
+      }
+    }
+    return await next();
+  };
+}
+
+// ------------------------------------------------------------
+// §8.8 リクエスト ID ミドルウェア
+// ------------------------------------------------------------
+
+export interface RequestIdOptions {
+  header?: string;
+  generator?: () => string;
+}
+
+export function requestId(
+  options?: RequestIdOptions,
+): Middleware<{ requestId: string }> {
+  const headerName = options?.header ?? "X-Request-ID";
+  const generate = options?.generator ?? (() => crypto.randomUUID());
+
+  return async (
+    ctx: Context<Record<string, string>, unknown, Record<string, string>, { requestId: string }>,
+    next: () => Promise<Response>,
+  ): Promise<Response> => {
+    const id = ctx.req.headers.get(headerName) ?? generate();
+    ctx.state.requestId = id;
+
+    const response = await next();
+    const headers = new Headers(response.headers);
+    headers.set(headerName, id);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
+// ------------------------------------------------------------
+// §8.9 タイムアウトミドルウェア
+// ------------------------------------------------------------
+
+export interface TimeoutOptions {
+  ms: number;
+  message?: string;
+  status?: 408 | 503 | 504;
+}
+
+export function timeout(options: TimeoutOptions): Middleware {
+  const message = options.message ?? "Request Timeout";
+  const status = options.status ?? 503;
+
+  return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    let timerId: number | undefined;
+    const timeoutPromise = new Promise<Response>((resolve) => {
+      timerId = setTimeout(() => {
+        resolve(
+          new Response(
+            JSON.stringify({ error: message }),
+            {
+              status,
+              headers: { "Content-Type": "application/json; charset=UTF-8" },
+            },
+          ),
+        );
+      }, options.ms);
+    });
+
+    const result = await Promise.race([next(), timeoutPromise]);
+    clearTimeout(timerId);
+    return result;
+  };
+}
+
+// ------------------------------------------------------------
+// §8.10 セキュリティヘッダーミドルウェア
+// ------------------------------------------------------------
+
+export interface SecureHeadersOptions {
+  xContentTypeOptions?: boolean;
+  xFrameOptions?: "DENY" | "SAMEORIGIN" | false;
+  xXssProtection?: boolean;
+  referrerPolicy?: string | false;
+  permissionsPolicy?: string | false;
+}
+
+export function secureHeaders(options?: SecureHeadersOptions): Middleware {
+  const opts = options ?? {};
+  const xContentTypeOptions = opts.xContentTypeOptions !== false;
+  const xFrameOptions = opts.xFrameOptions !== undefined ? opts.xFrameOptions : "SAMEORIGIN";
+  const xXssProtection = opts.xXssProtection !== false;
+  const referrerPolicy = opts.referrerPolicy !== undefined
+    ? opts.referrerPolicy
+    : "strict-origin-when-cross-origin";
+  const permissionsPolicy = opts.permissionsPolicy ?? false;
+
+  return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+    const response = await next();
+    const headers = new Headers(response.headers);
+
+    if (xContentTypeOptions) {
+      headers.set("X-Content-Type-Options", "nosniff");
+    }
+    if (xFrameOptions !== false) {
+      headers.set("X-Frame-Options", xFrameOptions);
+    }
+    if (xXssProtection) {
+      headers.set("X-XSS-Protection", "0");
+    }
+    if (referrerPolicy !== false) {
+      headers.set("Referrer-Policy", referrerPolicy);
+    }
+    if (permissionsPolicy !== false) {
+      headers.set("Permissions-Policy", permissionsPolicy);
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
+// ------------------------------------------------------------
 // §8.6 応答圧縮ミドルウェア
 // ------------------------------------------------------------
 

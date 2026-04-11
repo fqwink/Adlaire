@@ -15,6 +15,9 @@ export type {
   HttpStatus,
   Method,
   Middleware,
+  QueryResult,
+  QueryRule,
+  QuerySchema,
   Route,
   Rule,
   RuleBase,
@@ -37,6 +40,8 @@ export {
   getCookie,
   html,
   json,
+  parseParam,
+  parseQuery,
   redirect,
   send,
   serveStatic,
@@ -46,12 +51,26 @@ export {
 export type { CookieOptions, StaticOptions } from "./Core/response.ts";
 
 // Middleware
-export { compress, cors, etag, logger, rateLimit } from "./Core/middleware.ts";
+export {
+  bodyLimit,
+  compress,
+  cors,
+  etag,
+  logger,
+  rateLimit,
+  requestId,
+  secureHeaders,
+  timeout,
+} from "./Core/middleware.ts";
 export type {
+  BodyLimitOptions,
   CompressOptions,
   CorsOptions,
   LoggerOptions,
   RateLimitOptions,
+  RequestIdOptions,
+  SecureHeadersOptions,
+  TimeoutOptions,
 } from "./Core/middleware.ts";
 
 // Validator

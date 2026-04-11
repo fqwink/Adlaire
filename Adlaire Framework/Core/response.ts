@@ -1,9 +1,11 @@
 // ============================================================
 // Adlaire Framework — response.ts
 // レスポンスヘルパー・静的ファイル配信・Cookie・Content-Negotiation
+// パースヘルパー（parseQuery / parseParam）
 // ============================================================
 
-import type { Handler, HttpStatus } from "./types.ts";
+import type { Handler, HttpStatus, QueryResult, QuerySchema } from "./types.ts";
+import { HTTPError } from "./types.ts";
 
 type RedirectStatus = 301 | 302 | 307 | 308;
 
@@ -209,4 +211,106 @@ export function accepts(req: Request, ...types: string[]): string | null {
     }
   }
   return null;
+}
+
+// ------------------------------------------------------------
+// §9.5 クエリ文字列スキーマパース
+// ------------------------------------------------------------
+
+export function parseQuery<S extends QuerySchema>(
+  query: Record<string, string>,
+  schema: S,
+): QueryResult<S> {
+  const result: Record<string, string | number | boolean | undefined> = {};
+
+  for (const [key, rule] of Object.entries(schema)) {
+    const raw = query[key];
+
+    if (raw === undefined) {
+      if (rule.required) {
+        throw new HTTPError(400, `クエリパラメータ "${key}" は必須です`);
+      }
+      if ("default" in rule && rule.default !== undefined) {
+        result[key] = rule.default;
+      } else {
+        result[key] = undefined;
+      }
+      continue;
+    }
+
+    switch (rule.type) {
+      case "string":
+        result[key] = raw;
+        break;
+      case "number": {
+        const n = Number(raw);
+        if (Number.isNaN(n)) {
+          throw new HTTPError(400, `クエリパラメータ "${key}" は数値である必要があります`);
+        }
+        if (rule.integer && !Number.isInteger(n)) {
+          throw new HTTPError(400, `クエリパラメータ "${key}" は整数である必要があります`);
+        }
+        if (rule.min !== undefined && n < rule.min) {
+          throw new HTTPError(400, `クエリパラメータ "${key}" は ${rule.min} 以上である必要があります`);
+        }
+        if (rule.max !== undefined && n > rule.max) {
+          throw new HTTPError(400, `クエリパラメータ "${key}" は ${rule.max} 以下である必要があります`);
+        }
+        result[key] = n;
+        break;
+      }
+      case "boolean":
+        result[key] = raw === "true" || raw === "1";
+        break;
+      case "enum":
+        if (!(rule.values as readonly string[]).includes(raw)) {
+          throw new HTTPError(
+            400,
+            `クエリパラメータ "${key}" は ${(rule.values as readonly string[]).join(", ")} のいずれかである必要があります`,
+          );
+        }
+        result[key] = raw;
+        break;
+    }
+  }
+
+  return result as QueryResult<S>;
+}
+
+// ------------------------------------------------------------
+// §9.6 パスパラメータ型変換
+// ------------------------------------------------------------
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function parseParam(value: string, type: "number"): number;
+export function parseParam(value: string, type: "int"): number;
+export function parseParam(value: string, type: "uuid"): string;
+export function parseParam(
+  value: string,
+  type: "number" | "int" | "uuid",
+): number | string {
+  switch (type) {
+    case "number": {
+      const n = Number(value);
+      if (Number.isNaN(n)) {
+        throw new HTTPError(400, `パスパラメータが数値ではありません: "${value}"`);
+      }
+      return n;
+    }
+    case "int": {
+      const n = Number(value);
+      if (Number.isNaN(n) || !Number.isInteger(n)) {
+        throw new HTTPError(400, `パスパラメータが整数ではありません: "${value}"`);
+      }
+      return n;
+    }
+    case "uuid": {
+      if (!UUID_PATTERN.test(value)) {
+        throw new HTTPError(400, `パスパラメータが UUID 形式ではありません: "${value}"`);
+      }
+      return value;
+    }
+  }
 }

@@ -109,13 +109,14 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ```
 Adlaire Framework/
 ├── mod.ts                # 【唯一の公開エントリーポイント】外部からのインポートはここのみ
-├── deno.json             # Deno 設定（exports: "./mod.ts" のみ）
+├── cli.ts                # CLI エントリーポイント（adlaire-fw コマンド）
+├── deno.json             # Deno 設定
 └── Core/                 # 【Adlaire Group 専用】サブディレクトリ分割禁止・フラット配置
     ├── types.ts          # 全型定義
     ├── server.ts         # App クラス・起動・エラーハンドラー・env
     ├── router.ts         # Router
-    ├── middleware.ts     # バリデーター
-    └── response.ts       # レスポンスヘルパー
+    ├── middleware.ts     # バリデーター・各種ミドルウェア
+    └── response.ts       # レスポンスヘルパー・パースヘルパー
 ```
 
 `Core/` 内のファイルはすべて同格・同階層とする。サブディレクトリによる分割を禁止する。
@@ -128,6 +129,9 @@ Adlaire Framework/
 // ✅ 正規のインポート
 import { createServer, json, HTTPError } from "@adlaire/fw";
 
+// ✅ CLI エントリーポイント（adlaire-fw コマンド用）
+// deno run -A jsr:@adlaire/fw/cli routes
+
 // ❌ 禁止（パッケージ構造上インポートできない）
 import { ... } from "@adlaire/fw/Core/types.ts";
 ```
@@ -137,8 +141,11 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```json
 {
   "name": "@adlaire/fw",
-  "version": "1.0.0",
-  "exports": "./mod.ts",
+  "version": "1.1.0",
+  "exports": {
+    ".": "./mod.ts",
+    "./cli": "./cli.ts"
+  },
   "compilerOptions": {
     "strict": true,
     "noImplicitAny": true,
@@ -146,6 +153,9 @@ import { ... } from "@adlaire/fw/Core/types.ts";
   }
 }
 ```
+
+- `"."` — 通常のライブラリインポート（`@adlaire/fw`）
+- `"./cli"` — CLI ツール（`@adlaire/fw/cli`）
 
 ---
 
@@ -340,6 +350,32 @@ type EnvResult<S extends EnvSchema> = {
     S[K]["type"] extends "number" | "port" ? number :
     S[K]["type"] extends "boolean" ? boolean :
     string;
+};
+```
+
+## 5.7 QueryRule / QuerySchema / QueryResult
+
+`parseQuery()`（§9.5）のスキーマ検証・型変換に使用する型。
+
+```typescript
+// クエリ文字列の型変換ルール
+type QueryRule =
+  | { type: "string";  required?: boolean; default?: string }
+  | { type: "number";  required?: boolean; default?: number; integer?: boolean; min?: number; max?: number }
+  | { type: "boolean"; required?: boolean; default?: boolean }
+  | { type: "enum";    values: readonly string[]; required?: boolean; default?: string };
+
+type QuerySchema = Record<string, QueryRule>;
+
+// スキーマから変換された値の型を導出する Mapped Type
+// required: true または default 指定があれば非 undefined。それ以外は T | undefined
+type QueryResult<S extends QuerySchema> = {
+  readonly [K in keyof S]:
+    S[K]["type"] extends "number" ?
+      (S[K] extends ({ required: true } | { default: number }) ? number : number | undefined) :
+    S[K]["type"] extends "boolean" ?
+      (S[K] extends ({ required: true } | { default: boolean }) ? boolean : boolean | undefined) :
+      (S[K] extends ({ required: true } | { default: string }) ? string : string | undefined)
 };
 ```
 
@@ -696,6 +732,135 @@ interface CompressOptions {
 - `Content-Encoding` / `Vary: Accept-Encoding` を付与する
 - `threshold` 未満のレスポンスは圧縮しない
 
+## 8.7 ボディサイズ制限ミドルウェア
+
+```typescript
+function bodyLimit(options: BodyLimitOptions): Middleware
+```
+
+```typescript
+interface BodyLimitOptions {
+  maxBytes: number;    // 最大ボディサイズ（バイト）
+  message?: string;    // エラーメッセージ（デフォルト: "Payload Too Large"）
+}
+```
+
+- `Content-Length` ヘッダーが `maxBytes` を超える場合、`413 Payload Too Large` を返す
+- `Content-Length` ヘッダーが存在しない場合はスキップ（サイズ不明）
+- **注意**: リバースプロキシ（nginx 等）が `Content-Length` を必ず付与する構成で最も効果的に機能する
+
+### 使用例
+
+```typescript
+import { bodyLimit, createServer } from "@adlaire/fw";
+
+const server = createServer();
+server.use(bodyLimit({ maxBytes: 1 * 1024 * 1024 })); // 1 MB
+```
+
+## 8.8 リクエスト ID ミドルウェア
+
+```typescript
+function requestId(options?: RequestIdOptions): Middleware<{ requestId: string }>
+```
+
+```typescript
+interface RequestIdOptions {
+  header?: string;               // ヘッダー名（デフォルト: "X-Request-ID"）
+  generator?: () => string;      // ID 生成関数（デフォルト: crypto.randomUUID()）
+}
+```
+
+- リクエストの `X-Request-ID` ヘッダーを読み取る。存在する場合はそれを使用し、ない場合は `crypto.randomUUID()` で生成する
+- 生成または受け取った ID を `ctx.state.requestId` に格納する（`string` 型）
+- レスポンスに `X-Request-ID` ヘッダーを付与する
+
+### 使用例
+
+```typescript
+import { createServer, requestId } from "@adlaire/fw";
+
+const server = createServer();
+server.use(requestId());
+
+server.router.get("/", (ctx) => {
+  const id = (ctx.state as { requestId: string }).requestId;
+  return json({ requestId: id });
+});
+```
+
+## 8.9 タイムアウトミドルウェア
+
+```typescript
+function timeout(options: TimeoutOptions): Middleware
+```
+
+```typescript
+interface TimeoutOptions {
+  ms: number;                   // タイムアウト期間（ミリ秒）
+  message?: string;             // エラーメッセージ（デフォルト: "Request Timeout"）
+  status?: 408 | 503 | 504;    // レスポンスステータス（デフォルト: 503）
+}
+```
+
+- `Promise.race()` を用いて `next()` とタイムアウトを競争させる
+- タイムアウト発生時は指定ステータス（デフォルト 503）の JSON レスポンスを返す
+- タイムアウト後もハンドラーは内部で完了まで実行される（キャンセルは行わない）
+
+### 使用例
+
+```typescript
+import { createServer, timeout } from "@adlaire/fw";
+
+const server = createServer();
+server.use(timeout({ ms: 5000 })); // 5 秒
+```
+
+## 8.10 セキュリティヘッダーミドルウェア
+
+```typescript
+function secureHeaders(options?: SecureHeadersOptions): Middleware
+```
+
+```typescript
+interface SecureHeadersOptions {
+  /** X-Content-Type-Options: nosniff（デフォルト: true） */
+  xContentTypeOptions?: boolean;
+  /** X-Frame-Options（デフォルト: "SAMEORIGIN"、false で付与しない） */
+  xFrameOptions?: "DENY" | "SAMEORIGIN" | false;
+  /** X-XSS-Protection: 0 — 旧式 XSS フィルター無効化（デフォルト: true） */
+  xXssProtection?: boolean;
+  /** Referrer-Policy（デフォルト: "strict-origin-when-cross-origin"、false で付与しない） */
+  referrerPolicy?: string | false;
+  /** Permissions-Policy（デフォルト: false） */
+  permissionsPolicy?: string | false;
+}
+```
+
+- レスポンスに以下のセキュリティヘッダーを付与する
+
+| ヘッダー | デフォルト値 |
+|---------|------------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `X-XSS-Protection` | `0`（旧式フィルター無効化） |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | （付与しない） |
+
+- 各オプションで `false` を設定したヘッダーは付与しない
+
+### 使用例
+
+```typescript
+import { createServer, secureHeaders } from "@adlaire/fw";
+
+const server = createServer();
+server.use(secureHeaders());
+
+// X-Frame-Options を DENY に変更
+server.use(secureHeaders({ xFrameOptions: "DENY" }));
+```
+
 ---
 
 # 9. response.ts　[Core]
@@ -793,6 +958,87 @@ server.router.get("/data", (ctx) => {
 });
 ```
 
+## 9.5 クエリ文字列スキーマパース
+
+```typescript
+function parseQuery<S extends QuerySchema>(
+  query: Record<string, string>,
+  schema: S,
+): QueryResult<S>
+```
+
+- `ctx.query`（`Record<string, string>`）をスキーマに基づいて型変換する
+- `QuerySchema`（§5.7）で型変換・バリデーションルールを定義する
+- `required: true` の項目が存在しない場合、`HTTPError(400)` を throw する
+- `default` が指定されている場合、値が存在しないときにデフォルト値を使用する
+- 変換後の値は `QueryResult<S>` の型（`number` / `boolean` / `string` / `T | undefined`）で返す
+
+### 変換ルール
+
+| QueryRule.type | 入力例 | 変換後 |
+|----------------|--------|--------|
+| `"string"` | `"hello"` | `"hello"` |
+| `"number"` | `"42"` | `42`（`Number()` で変換。NaN の場合 HTTPError(400)） |
+| `"boolean"` | `"true"` / `"1"` | `true`。それ以外は `false` |
+| `"enum"` | `"asc"` | `"asc"`（`values` 外は HTTPError(400)） |
+
+- `"number"` で `integer: true` の場合、整数以外は `HTTPError(400)`
+- `"number"` で `min` / `max` が指定されている場合、範囲外は `HTTPError(400)`
+
+### 使用例
+
+```typescript
+import { createServer, json, parseQuery } from "@adlaire/fw";
+
+const server = createServer();
+
+server.router.get("/items", (ctx) => {
+  const q = parseQuery(ctx.query, {
+    page:  { type: "number", default: 1, integer: true, min: 1 },
+    limit: { type: "number", default: 20, integer: true, min: 1, max: 100 },
+    sort:  { type: "enum", values: ["asc", "desc"] as const, default: "asc" },
+    q:     { type: "string" },
+  });
+  // q.page は number、q.limit は number、q.sort は string、q.q は string | undefined
+  return json({ page: q.page, limit: q.limit });
+});
+```
+
+## 9.6 パスパラメータ型変換
+
+```typescript
+function parseParam(value: string, type: "number"): number
+function parseParam(value: string, type: "int"): number
+function parseParam(value: string, type: "uuid"): string
+```
+
+- `ctx.params` の文字列値を指定の型に変換する
+- 変換失敗時は `HTTPError(400)` を throw する
+
+| type | 動作 |
+|------|------|
+| `"number"` | `Number()` で変換。`NaN` の場合 `HTTPError(400)` |
+| `"int"` | 整数変換。整数でない場合 `HTTPError(400)` |
+| `"uuid"` | UUID v4 形式の検証。不正形式の場合 `HTTPError(400)` |
+
+### 使用例
+
+```typescript
+import { createServer, json, parseParam } from "@adlaire/fw";
+
+const server = createServer();
+
+server.router.get("/users/:id", (ctx) => {
+  const id = parseParam(ctx.params.id, "int");   // number
+  return json({ id });
+});
+
+server.router.get("/items/:uuid", (ctx) => {
+  const uuid = parseParam(ctx.params.uuid, "uuid");  // string（UUID 形式保証）
+  return json({ uuid });
+});
+```
+
 ---
 
 # 10. エラーハンドリング
@@ -859,4 +1105,82 @@ server.router.get("/admin", (ctx) => {
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
+
+---
+
+# 12. cli.ts　[CLI]
+
+`adlaire-fw` コマンドの実装。`cli.ts`（フレームワークルート）として提供する。
+
+## 12.1 エントリーポイント
+
+```bash
+# パッケージ経由で実行
+deno run -A jsr:@adlaire/fw/cli <command> [args]
+
+# ローカル開発
+deno run -A cli.ts <command> [args]
+```
+
+## 12.2 コマンド一覧
+
+| コマンド | 書式 | 説明 |
+|---------|------|------|
+| `routes` | `adlaire-fw routes [entry]` | 登録ルート一覧を表示する |
+| `dev` | `adlaire-fw dev [entry]` | ファイル変更監視付き開発サーバーを起動する |
+| `new` | `adlaire-fw new <name>` | プロジェクトテンプレートを生成する |
+| `check` | `adlaire-fw check [entry]` | 型検証を実行する |
+
+`entry` のデフォルト値は `./main.ts`。
+
+## 12.3 routes コマンド
+
+エントリーファイルを動的インポートし、`server.router.routes()` の結果をテーブル形式で表示する。
+
+- エントリーファイルは `export const server` または `export { server }` で `App` インスタンスをエクスポートする必要がある
+- `listen()` はエントリーファイル内で `import.meta.main` ガードを使用すること（CLI からインポート時にサーバーが起動しないようにするため）
+
+```typescript
+// main.ts の推奨パターン
+export const server = createServer();
+// ... ルート定義 ...
+if (import.meta.main) {
+  server.listen(8000);
+}
+```
+
+## 12.4 dev コマンド
+
+```bash
+adlaire-fw dev [./main.ts]
+# → deno run --watch --allow-all <entry> を子プロセスとして起動
+```
+
+- `Deno.Command` を使用してサブプロセスを起動する
+- stdin / stdout / stderr をすべて親プロセスに継承する
+- Ctrl+C 等でサブプロセスが終了した場合、CLI も終了する
+
+## 12.5 new コマンド
+
+```bash
+adlaire-fw new <name>
+```
+
+以下のファイルを生成する:
+
+```
+<name>/
+├── main.ts        # App インスタンス + ルート定義サンプル
+├── deno.json      # プロジェクト設定（@adlaire/fw 依存含む）
+└── .env           # 環境変数テンプレート
+```
+
+## 12.6 check コマンド
+
+```bash
+adlaire-fw check [./main.ts]
+# → deno check <entry> を子プロセスとして起動
+```
+
+- `deno check` の終了コードをそのまま CLI の終了コードとして返す
 
