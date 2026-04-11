@@ -5,6 +5,33 @@
 
 ---
 
+## Ver.1.15-17 — エラーハンドリング強化・バリデーター強化
+
+**日付**: 2026-04-11
+**種別**: 機能改良
+
+### エラーハンドリング強化（types.ts / server.ts）
+
+| # | 対象ファイル | 概要 |
+|:-:|------------|------|
+| 1 | `types.ts` | `ErrorResponse` 型追加（エラーレスポンス統一形式） |
+| 2 | `types.ts` | `HTTPError` クラス追加（任意ステータスのスロー） |
+| 3 | `server.ts` | 405 Method Not Allowed レスポンスを実装 |
+| 4 | `server.ts` | `onError` フォールバック: `HTTPError` / その他例外で分岐 |
+| 5 | `server.ts` | エラーレスポンスを `ErrorResponse` 形式に統一 |
+
+### バリデーター強化（types.ts / middleware.ts）
+
+| # | 対象ファイル | 概要 |
+|:-:|------------|------|
+| 6 | `types.ts` | `Rule` discriminated union 型・`RuleBase` 共通オプションを追加 |
+| 7 | `middleware.ts` | `string` Rule に `pattern`（正規表現）/ `enum`（列挙値）オプション追加 |
+| 8 | `middleware.ts` | `number` Rule に `integer`（整数チェック）オプション追加 |
+| 9 | `middleware.ts` | 全 Rule に `nullable` オプション追加（null 値の許可） |
+| 10 | `middleware.ts` | 配列要素のエラーパスを `tags[0]` インデックス記法で返すよう修正 |
+
+---
+
 ## Ver.1.14-16 — 組み込みミドルウェア廃止
 
 **日付**: 2026-04-11

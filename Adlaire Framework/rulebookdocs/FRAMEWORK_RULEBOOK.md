@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.2.2**
+> **文書バージョン: Ver.2.3**
 > **最終更新: 2026-04-11**
 
 ---
@@ -167,18 +167,55 @@ type ErrorHandler =
   (err: unknown, ctx: Context) => Response | Promise<Response>;
 ```
 
-## 5.3 ValidationError / Schema
+## 5.3 ValidationError / Schema / Rule
 
 ```typescript
 interface ValidationError {
-  field: string;   // ドット記法（例: address.city）
+  field: string;   // ドット記法・配列インデックス記法（例: address.city / tags[0]）
   message: string;
 }
 
-type Schema = Record<string, Rule>; // Rule は middleware.ts で定義
+// Rule の共通オプション
+interface RuleBase {
+  required?: boolean;   // デフォルト: false
+  nullable?: boolean;   // null 値を許可するか（デフォルト: false）
+}
+
+// Rule — Discriminated Union（type フィールドで判別）
+type Rule =
+  | (RuleBase & { type: "string";  min?: number; max?: number; pattern?: RegExp; enum?: string[] })
+  | (RuleBase & { type: "number";  min?: number; max?: number; integer?: boolean })
+  | (RuleBase & { type: "boolean" })
+  | (RuleBase & { type: "email" })
+  | (RuleBase & { type: "object";  fields?: Schema })
+  | (RuleBase & { type: "array";   items?: Rule; min?: number; max?: number })
+  | (RuleBase & { type: "custom";  validate: (v: unknown) => true | string });
+
+type Schema = Record<string, Rule>;
 ```
 
-## 5.4 Route / Method
+## 5.4 ErrorResponse / HTTPError
+
+```typescript
+// すべてのエラーレスポンスのボディ形式（統一）
+interface ErrorResponse {
+  error: string;
+  detail?: unknown;
+}
+
+// ハンドラーから任意の HTTP ステータスをスローするためのエラークラス
+class HTTPError extends Error {
+  constructor(
+    public readonly status: number,
+    message?: string,
+    public readonly detail?: unknown,
+  ) {
+    super(message ?? String(status));
+  }
+}
+```
+
+## 5.5 Route / Method
 
 ```typescript
 interface Route {
@@ -257,23 +294,27 @@ function loadEnv(path?: string): Promise<void>
 
 ## 8.1 バリデーター
 
-### Rule 型
+### Rule 型（型定義は §5.3 参照）
 
-| 型 | オプション |
-|----|-----------|
-| `string` | `required` / `min` / `max`（文字数） |
-| `number` | `required` / `min` / `max`（値域） |
-| `boolean` | `required` |
-| `email` | `required` |
-| `object` | `required` / `fields`（サブスキーマ） |
-| `array` | `required` / `items`（要素ルール）/ `min` / `max`（要素数） |
-| `custom` | `validate(v): true \| string` |
+| 型 | 共通オプション | 固有オプション |
+|----|--------------|--------------|
+| `string` | `required` / `nullable` | `min` / `max`（文字数）/ `pattern`（正規表現）/ `enum`（列挙値） |
+| `number` | `required` / `nullable` | `min` / `max`（値域）/ `integer`（整数チェック） |
+| `boolean` | `required` / `nullable` | — |
+| `email` | `required` / `nullable` | — |
+| `object` | `required` / `nullable` | `fields`（サブスキーマ） |
+| `array` | `required` / `nullable` | `items`（要素ルール）/ `min` / `max`（要素数） |
+| `custom` | `required` / `nullable` | `validate(v: unknown): true \| string` |
 
 ### 使用例
 
 ```typescript
 const schema: Schema = {
   name:    { type: "string", required: true, min: 1, max: 50 },
+  code:    { type: "string", pattern: /^\d{3}-\d{4}$/ },
+  role:    { type: "string", enum: ["admin", "editor", "viewer"] },
+  age:     { type: "number", min: 0, max: 150, integer: true },
+  active:  { type: "boolean", nullable: true },
   address: {
     type: "object",
     fields: {
@@ -282,7 +323,7 @@ const schema: Schema = {
     },
   },
   tags:  { type: "array", items: { type: "string" }, max: 10 },
-  score: { type: "custom", validate: (v) => (v >= 0 && v <= 100) || "0〜100 で入力" },
+  score: { type: "custom", validate: (v) => (typeof v === "number" && v >= 0 && v <= 100) || "0〜100 で入力" },
 };
 
 const errors: ValidationError[] = validate(ctx.body, schema);
@@ -290,8 +331,13 @@ const errors: ValidationError[] = validate(ctx.body, schema);
 
 ### バリデーション仕様
 
-- エラーパスはドット記法（例: `address.city is required`）
+- エラーパスはドット記法（例: `address.city`）
+- 配列要素のエラーパスはインデックス記法（例: `tags[0]`）
+- ネスト組み合わせ例: `items[2].name`
 - 戻り値が空配列の場合はバリデーション成功
+- `required: true` かつ値が `undefined` の場合はエラー
+- `nullable: true` の場合、`null` 値はバリデーションを通過する
+- `required: true` + `nullable: false`（デフォルト）の場合、`null` はエラー
 
 ---
 
@@ -309,16 +355,53 @@ const errors: ValidationError[] = validate(ctx.body, schema);
 
 # 10. エラーハンドリング
 
-| ケース | レスポンス | 処理箇所 |
-|--------|-----------|---------|
-| ルート未一致 | `404  { error: "Not Found" }` | `server.ts`（`Router.match` が `null`） |
-| ハンドラー例外 | `500  { error: "Internal Server Error" }` | `onError` ハンドラー or フォールバック |
-| バリデーションエラー | `400  { errors: ValidationError[] }` | ハンドラー内で `validate()` 結果を確認 |
+## 10.1 エラーレスポンス形式
 
-### onError 優先順位
+すべてのエラーレスポンスは `ErrorResponse`（§5.4）形式で統一する。
 
-1. `server.onError()` で登録したハンドラーを順に試行する
-2. いずれも `Response` を返さなかった場合、500 フォールバックを返す
+```typescript
+// 正常系
+{ error: "Not Found" }                              // 404
+{ error: "Method Not Allowed" }                     // 405
+{ error: "Internal Server Error" }                  // 500
+{ error: "Forbidden", detail: "..." }               // HTTPError 由来
+
+// バリデーションエラー
+{ error: "Validation Failed", detail: ValidationError[] }  // 400
+```
+
+## 10.2 エラーケース一覧
+
+| ケース | ステータス | レスポンス | 処理箇所 |
+|--------|:---------:|-----------|---------|
+| ルート未一致 | 404 | `{ error: "Not Found" }` | `server.ts`（`Router.match` が `null`） |
+| メソッド不一致 | 405 | `{ error: "Method Not Allowed" }` | `server.ts`（パスはマッチするがメソッドが未登録） |
+| `HTTPError` スロー | HTTPError.status | `{ error: HTTPError.message, detail?: HTTPError.detail }` | `onError` チェーン or フォールバック |
+| ハンドラー例外（その他） | 500 | `{ error: "Internal Server Error" }` | `onError` チェーン or フォールバック |
+| バリデーション失敗 | 400 | `{ error: "Validation Failed", detail: ValidationError[] }` | ハンドラー内で `validate()` 結果を確認 |
+
+## 10.3 HTTPError の使用
+
+ハンドラーから `HTTPError` をスローすることで任意のステータスコードでレスポンスを返せる。
+
+```typescript
+import { HTTPError } from "adlaire-fw/types";
+
+server.router.get("/admin", (ctx) => {
+  if (!ctx.state.isAdmin) {
+    throw new HTTPError(403, "Forbidden");
+  }
+  return json({ ok: true });
+});
+```
+
+## 10.4 onError 優先順位
+
+1. `server.onError()` で登録したハンドラーを登録順に試行する
+2. ハンドラーが `Response` を返した時点でそれを使用し、以降のハンドラーは呼ばない
+3. すべてのハンドラーが `Response` を返さなかった（`null` / `undefined` / `void`）場合、フォールバックを返す
+   - `HTTPError` の場合: `HTTPError.status` + `{ error: message, detail? }`
+   - それ以外: `500` + `{ error: "Internal Server Error" }`
 
 ---
 
