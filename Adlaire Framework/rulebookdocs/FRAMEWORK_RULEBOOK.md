@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.2.7**
+> **文書バージョン: Ver.2.8**
 > **最終更新: 2026-04-11**
 
 ---
@@ -112,18 +112,19 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ## 3.1 構成
 
 ```
-Adlaire Framework/        # プロジェクトルート（バックエンドフレームワーク）
+Adlaire Framework/        # プロジェクトルート（バックエンド + フロントエンド）
 ├── mod.ts                # 【唯一の公開エントリーポイント】アプリ開発者はここからのみインポートする
 ├── deno.json             # Deno 設定（exports: "./mod.ts" のみ）
-└── Core/                 # 【フレームワーク開発者専用】アプリ開発者は直接インポート不可
-    ├── types.ts          # [Core] 全型定義
-    ├── server.ts         # [Core] App クラス・起動・エラーハンドラー・env
-    ├── router.ts         # [Core] Router
-    ├── middleware.ts     # [Core] バリデーター
-    └── response.ts       # [Core] レスポンスヘルパー
+└── Core/                 # 【フレームワーク開発者専用】サブディレクトリ分割禁止・フラット配置
+    ├── types.ts          # [Backend Core] 全型定義
+    ├── server.ts         # [Backend Core] App クラス・起動・エラーハンドラー・env
+    ├── router.ts         # [Backend Core] Router
+    ├── middleware.ts     # [Backend Core] バリデーター
+    ├── response.ts       # [Backend Core] レスポンスヘルパー
+    └── ...               # [Frontend Core] 仕様策定後に追加（同階層・サブディレクトリなし）
 ```
 
-Core 5 ファイル（`Core/` 内）は役割による優劣・階層なし、すべて同格とする。
+`Core/` 内のファイルはバックエンド・フロントエンド問わず全て同格・同階層とする。サブディレクトリによる分割を禁止する。
 
 ## 3.2 公開エントリーポイントの封鎖
 
@@ -459,7 +460,7 @@ server.router.get("/admin", (ctx) => {
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない。アプリ開発者がフレームワーク経由で型を破る手段を API 設計上存在させない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
-| **5 ファイル Core 構成** | `Core/` に `types` / `server` / `router` / `middleware` / `response` の 5 ファイルのみ。階層なし |
+| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。バックエンド・フロントエンドのファイルを問わず同階層に配置する |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
@@ -468,13 +469,20 @@ server.router.get("/admin", (ctx) => {
 
 # 12. フロントエンドフレームワーク
 
-Adlaire Framework はバックエンド用（本仕様書）とフロントエンド用の 2 種類で構成される。
+Adlaire Framework はバックエンド用（§1〜§11）とフロントエンド用の 2 種類を **単一プロジェクト（`Adlaire Framework/`）内に収録する**。
 
-フロントエンドフレームワークは本プロジェクトとは独立した別プロジェクトとして新設する。
-仕様は別途 `FRAMEWORK_RULEBOOK.md`（フロントエンド用）で策定する。
+## 12.1 構成原則
+
+- バックエンドとフロントエンドは**同一 `Core/` 内にフラットに配置**する（サブディレクトリによる分割禁止）
+- ディレクトリ分割は一切行わない
+- `Core/` 内のファイルはバックエンド用・フロントエンド用を問わず同格・同階層
+
+## 12.2 状態
+
+フロントエンドフレームワークの Core ファイル構成・仕様は別途本ルールブックに追記する（現在仕様策定中）。
 
 | 項目 | 内容 |
 |------|------|
-| **プロジェクト** | 独立プロジェクト（本プロジェクトとは別ディレクトリ） |
+| **配置** | `Adlaire Framework/Core/`（バックエンド Core と同一ディレクトリ内） |
 | **状態** | 仕様策定中 |
-| **共通原則** | §0（絶対原則: 役割分離 / 型安全 / any 禁止 / npm 禁止）はフロントエンドフレームワークにも全面適用 |
+| **適用原則** | §0（役割分離 / 型安全 / any 禁止 / npm 禁止）を全面適用 |
