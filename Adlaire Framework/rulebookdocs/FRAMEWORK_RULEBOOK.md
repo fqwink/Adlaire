@@ -381,6 +381,87 @@ const errors: ValidationError[] = validate(ctx.body, schema);
 
 ---
 
+## 8.2 CORS ミドルウェア
+
+`cors()` ファクトリ関数が返す `Middleware` を `server.use()` に登録することで、Cross-Origin Resource Sharing ヘッダーを制御する。
+
+### CorsOptions
+
+```typescript
+interface CorsOptions {
+  /** 許可するオリジン（デフォルト: "*"） */
+  origin?: string | string[] | RegExp | ((origin: string) => boolean);
+  /** 許可する HTTP メソッド（デフォルト: ["GET","POST","PUT","DELETE","PATCH"]） */
+  methods?: Method[];
+  /** 許可するリクエストヘッダー（デフォルト: ["Content-Type","Authorization"]） */
+  allowedHeaders?: string[];
+  /** クライアントに公開するレスポンスヘッダー（デフォルト: []） */
+  exposedHeaders?: string[];
+  /** 認証情報（Cookie 等）を許可するか（デフォルト: false） */
+  credentials?: boolean;
+  /** プリフライトキャッシュ秒数（デフォルト: 5） */
+  maxAge?: number;
+}
+```
+
+### cors() 関数
+
+```typescript
+function cors(options?: CorsOptions): Middleware
+```
+
+### 動作仕様
+
+- `origin` 省略時（または `"*"`）: すべてのオリジンに `Access-Control-Allow-Origin: *` を付与する
+- `origin` が `string` の場合: リクエストの `Origin` ヘッダーと一致する場合のみ付与する
+- `origin` が `string[]` の場合: リスト内いずれかと一致する場合に付与する
+- `origin` が `RegExp` の場合: `test()` が `true` の場合に付与する
+- `origin` が `(origin: string) => boolean` の場合: 戻り値が `true` の場合に付与する
+- `credentials: true` かつ `origin` が `"*"`（省略を含む）の組み合わせは禁止。`cors()` 呼び出し時に `TypeError` を throw する
+- `OPTIONS` プリフライトリクエストには `204 No Content` を即座に返す（後続のミドルウェア・ハンドラーを呼ばない）
+- オリジン評価がリクエスト依存（`string[]` / `RegExp` / 関数）の場合は `Vary: Origin` を付与する
+
+### 付与するヘッダー
+
+| ヘッダー | 付与条件 |
+|---------|---------|
+| `Access-Control-Allow-Origin` | 常に（オリジン評価結果に基づく） |
+| `Access-Control-Allow-Methods` | `methods` オプションの値 |
+| `Access-Control-Allow-Headers` | `allowedHeaders` オプションの値 |
+| `Access-Control-Expose-Headers` | `exposedHeaders` が空でない場合 |
+| `Access-Control-Allow-Credentials` | `credentials: true` の場合 |
+| `Access-Control-Max-Age` | プリフライト（`OPTIONS`）時のみ、`maxAge` オプションの値 |
+| `Vary` | `origin` がリクエスト依存の場合（`Vary: Origin`） |
+
+### 使用例
+
+```typescript
+import { createServer, cors } from "@adlaire/fw";
+
+const server = createServer();
+
+// 全オリジン許可（credentials なし）
+server.use(cors());
+
+// 特定オリジン + credentials
+server.use(cors({
+  origin: "https://example.com",
+  credentials: true,
+}));
+
+// 複数オリジン
+server.use(cors({
+  origin: ["https://a.example.com", "https://b.example.com"],
+}));
+
+// 動的判定
+server.use(cors({
+  origin: (o) => o.endsWith(".example.com"),
+}));
+```
+
+---
+
 # 9. response.ts　[Core]
 
 すべてのヘルパーは `Response` オブジェクトを返す（直接送信は行わない）。
