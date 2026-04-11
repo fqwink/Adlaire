@@ -48,13 +48,13 @@
 
 # 1. 概要
 
-Adlaire Group の全プロジェクトで共通利用する TypeScript 製フルスタック Web フレームワーク。
-バックエンド（サーバーサイド）とフロントエンド（クライアントサイド）を単一プロジェクト・単一 `Core/` 内で提供する。
+Adlaire Group の全プロジェクトで共通利用する TypeScript 製 Web フレームワーク。
+バックエンド・フロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
 
 | 項目 | 内容 |
 |------|------|
 | **名称** | Adlaire Framework（adlaire-fw） |
-| **種別** | フルスタック Web フレームワーク |
+| **種別** | Web フレームワーク（バックエンド・フロントエンド） |
 | **言語** | TypeScript 5.x（strict モード必須） |
 | **ランタイム** | Deno 2.x |
 | **配備環境** | Deno Deploy / Adlaire Deploy |
@@ -113,7 +113,7 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ## 3.1 構成
 
 ```
-Adlaire Framework/        # プロジェクトルート（フルスタック）
+Adlaire Framework/        # プロジェクトルート（バックエンド・フロントエンド）
 ├── mod.ts                # 【唯一の公開エントリーポイント】アプリ開発者はここからのみインポートする
 ├── deno.json             # Deno 設定（exports: "./mod.ts" のみ）
 └── Core/                 # 【フレームワーク開発者専用】サブディレクトリ分割禁止・フラット配置
@@ -468,9 +468,9 @@ server.router.get("/admin", (ctx) => {
 
 ---
 
-# 12. フルスタック構成
+# 12. フロントエンドフレームワーク
 
-Adlaire Framework は**フルスタック Web フレームワーク**であり、バックエンド（§1〜§11）とフロントエンドを単一プロジェクト・単一 `Core/` 内で提供する。
+Adlaire Framework はバックエンド（§1〜§11）とフロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
 
 ## 12.1 構成原則
 

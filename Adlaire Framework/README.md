@@ -1,7 +1,7 @@
 # Adlaire Framework
 
-Adlaire Group 全プロジェクトで共通利用する TypeScript 製フルスタック Web フレームワーク。
-バックエンドとフロントエンドを単一プロジェクト・単一 `Core/` 内で提供する。
+Adlaire Group 全プロジェクトで共通利用する TypeScript 製 Web フレームワーク。
+バックエンド・フロントエンドを単一プロジェクト・単一 `Core/` 内に収録する。
 
 ## 概要
 
