@@ -31,7 +31,7 @@
 | **フレームワーク開発者**（Adlaire Group） | アーキテクチャ方針の決定・Core 5 ファイルの実装・`mod.ts` 公開 API の設計 |
 | **アプリ開発者** | `mod.ts` が公開するシンボルのみ使用可。`src/` への直接インポート不可 |
 
-`deno.json` の `"exports": "./mod.ts"` により `src/` 直接インポートをパッケージ構造で封鎖する。
+`deno.json` の `"exports": "./mod.ts"` により `Core/` 直接インポートをパッケージ構造で封鎖する。
 
 ---
 
@@ -55,6 +55,16 @@
 - 動的な値には `unknown` を使用し、型ガードで絞り込む
 - `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
 - `Handler` は必ず `Response` を返す（`void` 禁止）
+
+### any 使用禁止（絶対原則）
+
+`any` 型の使用をフレームワーク全域で禁止する。いかなる理由があっても例外を認めない。
+
+- `any` 型の宣言・使用禁止
+- `as any` によるキャスト禁止
+- `// @ts-ignore`・`// @ts-expect-error` による型エラー抑制禁止
+- `as unknown as T` 等の型安全を迂回するキャストチェーン禁止
+- 動的な値には `unknown` を使用し、型ガードで絞り込む
 
 ### その他禁止事項（絶対原則）
 

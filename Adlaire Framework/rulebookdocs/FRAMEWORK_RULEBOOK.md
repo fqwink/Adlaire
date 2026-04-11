@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.2.6**
+> **文書バージョン: Ver.2.7**
 > **最終更新: 2026-04-11**
 
 ---
@@ -18,8 +18,8 @@
 | **フレームワーク開発者** | Adlaire Group — Core 5 ファイルの実装者 | アーキテクチャ方針の決定・Core 実装・公開 API の設計 |
 | **アプリ開発者** | adlaire-fw を利用してアプリケーションを構築する開発者 | `mod.ts` が公開する API のみ使用可 |
 
-**アプリ開発者は `src/` 内の Core ファイルに直接触れることができない。**
-`deno.json` の `"exports": "./mod.ts"` により、`src/` 直接インポートをパッケージ構造で封鎖する。
+**アプリ開発者は `Core/` 内のファイルに直接触れることができない。**
+`deno.json` の `"exports": "./mod.ts"` のみを設定し、`Core/` 直接インポートをパッケージ構造で封鎖する。
 
 ## 0.2 型安全
 
@@ -27,13 +27,23 @@
 
 - 公開 API（`mod.ts` エクスポート）に `any` 型を含めない
 - エスケープハッチ（`any` を返す関数・型アサーションを強いる設計）を提供しない
-- Core 実装（`src/`）において `any`・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用を禁止する
+- Core 実装（`Core/`）において `any`・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用を禁止する
 - 動的な値には `unknown` を使用し型ガードで絞り込む
 - アプリ開発者が公開 API を通じて型を破る手段を設計上存在させない
 
 ## 0.3 npm 禁止
 
 `npm:` スペシャライザーの使用を禁止する。依存は Deno 標準ライブラリ（`jsr:@std/*`）と Web 標準 API のみ。
+
+## 0.4 any 使用禁止
+
+`any` 型の使用をフレームワーク全域で禁止する。いかなる理由があっても例外を認めない。
+
+- `any` 型の宣言・使用禁止
+- `as any` によるキャスト禁止
+- `// @ts-ignore`・`// @ts-expect-error` による型エラー抑制禁止
+- `as unknown as T` 等の型安全を迂回するキャストチェーン禁止
+- 動的な値には `unknown` を使用し、型ガードで絞り込む
 
 ---
 
@@ -102,30 +112,30 @@ if (Deno.env.get("DEPLOY_TARGET") !== "deno-deploy") {
 ## 3.1 構成
 
 ```
-adlaire-fw/
-├── mod.ts            # 【唯一の公開エントリーポイント】アプリ開発者はここからのみインポートする
-├── deno.json         # Deno 設定（exports: "./mod.ts" のみ）
-└── src/              # 【フレームワーク開発者専用】アプリ開発者は直接インポート不可
-    ├── types.ts      # [Core] 全型定義
-    ├── server.ts     # [Core] App クラス・起動・エラーハンドラー・env
-    ├── router.ts     # [Core] Router
-    ├── middleware.ts # [Core] バリデーター
-    └── response.ts   # [Core] レスポンスヘルパー
+Adlaire Framework/        # プロジェクトルート（バックエンドフレームワーク）
+├── mod.ts                # 【唯一の公開エントリーポイント】アプリ開発者はここからのみインポートする
+├── deno.json             # Deno 設定（exports: "./mod.ts" のみ）
+└── Core/                 # 【フレームワーク開発者専用】アプリ開発者は直接インポート不可
+    ├── types.ts          # [Core] 全型定義
+    ├── server.ts         # [Core] App クラス・起動・エラーハンドラー・env
+    ├── router.ts         # [Core] Router
+    ├── middleware.ts     # [Core] バリデーター
+    └── response.ts       # [Core] レスポンスヘルパー
 ```
 
-Core 5 ファイル（`src/` 内）は役割による優劣・階層なし、すべて同格とする。
+Core 5 ファイル（`Core/` 内）は役割による優劣・階層なし、すべて同格とする。
 
 ## 3.2 公開エントリーポイントの封鎖
 
 アプリ開発者は `mod.ts` が公開するシンボルのみ使用できる。
-`deno.json` の `"exports"` を `"./mod.ts"` のみに設定することで、`src/` への直接インポートをパッケージ構造で封鎖する。
+`deno.json` の `"exports"` を `"./mod.ts"` のみに設定することで、`Core/` への直接インポートをパッケージ構造で封鎖する。
 
 ```typescript
 // ✅ アプリ開発者の正しい使用
 import { createServer, json, HTTPError } from "@adlaire/fw";
 
 // ❌ 禁止（パッケージ構造上インポートできない）
-import { ... } from "@adlaire/fw/src/types.ts";
+import { ... } from "@adlaire/fw/Core/types.ts";
 ```
 
 ## 3.3 deno.json
@@ -445,10 +455,26 @@ server.router.get("/admin", (ctx) => {
 
 | 制約 | 内容 |
 |------|------|
-| **役割分離（絶対原則）** | フレームワーク開発者（Adlaire Group）が方針を決定し Core を実装する。アプリ開発者は `mod.ts` 公開 API のみ使用可。`src/` への直接アクセスをパッケージ構造で封鎖する |
+| **役割分離（絶対原則）** | フレームワーク開発者（Adlaire Group）が方針を決定し Core を実装する。アプリ開発者は `mod.ts` 公開 API のみ使用可。`Core/` への直接アクセスをパッケージ構造で封鎖する |
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない。アプリ開発者がフレームワーク経由で型を破る手段を API 設計上存在させない |
+| **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
-| **5 ファイル Core 構成** | `types` / `server` / `router` / `middleware` / `response` の 5 ファイルのみ。階層なし |
+| **5 ファイル Core 構成** | `Core/` に `types` / `server` / `router` / `middleware` / `response` の 5 ファイルのみ。階層なし |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
+
+---
+
+# 12. フロントエンドフレームワーク
+
+Adlaire Framework はバックエンド用（本仕様書）とフロントエンド用の 2 種類で構成される。
+
+フロントエンドフレームワークは本プロジェクトとは独立した別プロジェクトとして新設する。
+仕様は別途 `FRAMEWORK_RULEBOOK.md`（フロントエンド用）で策定する。
+
+| 項目 | 内容 |
+|------|------|
+| **プロジェクト** | 独立プロジェクト（本プロジェクトとは別ディレクトリ） |
+| **状態** | 仕様策定中 |
+| **共通原則** | §0（絶対原則: 役割分離 / 型安全 / any 禁止 / npm 禁止）はフロントエンドフレームワークにも全面適用 |
