@@ -1338,11 +1338,12 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 1 | 追加機能 | HTTP サーバー起動（`Deno.serve` / `createServer()` / `fetch` ハンドラー / `listen()`） | §1 / §4 | 計画 |
-| 2 | 追加機能 | Router クラス（`get/post/put/delete/patch` / `group()` / `match()` / 動的パラメータ） | §7 | 計画 |
-| 3 | 追加機能 | 型定義（`Context` / `Handler` / `Middleware` / `ErrorHandler` / `ValidationError` / `Schema` / `Rule` / `Route` / `Method` / `HTTPError` / `ErrorResponse`） | §5 | 計画 |
-| 4 | 追加機能 | レスポンスヘルパー（`json()` / `text()` / `send()`） | §6 | 計画 |
-| 5 | 追加機能 | バリデーター（`validate()` / `Schema` / `Rule`） | §8.1 | 計画 |
+| 1 | 追加機能 | HTTP サーバー起動（`Deno.serve` / `createServer()` / `fetch` ハンドラー / `listen()`） | §2 / §6 | 計画 |
+| 2 | 追加機能 | Router クラス（`get/post/put/delete/patch/head/options` / `group()` / `match()` / 動的パラメータ / ワイルドカード） | §7 | 計画 |
+| 3 | 追加機能 | 型定義（`Context<P,B,Q,S>` / `Handler<P,B,Q,S>` / `Middleware` / `ErrorHandler` / `ValidationError` / `Schema` / `Rule` / `Route` / `Method` / `HTTPError` / `ErrorResponse`） | §5 | 計画 |
+| 4 | 追加機能 | レスポンスヘルパー（`json()` / `text()` / `html()` / `send()` / `redirect()`） | §9 | 計画 |
+| 5 | 追加機能 | バリデーター（`validate()` / `Schema` / `Rule`（`url` 型含む）） | §8.1 | 計画 |
+| 6 | 追加機能 | Content-Type 別ボディパース（`application/json` / `text/plain` / `application/x-www-form-urlencoded`） | §4.1 | 計画 |
 
 ---
 

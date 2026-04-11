@@ -154,7 +154,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```
 1. Deno.serve / export default fetch がリクエストを受信
 2. URL パース（URLSearchParams でクエリ分離）
-3. リクエストボディ読み込み・JSON パース
+3. リクエストボディ読み込み・Content-Type に応じたパース（§4.1）
 4. Context オブジェクト生成（state: {} を含む）
 5. Router.match() でルートマッチング
    └ 未一致 → 404 JSON レスポンス終了
@@ -163,6 +163,17 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 7. ルートハンドラー実行 → Response を返す
 8. onError（登録済みの場合）でエラーを Response に変換
 ```
+
+## 4.1 Content-Type 別ボディパース
+
+| Content-Type | `ctx.body` の型 | 動作 |
+|---|---|---|
+| `application/json` | `unknown` | `JSON.parse()` でパース |
+| `text/plain` | `string` | テキストとして読み込み |
+| `application/x-www-form-urlencoded` | `Record<string, string>` | `URLSearchParams` でパース |
+| `multipart/form-data` | `null` | Phase 3 実装予定。現在は `null` |
+| ボディなし（`GET` / `HEAD` / `DELETE` 等） | `null` | `null` |
+| パース失敗（不正 JSON 等） | `null` | `null`（エラーをスローしない） |
 
 ---
 
@@ -178,12 +189,13 @@ interface Context<
   P extends Record<string, string> = Record<string, string>,
   B = unknown,
   Q extends Record<string, string> = Record<string, string>,
+  S extends Record<string, unknown> = Record<string, unknown>,
 > {
-  req: Request;                    // Web 標準 Request
-  params: P;                       // URL パスパラメータ
-  query: Q;                        // クエリストリング
-  body: B;                         // パース済みボディ
-  state: Record<string, unknown>;  // ミドルウェア間共有データ
+  req: Request;   // Web 標準 Request
+  params: P;      // URL パスパラメータ
+  query: Q;       // クエリストリング
+  body: B;        // パース済みボディ
+  state: S;       // ミドルウェア間共有データ（型引数 S で型付け可能）
 }
 ```
 
@@ -196,7 +208,8 @@ type Handler<
   P extends Record<string, string> = Record<string, string>,
   B = unknown,
   Q extends Record<string, string> = Record<string, string>,
-> = (ctx: Context<P, B, Q>) => Response | Promise<Response>;
+  S extends Record<string, unknown> = Record<string, unknown>,
+> = (ctx: Context<P, B, Q, S>) => Response | Promise<Response>;
 
 // Middleware は next() の結果を返す
 type Middleware =
@@ -205,6 +218,29 @@ type Middleware =
 // ErrorHandler はエラーを Response に変換する
 type ErrorHandler =
   (err: unknown, ctx: Context) => Response | Promise<Response>;
+```
+
+### state 型安全化の使用例
+
+ミドルウェアで `ctx.state` に値を書き込み、ハンドラーで `S` 型引数を指定して型付きで参照する。
+
+```typescript
+// ミドルウェアで state に書き込む（Middleware 型は Context のデフォルト S を使用）
+server.use(async (ctx, next) => {
+  ctx.state.userId = "user-123";
+  return next();
+});
+
+// ハンドラーで S 型引数を指定して型付きで参照する
+type AuthState = { userId: string };
+
+server.router.get<Record<string, string>, unknown, Record<string, string>, AuthState>(
+  "/profile",
+  (ctx) => {
+    const id = ctx.state.userId; // string（unknown でない）
+    return json({ id });
+  },
+);
 ```
 
 ## 5.3 ValidationError / Schema / Rule
@@ -227,6 +263,7 @@ type Rule =
   | (RuleBase & { type: "number";  min?: number; max?: number; integer?: boolean })
   | (RuleBase & { type: "boolean" })
   | (RuleBase & { type: "email" })
+  | (RuleBase & { type: "url";     allowedProtocols?: string[] })
   | (RuleBase & { type: "object";  fields?: Schema })
   | (RuleBase & { type: "array";   items?: Rule; min?: number; max?: number })
   | (RuleBase & { type: "custom";  validate: (v: unknown) => true | string });
@@ -264,7 +301,7 @@ interface Route {
   handler: Handler;
 }
 
-type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS";
 ```
 
 ---
@@ -313,7 +350,7 @@ function loadEnv(path?: string): Promise<void>
 
 | メソッド | 説明 |
 |---------|------|
-| `get / post / put / delete / patch(path, handler)` | ルートを登録（メソッドチェーン対応） |
+| `get / post / put / delete / patch / head / options(path, handler)` | ルートを登録（メソッドチェーン対応） |
 | `group(prefix)` | プレフィクス付き `RouteGroup` を返す |
 | `match(method, url)` | ハンドラーと `params` を返す。未一致は `null` |
 
@@ -323,7 +360,17 @@ function loadEnv(path?: string): Promise<void>
 |---------|------|-----|
 | 固定セグメント | 完全一致 | `/users/list` |
 | 動的セグメント | `:name` で変数化 | `/users/:id` |
+| ワイルドカード | `*name` でそれ以降のパス全体を変数化。最後のセグメントにのみ使用可 | `/static/*path` |
 | クエリストリング | パスマッチから除外し `ctx.query` に格納 | `?page=1` |
+
+マッチング優先順位（降順）: 固定セグメント > 動的セグメント > ワイルドカード
+
+## 7.3 HEAD / OPTIONS の動作
+
+| メソッド | 動作 |
+|---------|------|
+| `HEAD` | 明示的に `head()` で登録したハンドラーを優先する。未登録の場合、対応する `GET` ハンドラーを実行しボディを除いたレスポンスを返す |
+| `OPTIONS` | `cors()` ミドルウェアがプリフライトを処理する。`options()` で明示登録した場合はミドルウェアより後に呼ばれる |
 
 ---
 
@@ -342,6 +389,7 @@ function loadEnv(path?: string): Promise<void>
 | `number` | `required` / `nullable` | `min` / `max`（値域）/ `integer`（整数チェック） |
 | `boolean` | `required` / `nullable` | — |
 | `email` | `required` / `nullable` | — |
+| `url`   | `required` / `nullable` | `allowedProtocols`（デフォルト: `["http", "https"]`）|
 | `object` | `required` / `nullable` | `fields`（サブスキーマ） |
 | `array` | `required` / `nullable` | `items`（要素ルール）/ `min` / `max`（要素数） |
 | `custom` | `required` / `nullable` | `validate(v: unknown): true \| string` |
@@ -420,6 +468,7 @@ function cors(options?: CorsOptions): Middleware
 - `credentials: true` かつ `origin` が `"*"`（省略を含む）の組み合わせは禁止。`cors()` 呼び出し時に `TypeError` を throw する
 - `OPTIONS` プリフライトリクエストには `204 No Content` を即座に返す（後続のミドルウェア・ハンドラーを呼ばない）
 - オリジン評価がリクエスト依存（`string[]` / `RegExp` / 関数）の場合は `Vary: Origin` を付与する
+- `Origin` ヘッダーが存在しないリクエスト（curl・サーバー間通信等）には CORS ヘッダーを付与せず、そのまま `next()` を呼ぶ
 
 ### 付与するヘッダー
 
@@ -469,8 +518,26 @@ server.use(cors({
 | 関数 | シグネチャ | 説明 |
 |------|-----------|------|
 | `json` | `json(data, status?)` | JSON レスポンス（デフォルト 200） |
-| `text` | `text(body, status?)` | プレーンテキスト |
+| `text` | `text(body, status?)` | プレーンテキスト（`Content-Type: text/plain; charset=UTF-8`） |
+| `html` | `html(body, status?)` | HTML レスポンス（`Content-Type: text/html; charset=UTF-8`、デフォルト 200） |
 | `send` | `send(status, body?)` | 任意ステータスと生テキスト |
+| `redirect` | `redirect(url, status?)` | リダイレクト（デフォルト 302。`status` は `301 \| 302 \| 307 \| 308` のみ許可） |
+
+### 使用例
+
+```typescript
+import { createServer, html, json, redirect } from "@adlaire/fw";
+
+const server = createServer();
+
+server.router.get("/page", (ctx) => {
+  return html("<h1>Hello</h1>");
+});
+
+server.router.get("/old-path", (ctx) => {
+  return redirect("/new-path", 301);
+});
+```
 
 ---
 
