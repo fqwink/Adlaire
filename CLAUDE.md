@@ -25,7 +25,7 @@
 | `Adlaire Deploy/` | **Adlaire Deploy** | Ver.1.9-14 | `Adlaire Deploy/rulebookdocs/` |
 | `Adlaire Portal System/` | **Adlaire Portal System** | Ver.1.1 | `Adlaire Portal System/rulebookdocs/` |
 | `Adlaire Style/` | **Adlaire Style** | Ver.1.0-1 | `Adlaire Style/rulebookdocs/` |
-| `Adlaire Framework/` | **Adlaire Framework** | Ver.1.0 | `Adlaire Framework/rulebookdocs/` |
+| `Adlaire Framework/` | **Adlaire Framework** | Ver.1.0-1 | `Adlaire Framework/rulebookdocs/` |
 
 ### Adlaire Static CMS (`Adlaire Static CMS/`)
 

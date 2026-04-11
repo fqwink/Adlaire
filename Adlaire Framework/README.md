@@ -6,14 +6,16 @@ Adlaire Group 全プロジェクトで共通利用する TypeScript 製フルス
 
 - **Deno 2.x / TypeScript 5.x** — npm 依存ゼロ・型安全ファースト
 - **明示的 Router API** — `createServer()` / `server.router.get()` / `server.router.group()`
-- **ミドルウェアチェーン** — `server.use()` による登録順処理
+- **ミドルウェアチェーン** — グローバル・ルートレベル・グループレベルで適用可能
 - **デュアルデプロイ対応** — Deno Deploy（Fetch ハンドラー）/ Adlaire Deploy（`Deno.serve`）
 - **バリデーター** — `Schema` 型 + `validate()` によるボディ検証
+- **CORS / Logger / Rate Limiter / ETag / Compress** — 組み込みミドルウェア
+- **静的ファイル配信 / Cookie / Content-Negotiation** — ユーティリティ
 - **Core 構成** — `Core/` ディレクトリにフラット配置
 
 ## 状態
 
-**Ver.1.0 — 仕様策定済み・実装未着手**
+**Ver.1.0 — Phase 1 実装済み**
 
 ## 仕様
 
@@ -56,13 +58,29 @@ api.get("/users", (ctx) => json({ users: [] }));
 api.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
 ```
 
-## ミドルウェア
+## ルートレベルミドルウェア
 
 ```typescript
-server.use(async (ctx, next) => {
-  console.log(`${ctx.req.method} ${ctx.req.url}`);
-  return await next();
+import { createServer, json, cors } from "@adlaire/fw";
+
+const server = createServer();
+
+// 特定ルートにのみミドルウェアを適用
+server.router.get("/admin", authMiddleware, (ctx) => {
+  return json({ admin: true });
 });
+```
+
+## 組み込みミドルウェア
+
+```typescript
+import { cors, logger, rateLimit, etag, compress } from "@adlaire/fw";
+
+server.use(logger());
+server.use(cors({ origin: "https://example.com", credentials: true }));
+server.use(rateLimit({ windowMs: 60_000, max: 100 }));
+server.use(etag());
+server.use(compress());
 ```
 
 ## バリデーター
@@ -79,6 +97,24 @@ server.router.post("/submit", async (ctx) => {
   }
   return json({ ok: true });
 });
+```
+
+## 静的ファイル配信
+
+```typescript
+import { serveStatic } from "@adlaire/fw";
+
+server.router.get("/static/*path", serveStatic({ root: "./public" }));
+```
+
+## テスト
+
+```typescript
+const server = createServer();
+server.router.get("/hello", () => json({ msg: "hi" }));
+
+const res = await server.testRequest("GET", "/hello");
+const body = await res.json(); // { msg: "hi" }
 ```
 
 ## LICENSE
