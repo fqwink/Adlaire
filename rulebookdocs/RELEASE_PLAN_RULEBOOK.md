@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.12-14 | 2026-04-10 | 実装済み |
+| **Adlaire Framework** | Ver.1.0 | — | 仕様策定済み・実装未着手 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,240 +1320,69 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.12-14**（2026-04-10 実装済み）
+**Ver.1.0**（仕様策定済み・実装未着手）
 
 ### VII-2. リリース計画
 
 #### Ver.1.0-0 — Phase 0: ルールブック策定
 
 - **種別**: Phase 0
-- **状態**: 実装済み（FRAMEWORK_RULEBOOK.md Ver.1.30）
+- **状態**: 実装済み（FRAMEWORK_RULEBOOK.md Ver.2.6）
 
 ---
 
 #### Ver.1.0-1 — Phase 1: コア実装
 
 - **種別**: 追加機能（初版）
-- **状態**: 実装済み
+- **状態**: 計画
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 1 | 追加機能 | HTTP サーバー起動（`Deno.serve` ベース） | §1.4 / §10.1 | 実装済 |
-| 2 | 追加機能 | ファイルベースルーティング（`routes/` 探索・URL マッチング・動的パラメータ） | §5 | 実装済 |
-| 3 | 追加機能 | 型安全システム（`defineHandler` / `Context<Params>` / ルートパラメータ自動型付け） | §6 / §7 | 実装済 |
-| 4 | 追加機能 | レスポンスヘルパー（`ctx.json()` / `ctx.html()` / エラーレスポンス） | §7.2 / §7.3 | 実装済 |
-| 5 | 追加機能 | 静的ファイル配信（`static/` ディレクトリ対応） | §9 | 実装済 |
+| 1 | 追加機能 | HTTP サーバー起動（`Deno.serve` / `createServer()` / `fetch` ハンドラー / `listen()`） | §1 / §4 | 計画 |
+| 2 | 追加機能 | Router クラス（`get/post/put/delete/patch` / `group()` / `match()` / 動的パラメータ） | §7 | 計画 |
+| 3 | 追加機能 | 型定義（`Context` / `Handler` / `Middleware` / `ErrorHandler` / `ValidationError` / `Schema` / `Rule` / `Route` / `Method` / `HTTPError` / `ErrorResponse`） | §5 | 計画 |
+| 4 | 追加機能 | レスポンスヘルパー（`json()` / `text()` / `send()`） | §6 | 計画 |
+| 5 | 追加機能 | バリデーター（`validate()` / `Schema` / `Rule`） | §8.1 | 計画 |
 
 ---
 
 #### Ver.1.1-2 — Phase 2: ミドルウェア・CLI
 
 - **種別**: 追加機能
-- **状態**: 実装済み
+- **状態**: 計画
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 6 | 追加機能 | ミドルウェア（`_middleware.ts` チェーン・`defineMiddleware` / 状態型付け） | §8 | 実装済 |
-| 7 | 追加機能 | CLI: `adlaire new`（プロジェクトテンプレート生成） | §11 | 実装済 |
-| 8 | 追加機能 | CLI: `adlaire dev`（開発サーバー・ファイル監視リロード） | §11 | 実装済 |
-| 9 | 追加機能 | CLI: `adlaire check` / `adlaire routes`（型検証・ルート一覧） | §11 | 実装済 |
-| 10 | 追加機能 | CLI: `adlaire build --target=deno` / `--target=js` | §10.3 / §11 | 実装済 |
+| 6 | 追加機能 | ミドルウェアチェーン（`server.use()` / 状態型付け） | §9 | 計画 |
+| 7 | 追加機能 | CLI: `adlaire-fw new`（プロジェクトテンプレート生成） | §12 | 計画 |
+| 8 | 追加機能 | CLI: `adlaire-fw dev`（開発サーバー起動） | §12 | 計画 |
+| 9 | 追加機能 | CLI: `adlaire-fw check`（型検証） | §12 | 計画 |
+| 10 | 追加機能 | CLI: `adlaire-fw routes`（ルート一覧） | §12 | 計画 |
 
 ---
 
-#### Ver.1.1-3 — バグ修正
-
-- **種別**: バグ修正（精査 3件）
-- **状態**: 実装済み
-
-| # | 深刻度 | 対象 | 概要 | 状態 |
-|:-:|:------:|------|------|:----:|
-| 1 | 重大 | `router.ts` | ミドルウェアプレフィックスが `/admin` と `/administrator` を区別しない | 実装済 |
-| 2 | 重大 | `router.ts` | `file://` URL 生成でスペース含むパスが失敗 | 実装済 |
-| 3 | 中程度 | `cli/cmd_new.ts` | 生成プロジェクトの import map が存在しないパスを参照 | 実装済 |
-
----
-
-#### Ver.1.2-4 — エラーハンドラー + ctx.query / ctx.body / ctx.cookies
+#### Ver.1.2-3 — Phase 3: デプロイ・追加機能
 
 - **種別**: 追加機能
-- **状態**: 実装済み
+- **状態**: 計画
 
 | # | 種別 | 概要 | 仕様参照 | 状態 |
 |:-:|------|------|---------|:----:|
-| 11 | 追加機能 | `_error.ts` / `_404.ts` ルーター組み込み（最長プレフィックスマッチ） | §5.5 | 実装済 |
-| 12 | 追加機能 | `ctx.query` — クエリパラメータ型安全アクセス | §6.5 | 実装済 |
-| 13 | 追加機能 | `ctx.body<T>(guard?)` — JSON ボディパース + 型ガード・`ValidationError` | §6.6 | 実装済 |
-| 14 | 追加機能 | `ctx.cookies` — Cookie 読み書き・レスポンス自動反映 | §6.7 | 実装済 |
+| 11 | 追加機能 | SSE（Server-Sent Events）レスポンス生成 | §4 | 計画 |
+| 12 | 追加機能 | WebSocket アップグレードサポート | §4 | 計画 |
+| 13 | 追加機能 | サーバー起動・停止ライフサイクルフック | §4 | 計画 |
+| 14 | 追加機能 | WebSocket 接続グループ管理・ブロードキャスト | §4 | 計画 |
+| 15 | 追加機能 | multipart/form-data・urlencoded 型安全パース | §4 | 計画 |
+| 16 | 追加機能 | 複数環境変数の一括スキーマ定義・型変換・バリデーション（`loadEnv()`） | §6.2 | 計画 |
+| 17 | 追加機能 | `adlaire-fw deploy` — Adlaire Deploy API トリガー CLI | §12 | 計画 |
 
 ---
-
-#### Ver.1.3-5 — 組み込みミドルウェア + WebSocket サポート
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 15 | 追加機能 | `cors(options?)` — CORS ヘッダー設定・Preflight 204 応答 | §8.5 | 実装済 |
-| 16 | 追加機能 | `logger()` — リクエストログ | §8.5 | 実装済 |
-| 17 | 追加機能 | `rateLimit(options?)` — IP ベースのレートリミット・429 応答 | §8.5 | 実装済 |
-| 18 | 追加機能 | `compress()` — gzip / deflate 圧縮 | §8.5 | 実装済 |
-| 19 | 追加機能 | `ctx.upgradeWebSocket(handlers)` — WebSocket アップグレード | §6.8 | 実装済 |
-
----
-
-#### Ver.1.4-6 — SSE サポート + adlaire deploy CLI
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 20 | 追加機能 | `ctx.sse(callback)` — Server-Sent Events レスポンス生成 | §6.9 | 実装済 |
-| 21 | 追加機能 | `adlaire deploy --host=<URL> --project=<ID>` — Adlaire Deploy API トリガー | §11.3 | 実装済 |
-
----
-
-#### Ver.1.5-7 — ルートグループ + getEnv()
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 22 | 追加機能 | ルートグループ `(group-name)` — URL に影響しない透過ディレクトリ | §5.6 | 実装済 |
-| 23 | 追加機能 | `getEnv(key, fallback?)` — 型安全環境変数アクセサ | §10.7 | 実装済 |
-
----
-
-#### Ver.1.6-8 — jwtAuth() + csrf()
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 24 | 追加機能 | `jwtAuth(options)` — JWT Bearer 認証ミドルウェア（WebCrypto API / HS256） | §8.6 | 実装済 |
-| 25 | 追加機能 | `csrf(options?)` — CSRF 二重送信 Cookie 保護ミドルウェア | §8.7 | 実装済 |
-
----
-
-#### Ver.1.7-9 — securityHeaders() + requestId()
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 26 | 追加機能 | `securityHeaders(options?)` — セキュリティヘッダー一括付与ミドルウェア | §8.8 | 実装済 |
-| 27 | 追加機能 | `requestId(options?)` — リクエスト ID 生成・ctx.state 注入・レスポンスヘッダー付与 | §8.9 | 実装済 |
-
----
-
-#### Ver.1.8-10 — logger format 拡張 + cache()
-
-- **種別**: 機能改良 + 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 28 | 機能改良 | `logger(options?)` — `format: "json"` オプション追加（JSON Lines 出力） | §8.5 | 実装済 |
-| 29 | 追加機能 | `cache(options?)` — `Cache-Control` ヘッダー設定ミドルウェア | §8.10 | 実装済 |
-
----
-
-#### Ver.1.9-11 — ctx.sendFile() + ctx.negotiate()
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 30 | 追加機能 | `ctx.sendFile(path, options?)` — 任意ファイル配信（MIME 自動判定・Range 未対応） | §6.10 | 実装済 |
-| 31 | 追加機能 | `ctx.negotiate(handlers)` — Accept ヘッダーによるコンテンツネゴシエーション | §6.11 | 実装済 |
-
----
-
-#### Ver.1.10-12 — ctx.formData<T>() + defineEnvSchema()
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 32 | 追加機能 | `ctx.formData<T>(guard?)` — multipart/form-data・urlencoded 型安全パース | §6.12 | 実装済 |
-| 33 | 追加機能 | `defineEnvSchema(schema)` — 複数環境変数の一括スキーマ定義・型変換・バリデーション | §10.8 | 実装済 |
-
----
-
-#### Ver.1.11-13 — onStart / onStop フック + WebSocketRoom
-
-- **種別**: 追加機能
-- **状態**: 実装済み
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 34 | 追加機能 | `onStart(port)` / `onStop()` ライフサイクルフック（`adlaire.config.ts` 設定） | §4.2 | 実装済 |
-| 35 | 追加機能 | `WebSocketRoom` — WebSocket 接続グループ管理・ブロードキャスト | §6.13 | 実装済 |
-
----
-
-#### Ver.1.12-14 — バグ修正（56件精査・10件修正）
-
-- **種別**: バグ修正
-- **状態**: 実装済み
-- **精査**: 全12ファイル56項目精査（重大3件・中程度4件・軽微3件）
-
-| # | 深刻度 | 対象 | 概要 | 状態 |
-|:-:|:------:|------|------|:----:|
-| 1 | 重大 | `builtin_middleware.ts` | CORS credentials + wildcard origin RFC 違反 | 実装済 |
-| 2 | 重大 | `builtin_middleware.ts` | rateLimit Map メモリリーク | 実装済 |
-| 3 | 重大 | `context.ts` | SSE data マルチライン未対応（RFC 8895 違反） | 実装済 |
-| 4 | 中程度 | `cookies.ts` | Cookie name の不正な encodeURIComponent | 実装済 |
-| 5 | 中程度 | `context.ts` | sendFile Content-Disposition filename 未エスケープ | 実装済 |
-| 6 | 中程度 | `server.ts` | handleStop 二重呼び出し | 実装済 |
-| 7 | 中程度 | `builtin_middleware.ts` | jwtAuth algorithms オプション未使用 | 実装済 |
-| 8 | 軽微 | `env_schema.ts` | 空文字列が number 0 に暗黙変換 | 実装済 |
-| 9 | 軽微 | `context.ts` | formData 同名フィールド上書き | 実装済 |
-| 10 | 軽微 | `builtin_middleware.ts` | compress 二重圧縮 | 実装済 |
-
----
-
-#### Ver.1.2-3（旧計画 → 組み替え）— Phase 3: デプロイ対応
-
-- **種別**: 追加機能
-- **状態**: 計画（`adlaire build` は Ver.1.1-2 で実装済み。デュアルデプロイ自動判定は未実装）
-
-| # | 種別 | 概要 | 仕様参照 | 状態 |
-|:-:|------|------|---------|:----:|
-| 36 | 追加機能 | デュアルデプロイ対応（Deno Deploy / Adlaire Deploy 自動判定） | §10.5 / §10.6 | 計画 |
-
----
-
-#### Islands アーキテクチャ（未決定）
-
-- **状態**: Islands アーキテクチャの採否が確定した際に計画策定する。
 
 ### VII-3. リリース履歴
 
 | バージョン | リリース日 | 種別 | 概要 |
 |-----------|-----------|------|------|
-| **Ver.1.12-14** | 2026-04-10 | バグ修正 | 56件精査・10件修正（CORS RFC違反・rateLimit メモリリーク・SSE マルチライン等） |
-| **Ver.1.11-13** | 2026-04-10 | 追加機能 | `onStart`/`onStop` ライフサイクルフック・`WebSocketRoom` 接続マネージャー |
-| **Ver.1.10-12** | 2026-04-10 | 追加機能 | `ctx.formData<T>()` フォームデータパース・`defineEnvSchema()` 環境変数スキーマ |
-| **Ver.1.9-11** | 2026-04-10 | 追加機能 | `ctx.sendFile()` ファイル配信・`ctx.negotiate()` コンテンツネゴシエーション |
-| **Ver.1.8-10** | 2026-04-10 | 機能改良+追加 | `logger(format)` JSON Lines 出力・`cache()` Cache-Control ヘッダー |
-| **Ver.1.7-9** | 2026-04-10 | 追加機能 | `securityHeaders()` セキュリティヘッダー・`requestId()` リクエスト ID |
-| **Ver.1.6-8** | 2026-04-10 | 追加機能 | `jwtAuth()` JWT 認証・`csrf()` CSRF 保護 |
-| **Ver.1.5-7** | 2026-04-10 | 追加機能 | ルートグループ（`(group)`）・`getEnv()` 型安全環境変数アクセサ |
-| **Ver.1.4-6** | 2026-04-10 | 追加機能 | SSE（`ctx.sse()`）・`adlaire deploy` CLI |
-| **Ver.1.3-5** | 2026-04-10 | 追加機能 | 組み込みミドルウェア（cors/logger/rateLimit/compress）・WebSocket サポート |
-| **Ver.1.2-4** | 2026-04-10 | 追加機能 | `_error.ts`/`_404.ts` 組み込み・`ctx.query`/`ctx.body<T>()`/`ctx.cookies` |
-| **Ver.1.1-3** | 2026-04-10 | バグ修正 | ミドルウェアプレフィックス・file:// URL エンコード・import map パス修正（3件） |
-| **Ver.1.1-2** | 2026-04-10 | 追加機能 | Phase 2: CLI ツール全種（new/dev/build/check/routes） |
-| **Ver.1.0-1** | 2026-04-10 | 追加機能 | Phase 1: HTTP サーバー・ルーティング・ハンドラー・レスポンスヘルパー |
-| **Ver.1.0-0** | — | Phase 0 | ルールブック策定（FRAMEWORK_RULEBOOK.md） |
+| **Ver.1.0-0** | 2026-04-11 | Phase 0 | ルールブック策定（FRAMEWORK_RULEBOOK.md Ver.2.6） |
 
 ---
 
