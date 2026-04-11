@@ -10,6 +10,6 @@
 **日付**: 2026-04-11
 **種別**: Phase 0
 
-- `FRAMEWORK_RULEBOOK.md` Ver.2.6 策定完了（設計仕様書 Version 1.0, 2025年 に基づく全面改訂）
+- `FRAMEWORK_RULEBOOK.md` Ver.1.0 策定完了（フルスタック Web フレームワーク / Core/ フラット構成 / any 禁止絶対原則 / フロントエンド §12 収録）
 
 ---

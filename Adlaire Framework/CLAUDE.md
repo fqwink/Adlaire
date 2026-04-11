@@ -18,9 +18,11 @@
 
 | パス | 内容 |
 |------|------|
-| `rulebookdocs/FRAMEWORK_RULEBOOK.md` | **正式仕様書**（唯一の仕様管理文書） |
+| `rulebookdocs/FRAMEWORK_RULEBOOK.md` | **正式仕様書**（唯一の仕様管理文書）— **文書バージョン Ver.1.0 固定** |
 | `rulebookdocs/REVISION_HISTORY.md` | ルールブック改訂履歴 |
 | `docs/CHANGES.md` | 変更履歴 |
+
+> `FRAMEWORK_RULEBOOK.md` の文書バージョンは **Ver.1.0 で固定**する。仕様を変更・追記しても文書バージョンをインクリメントしない。
 
 ---
 
