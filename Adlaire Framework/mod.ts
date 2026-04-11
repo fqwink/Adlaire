@@ -26,6 +26,9 @@ export type {
   Rule,
   RuleBase,
   Schema,
+  Simplify,
+  StrictQueryResult,
+  TypedHandler,
   ValidationError,
 } from "./Core/types.ts";
 export { HTTPError } from "./Core/types.ts";

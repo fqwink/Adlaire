@@ -5,6 +5,25 @@
 
 ---
 
+## Ver.1.1-5 — 型安全強化・機能改良
+
+**日付**: 2026-04-11
+**種別**: 追加機能・機能改良
+
+### 型安全強化
+
+- `TypedHandler<Path, B?, Q?, S?>`: パスリテラル型から `ctx.params` を自動推論するハンドラー型エイリアス（`Handler<ExtractRouteParams<Path>, ...>` の省略形）
+- `Simplify<T>`: mapped type / intersection 型をフラット展開して IDE 表示を改善するユーティリティ型
+- `StrictQueryResult<S>`: `QueryResult<S>` の全フィールドから `undefined` を除去するユーティリティ型
+- `EnvRule` に `"enum"` 型を追加: `values: readonly string[]` で列挙値制限 + リテラル Union 型推論（`EnvValueOf<R>` を `infer V extends readonly string[]` で強化）
+- `RouteGroup` の全ルート登録メソッド（`get / post / put / delete / patch / head / options`）に `ExtractRouteParams<Path>` 自動推論オーバーロードを追加
+
+### 機能改良
+
+- `loadEnv()`: `rule.type === "enum"` の場合、`values` 外の値に対して `Error` を throw するバリデーションを追加
+
+---
+
 ## Ver.1.1-4 — セキュリティ強化・型安全強化・機能改良
 
 **日付**: 2026-04-11

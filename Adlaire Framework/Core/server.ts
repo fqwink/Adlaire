@@ -329,6 +329,15 @@ export async function loadEnv<S extends EnvSchema>(
       case "boolean":
         result[key] = rawVal === "true";
         break;
+      case "enum": {
+        if (!(rule.values as readonly string[]).includes(rawVal)) {
+          throw new Error(
+            `loadEnv: "${key}" は ${(rule.values as readonly string[]).join(", ")} のいずれかである必要があります: "${rawVal}"`,
+          );
+        }
+        result[key] = rawVal;
+        break;
+      }
     }
   }
 

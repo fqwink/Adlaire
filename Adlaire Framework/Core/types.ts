@@ -119,14 +119,17 @@ export type EnvRule =
   | { type: "string"; required?: boolean; default?: string }
   | { type: "number"; required?: boolean; default?: number }
   | { type: "boolean"; required?: boolean; default?: boolean }
-  | { type: "port"; required?: boolean; default?: number };
+  | { type: "port"; required?: boolean; default?: number }
+  | { type: "enum"; values: readonly string[]; required?: boolean; default?: string };
 
 export type EnvSchema = Record<string, EnvRule>;
 
 // ルール単体から値の TypeScript 型を導出するヘルパー型
+// enum は values の要素リテラル Union 型を生成する
 type EnvValueOf<R extends EnvRule> =
   R extends { type: "number" | "port" } ? number :
   R extends { type: "boolean" } ? boolean :
+  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
   string;
 
 // required: true または default 指定があれば非 undefined。それ以外は T | undefined
@@ -211,6 +214,31 @@ type InferRuleValue<R extends Rule> =
 export type InferSchema<S extends Schema> =
   { [K in keyof S as S[K] extends { required: true } ? K : never]-?: InferRuleValue<S[K]> } &
   { [K in keyof S as S[K] extends { required: true } ? never : K]?: InferRuleValue<S[K]> };
+
+// ------------------------------------------------------------
+// §5.10 TypedHandler
+// ------------------------------------------------------------
+
+export type TypedHandler<
+  Path extends string,
+  B = unknown,
+  Q extends Record<string, string> = Record<string, string>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+> = Handler<ExtractRouteParams<Path>, B, Q, S>;
+
+// ------------------------------------------------------------
+// §5.11 Simplify
+// ------------------------------------------------------------
+
+export type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+// ------------------------------------------------------------
+// §5.12 StrictQueryResult
+// ------------------------------------------------------------
+
+export type StrictQueryResult<S extends QuerySchema> = {
+  readonly [K in keyof QueryResult<S>]-?: NonNullable<QueryResult<S>[K]>
+};
 
 // ------------------------------------------------------------
 // §8.10 ContentSecurityPolicy（secureHeaders 用）

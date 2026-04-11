@@ -340,14 +340,17 @@ type EnvRule =
   | { type: "string";  required?: boolean; default?: string }
   | { type: "number";  required?: boolean; default?: number }
   | { type: "boolean"; required?: boolean; default?: boolean }
-  | { type: "port";    required?: boolean; default?: number };  // 1〜65535 の整数
+  | { type: "port";    required?: boolean; default?: number }       // 1〜65535 の整数
+  | { type: "enum";    values: readonly string[]; required?: boolean; default?: string };  // 列挙値
 
 type EnvSchema = Record<string, EnvRule>;
 
 // ルール単体から値の TypeScript 型を導出するヘルパー型
+// enum は values の要素リテラル Union 型を生成する
 type EnvValueOf<R extends EnvRule> =
   R extends { type: "number" | "port" } ? number :
   R extends { type: "boolean" } ? boolean :
+  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
   string;
 
 // スキーマから変換された値の型を導出する Mapped Type
@@ -359,6 +362,9 @@ type EnvResult<S extends EnvSchema> = {
       : EnvValueOf<S[K]> | undefined
 };
 ```
+
+- `"enum"` 型: `values` 外の値が来た場合は `Error` を throw する
+- `"enum"` の型推論: `values: ["dev","staging","prod"] as const` → `"dev" | "staging" | "prod"`
 
 > **破壊的変更（Ver.1.1-4）**: `required` なし・`default` なしのフィールドは `T | undefined` を返す。以前はゼロ値（`0` / `false` / `""`）を返していた。
 
@@ -492,6 +498,93 @@ type CreateUserBody = InferSchema<typeof createUserSchema>;
 server.router.post("/users", (ctx) => {
   const body = assertBody<CreateUserBody>(ctx.body, createUserSchema);
   return json({ name: body.name, age: body.age });
+});
+```
+
+## 5.10 TypedHandler
+
+パスリテラル型から `ctx.params` の型を自動推論するハンドラー型エイリアス。`Handler<ExtractRouteParams<Path>, ...>` の省略形。
+
+```typescript
+type TypedHandler<
+  Path extends string,
+  B = unknown,
+  Q extends Record<string, string> = Record<string, string>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+> = Handler<ExtractRouteParams<Path>, B, Q, S>;
+```
+
+### 使用例
+
+```typescript
+import { type TypedHandler, json } from "@adlaire/fw";
+
+// Handler<ExtractRouteParams<"/users/:id">> の省略形
+const userHandler: TypedHandler<"/users/:id"> = (ctx) => {
+  const id = ctx.params.id;   // string（型付き）
+  return json({ id });
+};
+
+// Body や State も型付けする場合
+type AuthState = { userId: string };
+const postHandler: TypedHandler<"/posts/:postId", { title: string }, Record<string, string>, AuthState> = (ctx) => {
+  const postId = ctx.params.postId;       // string
+  const userId = ctx.state.userId;        // string
+  return json({ postId, userId });
+};
+```
+
+## 5.11 Simplify
+
+TypeScript の mapped type や intersection 型を展開して可読性を向上させるユーティリティ型。IDE のホバー表示で `{ [K in ...] } & { ... }` のまま表示される場合に使用する。
+
+```typescript
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
+```
+
+### 使用例
+
+```typescript
+import { type InferSchema, type Simplify } from "@adlaire/fw";
+
+// InferSchema の結果をフラット表示する
+type RawBody = InferSchema<typeof schema>;
+// IDE 表示: { [K in ...]-?: ... } & { [K in ...]?: ... }
+
+type Body = Simplify<InferSchema<typeof schema>>;
+// IDE 表示: { name: string; age: number; bio?: string | undefined }
+```
+
+## 5.12 StrictQueryResult
+
+`QueryResult<S>` の `T | undefined` フィールドをすべて非 `undefined` に変換する型。デフォルト値ガード済みの値を扱う際に使用する。
+
+```typescript
+type StrictQueryResult<S extends QuerySchema> = {
+  readonly [K in keyof QueryResult<S>]-?: NonNullable<QueryResult<S>[K]>
+};
+```
+
+### 使用例
+
+```typescript
+import { type StrictQueryResult, parseQuery, json } from "@adlaire/fw";
+
+const schema = {
+  page:  { type: "number" as const, default: 1, integer: true },
+  limit: { type: "number" as const, default: 20, integer: true },
+  sort:  { type: "enum" as const, values: ["asc", "desc"] as const, default: "asc" },
+} as const;
+
+server.router.get("/items", (ctx) => {
+  const q = parseQuery(ctx.query, schema);
+  // q.page は number（default があるので非 undefined）
+  // q.sort は "asc" | "desc"（default があるので非 undefined）
+
+  // StrictQueryResult は全フィールドが非 undefined
+  const strict = q as StrictQueryResult<typeof schema>;
+  const page: number = strict.page;       // undefined なし
+  return json({ page });
 });
 ```
 
@@ -680,6 +773,15 @@ server.router.get("/posts/:postId/comments/:commentId", (ctx) => {
 
 - ルートレベルミドルウェア付きオーバーロードでも同様に型推論が機能する
 - `{ name: "..." }` の RouteOptions を渡す場合も型推論を維持する
+- `RouteGroup` の各ルート登録メソッドも同様の型付きオーバーロードをサポートする
+
+```typescript
+const admin = server.router.group("/admin");
+admin.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;   // string（型付き）
+  return json({ id });
+});
+```
 
 ---
 
