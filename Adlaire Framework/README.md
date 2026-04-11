@@ -8,7 +8,7 @@ Adlaire Group 全プロジェクトで共通利用する TypeScript 製バック
 - **明示的 Router API** — `createServer()` / `server.get()` / `server.group()`
 - **ミドルウェアチェーン** — `server.use()` による登録順処理
 - **デュアルデプロイ対応** — Deno Deploy（Fetch ハンドラー）/ Adlaire Deploy（`Deno.serve`）
-- **組み込みバリデーター** — `Schema` 型 + `validate()` によるボディ検証
+- **バリデーター** — `Schema` 型 + `validate()` によるボディ検証
 - **5 ファイル Core 構成** — `types` / `server` / `router` / `middleware` / `response`
 
 ## 状態

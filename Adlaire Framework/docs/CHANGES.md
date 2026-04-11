@@ -5,6 +5,15 @@
 
 ---
 
+## Ver.1.14-16 — 組み込みミドルウェア廃止
+
+**日付**: 2026-04-11
+**種別**: 廃止
+
+- `middleware.ts` の組み込みミドルウェア群（cors / logger / rateLimit / compress / jwtAuth / csrf / securityHeaders / requestId / cache）を廃止
+
+---
+
 ## Ver.1.13-15 — 静的ファイル配信廃止
 
 **日付**: 2026-04-11
