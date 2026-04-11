@@ -357,7 +357,18 @@ App クラス・サーバー起動・エラーハンドラー・env 管理を担
 | `use()` | `use(mw: Middleware): this` | ミドルウェアを登録順に追加 |
 | `onError()` | `onError(h: ErrorHandler): this` | エラーハンドラーを登録 |
 | `fetch` | `(req: Request) => Promise<Response>` | Deno Deploy 向け Fetch ハンドラー |
-| `listen()` | `listen(port: number, cb?: () => void)` | Adlaire Deploy 向け起動 |
+| `listen()` | `listen(port: number, cb?: () => void): Deno.HttpServer` | Adlaire Deploy 向け起動。`Deno.HttpServer` を返す |
+| `close()` | `close(): Promise<void>` | グレースフルシャットダウン。処理中リクエストの完了を待機してから停止 |
+| `testRequest()` | `testRequest(method: string, path: string, options?): Promise<Response>` | サーバー起動なしでルートをテスト。内部で `fetch` ハンドラーを直接呼び出す |
+
+### testRequest() オプション
+
+```typescript
+interface TestRequestOptions {
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+```
 
 ```typescript
 // ファクトリ関数でインスタンスを生成
@@ -442,6 +453,46 @@ const env = await loadEnv({
 |---------|------|
 | `HEAD` | 明示的に `head()` で登録したハンドラーを優先する。未登録の場合、対応する `GET` ハンドラーを実行しボディを除いたレスポンスを返す |
 | `OPTIONS` | `cors()` ミドルウェアがプリフライトを処理する。`options()` で明示登録した場合はミドルウェアより後に呼ばれる |
+
+## 7.4 ルートレベルミドルウェア
+
+ハンドラーの前にミドルウェアを挟むことで、特定ルート/グループのみにミドルウェアを適用する。
+
+```typescript
+// ルート単位: ハンドラーの前にミドルウェアを可変長で渡す
+server.router.get("/admin", authMiddleware, (ctx) => {
+  return json({ ok: true });
+});
+
+// 複数ミドルウェア
+server.router.post("/api/data", authMiddleware, rateLimitMiddleware, (ctx) => {
+  return json(ctx.body);
+});
+
+// グループ単位: group.use() で登録
+const admin = server.router.group("/admin");
+admin.use(authMiddleware);
+admin.get("/dashboard", (ctx) => json({ page: "dashboard" }));
+```
+
+- ルートレベルミドルウェアはグローバルミドルウェア（`server.use()`）の後に実行される
+- グループの `use()` はそのグループ配下の全ルートに適用される
+- 最後の引数が `Handler`、それ以前が `Middleware`
+
+## 7.5 名前付きルート
+
+ルートに名前を付けてリバース URL 生成を行う。
+
+```typescript
+server.router.get("/users/:id", handler, { name: "users.show" });
+
+const url = server.router.url("users.show", { id: "123" });
+// → "/users/123"
+```
+
+| メソッド | 説明 |
+|---------|------|
+| `url(name, params?)` | 名前付きルートから URL を生成する。未登録の名前は `Error` を throw |
 
 ---
 
@@ -580,6 +631,71 @@ server.use(cors({
 }));
 ```
 
+## 8.3 ロガーミドルウェア
+
+```typescript
+function logger(options?: LoggerOptions): Middleware
+```
+
+```typescript
+interface LoggerOptions {
+  level?: "silent" | "info" | "debug";  // デフォルト: "info"
+}
+```
+
+- リクエストのメソッド・パス・ステータスコード・レスポンス時間をログ出力する
+- 出力先は `console.log`（外部依存なし）
+- `level: "silent"` でログ出力を抑制
+- `level: "debug"` でヘッダー情報も出力
+- 出力形式: `GET /users 200 12ms`
+
+## 8.4 レートリミッター
+
+```typescript
+function rateLimit(options: RateLimitOptions): Middleware
+```
+
+```typescript
+interface RateLimitOptions {
+  windowMs: number;                                // ウィンドウ期間（ミリ秒）
+  max: number;                                     // ウィンドウ内の最大リクエスト数
+  key?: (ctx: Context) => string;                  // クライアント識別キー（デフォルト: IP アドレス）
+  message?: string;                                // 429 レスポンスメッセージ
+}
+```
+
+- インメモリ固定ウィンドウカウンター
+- 超過時 `429 Too Many Requests` + `Retry-After` ヘッダーを返す
+- デフォルトキー: `ctx.req.headers.get("x-forwarded-for")` → `"unknown"`
+
+## 8.5 ETag ミドルウェア
+
+```typescript
+function etag(): Middleware
+```
+
+- `next()` 実行後、レスポンスボディから弱い ETag（`W/"<ハッシュ>"` 形式）を算出して `ETag` ヘッダーを付与する
+- ハッシュは `crypto.subtle.digest("SHA-256", body)` で生成（Web Crypto API）
+- リクエストの `If-None-Match` ヘッダーが ETag と一致した場合、`304 Not Modified`（ボディなし）を返す
+- ボディが空または `null` のレスポンスには ETag を付与しない
+
+## 8.6 応答圧縮ミドルウェア
+
+```typescript
+function compress(options?: CompressOptions): Middleware
+```
+
+```typescript
+interface CompressOptions {
+  threshold?: number;  // 圧縮対象の最小バイト数（デフォルト: 1024）
+}
+```
+
+- `Accept-Encoding` ヘッダーに基づき `gzip` / `deflate` を適用する
+- Web 標準 `CompressionStream` API を使用（外部依存なし）
+- `Content-Encoding` / `Vary: Accept-Encoding` を付与する
+- `threshold` 未満のレスポンスは圧縮しない
+
 ---
 
 # 9. response.ts　[Core]
@@ -607,6 +723,73 @@ server.router.get("/page", (ctx) => {
 
 server.router.get("/old-path", (ctx) => {
   return redirect("/new-path", 301);
+});
+```
+
+## 9.2 静的ファイル配信
+
+```typescript
+function serveStatic(options: StaticOptions): Handler
+```
+
+```typescript
+interface StaticOptions {
+  root: string;  // 配信ルートディレクトリ（絶対パスまたは実行ディレクトリ相対パス）
+}
+```
+
+- ワイルドカードルート `*path`（§7.2）と組み合わせて使用する
+- MIME タイプは拡張子から自動判定する
+- ディレクトリトラバーサル防御: パス正規化後に `root` 外を参照する場合は `403 Forbidden` を返す
+- ファイル未存在時は `404 Not Found` を返す
+
+### 使用例
+
+```typescript
+server.router.get("/static/*path", serveStatic({ root: "./public" }));
+```
+
+## 9.3 Cookie ヘルパー
+
+```typescript
+function getCookie(req: Request, name: string): string | null
+function setCookie(headers: Headers, name: string, value: string, options?: CookieOptions): void
+function deleteCookie(headers: Headers, name: string): void
+```
+
+```typescript
+interface CookieOptions {
+  maxAge?: number;       // 秒数
+  expires?: Date;
+  path?: string;         // デフォルト: "/"
+  domain?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+}
+```
+
+- Web 標準 `Cookie` / `Set-Cookie` ヘッダーのみ使用する
+- `deleteCookie` は `Max-Age=0` を設定して削除する
+
+## 9.4 Content-Negotiation
+
+```typescript
+function accepts(req: Request, ...types: string[]): string | null
+```
+
+- `Accept` ヘッダーをパースし、`types` の中から最も適合する Content-Type を返す
+- Quality 値（`q=`）を考慮する
+- マッチするものがない場合は `null` を返す
+
+### 使用例
+
+```typescript
+import { accepts, html, json } from "@adlaire/fw";
+
+server.router.get("/data", (ctx) => {
+  if (accepts(ctx.req, "text/html")) return html("<h1>Data</h1>");
+  return json({ data: [] });
 });
 ```
 
