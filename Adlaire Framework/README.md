@@ -1,7 +1,7 @@
-# Adlaire Framework（バックエンド）
+# Adlaire Framework
 
-Adlaire Framework はバックエンド用とフロントエンド用の 2 種類で構成される。
-本リポジトリはバックエンド用フレームワーク。
+Adlaire Group 全プロジェクトで共通利用する TypeScript 製フルスタック Web フレームワーク。
+バックエンドとフロントエンドを単一プロジェクト・単一 `Core/` 内で提供する。
 
 ## 概要
 
