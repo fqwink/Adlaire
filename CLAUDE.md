@@ -22,10 +22,10 @@
 | `Adlaire Static CMS/` | **Adlaire Static CMS** | Ver.3.0-47 | `Adlaire Static CMS/rulebookdocs/` |
 | `Adlaire License Server/` | **Adlaire License Server** | 初期実装済 | `Adlaire License Server/rulebookdocs/` |
 | `Adlaire BaaS/` | **Adlaire BaaS** | 仕様策定段階 | `Adlaire BaaS/rulebookdocs/` |
-| `Adlaire Deploy/` | **Adlaire Deploy** | Phase 0 完了 | `Adlaire Deploy/rulebookdocs/` |
+| `Adlaire Deploy/` | **Adlaire Deploy** | Ver.1.9-14 | `Adlaire Deploy/rulebookdocs/` |
 | `Adlaire Portal System/` | **Adlaire Portal System** | Ver.1.1 | `Adlaire Portal System/rulebookdocs/` |
 | `Adlaire Style/` | **Adlaire Style** | Ver.1.0-1 | `Adlaire Style/rulebookdocs/` |
-| `Adlaire Framework/` | **Adlaire Framework** | Phase 0 完了 | `Adlaire Framework/rulebookdocs/` |
+| `Adlaire Framework/` | **Adlaire Framework** | Ver.1.5-7 | `Adlaire Framework/rulebookdocs/` |
 
 ### Adlaire Static CMS (`Adlaire Static CMS/`)
 
