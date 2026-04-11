@@ -33,20 +33,22 @@
 - **Web 標準 API**（`Request` / `Response` / `URL` / `ReadableStream` / `crypto.subtle`）
 - **Deno 標準ライブラリ**（`jsr:@std/*` のみ許可）
 
-### 禁止事項（絶対原則）
+### 型安全方針（絶対原則）
+
+型安全は**フレームワーク自身の実装が決定・保証する**。Core 5 ファイルの実装において以下を遵守する。
+
+- `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
+- 動的な値には `unknown` を使用し、型ガードで絞り込む
+- 公開 API は型推論ファーストで設計し、利用者が型引数を省略できることを目標とする
+- `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
+- `Handler` は必ず `Response` を返す（`void` 禁止）
+
+### その他禁止事項（絶対原則）
 
 - `npm:` スペシャライザーのインポートを全面禁止（`jsr:@std/*` と Web 標準 API のみ）
-- `any` 型の使用禁止（`unknown` を使用し型ガードで絞り込む）
-- `// @ts-ignore`・`// @ts-expect-error`・`as any` の使用禁止
 - `node:` スペシャライザー（Node.js 互換レイヤー）の使用禁止
 - サードパーティ製 HTTP フレームワークへの依存禁止
 - `eval()`・`Function()` 等の動的コード実行禁止
-
-### TypeScript 実装規則
-
-- `strict: true`・`noImplicitAny: true`・`exactOptionalPropertyTypes: true` を必須とする（`deno.json` 設定）
-- すべての公開 API に明示的な型注釈を付与する
-- `Handler` は必ず `Response` を返す（`void` 禁止）
 
 ---
 

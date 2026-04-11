@@ -1,6 +1,6 @@
 # Adlaire Framework — フレームワーク仕様ルールブック
 
-> **文書バージョン: Ver.2.3**
+> **文書バージョン: Ver.2.4**
 > **最終更新: 2026-04-11**
 
 ---
@@ -11,7 +11,7 @@ Adlaire Group の全プロジェクトに適用される不変の規則。いか
 
 | 原則 | 内容 |
 |------|------|
-| **型安全** | フレームワーク全体に適用される不変の制約。開発者はフレームワーク全体を通じて型安全を変更・上書き・回避することを一切禁止する。`any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用不可。`unknown` を使用し型ガードで絞り込む。すべての公開 API に明示的な型注釈を付与する |
+| **型安全** | 型安全は**フレームワーク自身の実装が決定・保証する**。Core 5 ファイル（`types.ts` / `server.ts` / `router.ts` / `middleware.ts` / `response.ts`）において `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用を禁止する。動的な値には `unknown` を使用し型ガードで絞り込む。公開 API は型推論が十分に効くよう設計し、利用者が型引数を省略できることを目標とする |
 | **npm 禁止** | `npm:` スペシャライザーの使用を禁止。依存は Deno 標準ライブラリ（`jsr:@std/*`）と Web 標準 API のみ |
 
 ---
@@ -409,7 +409,7 @@ server.router.get("/admin", (ctx) => {
 
 | 制約 | 内容 |
 |------|------|
-| **型安全（絶対原則）** | フレームワーク全体を通じて開発者による変更・上書き・回避を一切禁止。`strict: true` 必須。`any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用不可 |
+| **型安全（絶対原則）** | 型安全はフレームワーク自身の実装が決定・保証する。Core 5 ファイルで `any` 型・`// @ts-ignore`・`// @ts-expect-error`・`as any` の使用を禁止。公開 API は型推論ファーストで設計し、利用者が型引数を省略できることを目標とする |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
 | **5 ファイル Core 構成** | `types` / `server` / `router` / `middleware` / `response` の 5 ファイルのみ。階層なし |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
