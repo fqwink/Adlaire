@@ -9,7 +9,6 @@ Adlaire Group 全プロジェクトで共通利用する TypeScript 製バック
 - **ミドルウェアチェーン** — `server.use()` による登録順処理
 - **デュアルデプロイ対応** — Deno Deploy（Fetch ハンドラー）/ Adlaire Deploy（`Deno.serve`）
 - **組み込みバリデーター** — `Schema` 型 + `validate()` によるボディ検証
-- **静的ファイル配信** — `serveStatic()` ミドルウェア
 - **5 ファイル Core 構成** — `types` / `server` / `router` / `middleware` / `response`
 
 ## 状態
