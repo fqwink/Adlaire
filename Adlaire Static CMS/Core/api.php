@@ -219,7 +219,7 @@ function handleApiLicense(string $method): void
         }
 
         $domain = $_SERVER['HTTP_HOST'] ?? '';
-        $version = defined('App::VERSION') ? App::VERSION : '';
+        $version = App::VERSION;
 
         $payload = json_encode([
             'system_key' => $systemKey,
@@ -394,10 +394,15 @@ function apiPageSave(FileStorage $storage): void
         }
     }
 
-    $status = $_POST['status'] ?? 'published';
-    if (!in_array($status, ['draft', 'published'], true)) {
-        apiError(400, 'Invalid status');
-        return;
+    if (isset($_POST['status'])) {
+        $status = $_POST['status'];
+        if (!in_array($status, ['draft', 'published'], true)) {
+            apiError(400, 'Invalid status');
+            return;
+        }
+    } else {
+        $existing = $storage->readPageData($slug);
+        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'draft';
     }
     $result = $storage->writePage($slug, $content, $format, $blocks, $status);
     if (!$result) {

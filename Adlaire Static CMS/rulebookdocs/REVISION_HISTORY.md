@@ -48,6 +48,7 @@
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| Ver.3.4 | 2026-04-12 | **§4.6「将来方針 — Adlaire Framework 採用」を白紙化・削除**。Adlaire Framework 廃止に伴い採用計画を全面撤廃。 |
 | Ver.3.3 | 2026-04-09 | **SPA 計画（Ver.3.0）を全面白紙**。§4.4（ES モジュール移行・SPA エントリポイント）・§4.5（管理 UI SPA アーキテクチャ）・§5.1（SPA ZIP 変更）・§11（SPA 廃止項目）を削除。§2.2 の `admin-ui.php` 廃止記述を復元（現役ファイルとして再定義）。§2.3 の require 順序に `admin-ui.php` を復元。§5 プロジェクト構成を SPA 前の状態に戻す（`ts/editInplace.ts` 復元、`ts/pages/` 削除、`js/` を個別ファイル形式に戻す）。§4.6 の §4.5 参照を除去。 |
 | Ver.3.2 | 2026-04-09 | §4.6「将来方針 — Adlaire Framework 採用」を改訂。TypeScript → PHP 自動変換計画（白紙）を削除。バックエンド（PHP）は変更なしと明記。Adlaire Framework 採用（時期未定）は確定事項として維持。 |
 | Ver.3.1 | 2026-04-06 | §4.6 将来方針「Adlaire Framework 採用（時期未定）」を新設。TypeScript → PHP 自動変換機能（Framework 付随）の採用方針・現行 Ver.3.x との整合方針を記録。 |

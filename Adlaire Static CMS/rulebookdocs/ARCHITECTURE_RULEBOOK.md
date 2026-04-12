@@ -398,29 +398,6 @@ main push
 
 ---
 
-## 4.6 将来方針 — Adlaire Framework 採用（時期未定）
-
-> 本セクションは**将来の確定計画**を記録する。現行 Ver.3.x の実装要件ではない。
-
-### 4.6.1 Adlaire Framework 採用方針
-
-Adlaire Static CMS は将来的に **Adlaire Framework** を採用する。時期は未定。
-
-採用により、以下の変化が生じる:
-
-| 項目 | 現行 Ver.3.x | Adlaire Framework 採用後 |
-|------|-------------|------------------------|
-| フロントエンド | TypeScript SPA（esbuild） | TypeScript（Adlaire Framework） |
-| バックエンド | PHP（変更なし） | PHP（変更なし） |
-
-### 4.6.2 現行アーキテクチャとの整合
-
-- データフォーマット（JSON フラットファイル）・API 設計は Adlaire Framework 採用後も変更しない。
-- TypeScript による既存クライアント機能（エディタ・Markdown 等）は Framework 採用時に移行する。
-
----
-
-
 # 9. バージョン規則・廃止ポリシー
 
 > `CHARTER.md` §5（バージョン規則）および §6（廃止ポリシー）を参照。

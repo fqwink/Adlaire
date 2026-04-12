@@ -16,8 +16,8 @@ final class App
 {
     public const VERSION_MAJOR = 3;
     public const VERSION_MINOR = 0;
-    public const VERSION_BUILD = 47;
-    public const VERSION = 'Ver.3.0-47';
+    public const VERSION_BUILD = 48;
+    public const VERSION = 'Ver.3.0-48';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -204,10 +204,6 @@ final class App
             $_SESSION = [];
             if (session_status() === PHP_SESSION_ACTIVE) {
                 session_regenerate_id(true);
-                session_destroy();
-            }
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                // session_destroy() failed; force cleanup
                 session_destroy();
             }
             session_start();
