@@ -111,8 +111,9 @@ Adlaire Framework/
 ├── cli.ts                # CLI エントリーポイント（adlaire-fw コマンド）
 ├── deno.json             # Deno 設定（サブパスエクスポート定義）
 └── Core/                 # 【Adlaire Group 専用】サブディレクトリ分割禁止・フラット配置
-    ├── types.ts          # 全型定義（@adlaire/fw/types）
-    ├── server.ts         # App クラス・起動・エラーハンドラー・env（@adlaire/fw/server）
+    ├── types.ts          # フレームワーク共通型定義（@adlaire/fw/types）
+    ├── server.ts         # App クラス・起動・エラーハンドラー（@adlaire/fw/server）
+    ├── env.ts            # loadEnv / EnvSchema / EnvRule / EnvResult（@adlaire/fw/env）
     ├── router.ts         # Router（@adlaire/fw/router）
     ├── middleware.ts     # cors / secureHeaders / hsts / ipFilter / csrfProtection（@adlaire/fw/middleware）
     ├── transport.ts      # logger / rateLimit / etag / compress / bodyLimit / requestId / timeout（@adlaire/fw/transport）
@@ -124,9 +125,24 @@ Adlaire Framework/
 
 `Core/` 内のファイルはすべて同格・同階層とする。サブディレクトリによる分割を禁止する。
 
+### 依存グラフ制約
+
+`Core/` 内のモジュール間依存は以下のルールに従う。
+
+| ルール | 内容 |
+|--------|------|
+| **types.ts は依存なし** | 他の Core ファイルへの依存を持たない。すべての型を自己完結させる |
+| **env.ts は依存なし** | 環境変数スキーマ型と `loadEnv()` を自己完結させる。他の Core ファイルに依存しない |
+| **server.ts の依存先** | `types.ts` / `router.ts` のみ。`response.ts` に依存しない |
+| **static.ts の依存先** | `types.ts` のみ。`response.ts` に依存しない |
+| **その他** | `types.ts` のみに依存する（router / middleware / transport / validate / response / helpers） |
+| **循環依存禁止** | Core ファイル間の循環依存を禁止する |
+
+エラーレスポンスが必要な `server.ts` / `static.ts` は `new Response(JSON.stringify(...))` でインライン構築し、`response.ts` の `json()` を使用しない。
+
 ## 3.2 サブパスエクスポート
 
-`deno.json` の `"exports"` に各 Core モジュールのサブパスを定義する。利用者は必要なモジュールのみをインポートできる。`mod.ts` は廃止済み（Ver.2.0）。
+`deno.json` の `"exports"` に各 Core モジュールのサブパスを定義する。利用者は必要なモジュールのみをインポートできる。`mod.ts` は廃止済み（Ver.1.2-7）。
 
 ```typescript
 // ✅ 正規のインポート（サブパス単位）
@@ -151,9 +167,10 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```json
 {
   "name": "@adlaire/fw",
-  "version": "1.2.7",
+  "version": "1.3.8",
   "exports": {
     "./server":     "./Core/server.ts",
+    "./env":        "./Core/env.ts",
     "./router":     "./Core/router.ts",
     "./middleware": "./Core/middleware.ts",
     "./transport":  "./Core/transport.ts",
@@ -174,15 +191,16 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 
 | サブパス | ファイル | 主なエクスポート |
 |---------|---------|----------------|
-| `@adlaire/fw/server` | `Core/server.ts` | `createServer` / `App` / `loadEnv` |
+| `@adlaire/fw/server` | `Core/server.ts` | `createServer` / `App` / `TestResponse` |
+| `@adlaire/fw/env` | `Core/env.ts` | `loadEnv` / `EnvRule` / `EnvSchema` / `EnvResult` |
 | `@adlaire/fw/router` | `Core/router.ts` | `Router` / `RouteGroup` |
-| `@adlaire/fw/middleware` | `Core/middleware.ts` | `cors` / `secureHeaders` / `hsts` / `ipFilter` / `csrfProtection` |
+| `@adlaire/fw/middleware` | `Core/middleware.ts` | `cors` / `secureHeaders` / `hsts` / `ipFilter` / `csrfProtection` / `ContentSecurityPolicy` |
 | `@adlaire/fw/transport` | `Core/transport.ts` | `logger` / `rateLimit` / `etag` / `compress` / `bodyLimit` / `requestId` / `timeout` |
 | `@adlaire/fw/validate` | `Core/validate.ts` | `validate` / `assertBody` |
 | `@adlaire/fw/response` | `Core/response.ts` | `json` / `text` / `html` / `send` / `redirect` / `sse` / `upgradeWebSocket` / `SSEWriter` |
 | `@adlaire/fw/static` | `Core/static.ts` | `serveStatic` |
 | `@adlaire/fw/helpers` | `Core/helpers.ts` | `parseQuery` / `parseParam` / `getCookie` / `setCookie` / `deleteCookie` / `accepts` / `sanitizeHtml` |
-| `@adlaire/fw/types` | `Core/types.ts` | 全型定義（`Handler` / `Context` / `HTTPError` 等） |
+| `@adlaire/fw/types` | `Core/types.ts` | フレームワーク共通型（`Handler` / `Context` / `HTTPError` / `Schema` / `Rule` 等） |
 | `@adlaire/fw/cli` | `cli.ts` | CLI ツール |
 
 ---
@@ -217,8 +235,14 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 
 # 5. types.ts　[Core]
 
-フレームワーク全体で使用する型定義を一元管理する。
-他の Core ファイルはすべて `types.ts` からインポートする。
+フレームワーク全体で共通使用する型定義を管理する。
+
+ドメイン固有の型は各モジュールで定義し、`types.ts` には含めない。
+
+| ドメイン | 型 | モジュール |
+|---------|-----|-----------|
+| 環境変数 | `EnvRule` / `EnvSchema` / `EnvResult` | `@adlaire/fw/env` |
+| ミドルウェア | `ContentSecurityPolicy` | `@adlaire/fw/middleware` |
 
 ## 5.1 Context
 
@@ -370,41 +394,14 @@ type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS";
 
 ## 5.6 EnvRule / EnvSchema / EnvResult
 
-`loadEnv()` のスキーマ検証・型変換に使用する型（§6.2 参照）。
+> **`@adlaire/fw/env` に移動済み（Ver.1.3-8）**。
+> 型定義・`loadEnv()` の仕様は §6.2 env.ts [Core] を参照。
 
 ```typescript
-// 環境変数の型変換ルール
-type EnvRule =
-  | { type: "string";  required?: boolean; default?: string }
-  | { type: "number";  required?: boolean; default?: number }
-  | { type: "boolean"; required?: boolean; default?: boolean }
-  | { type: "port";    required?: boolean; default?: number }       // 1〜65535 の整数
-  | { type: "enum";    values: readonly string[]; required?: boolean; default?: string };  // 列挙値
-
-type EnvSchema = Record<string, EnvRule>;
-
-// ルール単体から値の TypeScript 型を導出するヘルパー型
-// enum は values の要素リテラル Union 型を生成する
-type EnvValueOf<R extends EnvRule> =
-  R extends { type: "number" | "port" } ? number :
-  R extends { type: "boolean" } ? boolean :
-  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
-  string;
-
-// スキーマから変換された値の型を導出する Mapped Type
-// required: true または default 指定があれば非 undefined。それ以外は T | undefined
-type EnvResult<S extends EnvSchema> = {
-  readonly [K in keyof S]:
-    S[K] extends ({ required: true } | { default: unknown })
-      ? EnvValueOf<S[K]>
-      : EnvValueOf<S[K]> | undefined
-};
+// インポート例
+import { loadEnv } from "@adlaire/fw/env";
+import type { EnvRule, EnvSchema, EnvResult } from "@adlaire/fw/env";
 ```
-
-- `"enum"` 型: `values` 外の値が来た場合は `Error` を throw する
-- `"enum"` の型推論: `values: ["dev","staging","prod"] as const` → `"dev" | "staging" | "prod"`
-
-> **破壊的変更（Ver.1.1-4）**: `required` なし・`default` なしのフィールドは `T | undefined` を返す。以前はゼロ値（`0` / `false` / `""`）を返していた。
 
 ## 5.7 QueryRule / QuerySchema / QueryResult
 
@@ -655,7 +652,7 @@ interface WebSocketUpgradeOptions {
 
 # 6. server.ts　[Core]
 
-App クラス・サーバー起動・エラーハンドラー・env 管理を担う。
+App クラス・サーバー起動・エラーハンドラーを担う。環境変数管理は `env.ts`（§6.2）に分離。
 
 ## 6.1 App クラス
 
@@ -713,7 +710,47 @@ interface TestRequestOptions {
 const server = createServer();
 ```
 
-## 6.2 loadEnv()
+## 6.2 env.ts　[Core]
+
+環境変数スキーマ型と `loadEnv()` を管理する独立モジュール。`server.ts` には依存しない。
+
+### EnvRule / EnvSchema / EnvResult
+
+```typescript
+// 環境変数の型変換ルール
+type EnvRule =
+  | { type: "string";  required?: boolean; default?: string }
+  | { type: "number";  required?: boolean; default?: number }
+  | { type: "boolean"; required?: boolean; default?: boolean }
+  | { type: "port";    required?: boolean; default?: number }       // 1〜65535 の整数
+  | { type: "enum";    values: readonly string[]; required?: boolean; default?: string };  // 列挙値
+
+type EnvSchema = Record<string, EnvRule>;
+
+// ルール単体から値の TypeScript 型を導出するヘルパー型
+// enum は values の要素リテラル Union 型を生成する
+type EnvValueOf<R extends EnvRule> =
+  R extends { type: "number" | "port" } ? number :
+  R extends { type: "boolean" } ? boolean :
+  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
+  string;
+
+// スキーマから変換された値の型を導出する Mapped Type
+// required: true または default 指定があれば非 undefined。それ以外は T | undefined
+type EnvResult<S extends EnvSchema> = {
+  readonly [K in keyof S]:
+    S[K] extends ({ required: true } | { default: unknown })
+      ? EnvValueOf<S[K]>
+      : EnvValueOf<S[K]> | undefined
+};
+```
+
+- `"enum"` 型: `values` 外の値が来た場合は `Error` を throw する
+- `"enum"` の型推論: `values: ["dev","staging","prod"] as const` → `"dev" | "staging" | "prod"`
+
+> **破壊的変更（Ver.1.1-4）**: `required` なし・`default` なしのフィールドは `T | undefined` を返す。以前はゼロ値（`0` / `false` / `""`）を返していた。
+
+### loadEnv()
 
 `.env` ファイルを読み込み `Deno.env.set` で展開する。Adlaire Deploy 専用。
 
@@ -748,7 +785,7 @@ function loadEnv<S extends EnvSchema>(options: {
 ### 使用例
 
 ```typescript
-import { loadEnv } from "@adlaire/fw/server";
+import { loadEnv } from "@adlaire/fw/env";
 
 // スキーマなし
 await loadEnv(".env");
@@ -1267,6 +1304,12 @@ server.use(timeout({ ms: 5000 })); // 5 秒
 ```typescript
 function secureHeaders(options?: SecureHeadersOptions): Middleware
 ```
+
+> **`ContentSecurityPolicy` 型は `@adlaire/fw/middleware` で定義する（Ver.1.3-8 移動）。`@adlaire/fw/types` には含まれない。**
+>
+> ```typescript
+> import type { ContentSecurityPolicy } from "@adlaire/fw/middleware";
+> ```
 
 ```typescript
 interface ContentSecurityPolicy {
@@ -1909,7 +1952,8 @@ server.router.get("/admin", (ctx) => {
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
-| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する（9 ファイル構成: types / server / router / middleware / transport / validate / response / static / helpers） |
+| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する（10 ファイル構成: types / server / env / router / middleware / transport / validate / response / static / helpers） |
+| **Core 依存グラフ** | `types.ts` / `env.ts` は他の Core ファイルに依存しない。`server.ts` / `static.ts` は `response.ts` に依存しない（§3.1 依存グラフ制約参照） |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |

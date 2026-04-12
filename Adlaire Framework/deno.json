@@ -1,8 +1,9 @@
 {
   "name": "@adlaire/fw",
-  "version": "1.2.7",
+  "version": "1.3.8",
   "exports": {
     "./server":     "./Core/server.ts",
+    "./env":        "./Core/env.ts",
     "./router":     "./Core/router.ts",
     "./middleware": "./Core/middleware.ts",
     "./transport":  "./Core/transport.ts",

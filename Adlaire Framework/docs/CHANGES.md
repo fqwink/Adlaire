@@ -5,6 +5,35 @@
 
 ---
 
+## Ver.1.3-8 — 構造改良（依存グラフ純化・型ドメイン分離・env.ts 分離）
+
+**日付**: 2026-04-12
+**種別**: 機能改良・アーキテクチャ変更
+
+### アーキテクチャ変更
+
+- **案A — 依存グラフ純化**: `server.ts` / `static.ts` の `response.ts` 依存を解消。エラーレスポンスをインライン構築に変更し、Core が完全 DAG（有向非巡回グラフ）になった
+- **案B — ContentSecurityPolicy 移動**: `@adlaire/fw/types` → `@adlaire/fw/middleware` へ移動。ミドルウェア専用型を types.ts から分離
+- **案C — env.ts 分離**: `loadEnv()` / `EnvRule` / `EnvSchema` / `EnvResult` を `server.ts` / `types.ts` から `Core/env.ts`（`@adlaire/fw/env`）として独立モジュール化。Core が 9 ファイルから 10 ファイル構成に拡張
+
+### 依存グラフ（変更後）
+
+| モジュール | 依存先 |
+|-----------|--------|
+| `types.ts` | なし（完全自己完結） |
+| `env.ts` | なし（完全自己完結・新規） |
+| `server.ts` | `types.ts` / `router.ts` のみ |
+| `static.ts` | `types.ts` のみ |
+| その他 | `types.ts` のみ |
+
+### 破壊的変更
+
+- `loadEnv()` のインポート元が `@adlaire/fw/server` → `@adlaire/fw/env` に変更
+- `EnvRule` / `EnvSchema` / `EnvResult` のインポート元が `@adlaire/fw/types` → `@adlaire/fw/env` に変更
+- `ContentSecurityPolicy` のインポート元が `@adlaire/fw/types` → `@adlaire/fw/middleware` に変更
+
+---
+
 ## Ver.1.2-7 — Core 9 ファイル化・mod.ts 廃止・新機能・機能改良
 
 **日付**: 2026-04-12

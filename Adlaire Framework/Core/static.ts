@@ -4,7 +4,14 @@
 // ============================================================
 
 import type { Handler } from "./types.ts";
-import { json } from "./response.ts";
+
+// JSON エラーレスポンスのインライン構築（response.ts への依存を排除）
+function jsonErr(data: unknown, status: number): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+  });
+}
 
 // ------------------------------------------------------------
 // §9.2 静的ファイル配信
@@ -62,11 +69,11 @@ export function serveStatic(options: StaticOptions): Handler {
 
     // ディレクトリトラバーサル防御
     if (filePath.includes("..") || filePath.startsWith("/")) {
-      return json({ error: "Forbidden" }, 403);
+      return jsonErr({ error: "Forbidden" }, 403);
     }
     const normalized = filePath.replace(/\\/g, "/");
     if (normalized.includes("..")) {
-      return json({ error: "Forbidden" }, 403);
+      return jsonErr({ error: "Forbidden" }, 403);
     }
 
     // index ファイル解決（パスが空またはディレクトリ末尾スラッシュ）
@@ -88,7 +95,7 @@ export function serveStatic(options: StaticOptions): Handler {
         },
       });
     } catch {
-      return json({ error: "Not Found" }, 404);
+      return jsonErr({ error: "Not Found" }, 404);
     }
   };
 }

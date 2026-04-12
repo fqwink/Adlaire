@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.2-7 | 2026-04-12 | Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 実装済み |
+| **Adlaire Framework** | Ver.1.3-8 | 2026-04-12 | 構造改良（依存グラフ純化・env.ts分離・ContentSecurityPolicy移動・Core 10ファイル化） 実装済み |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,9 +1320,20 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.2-7**（Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 実装済み）
+**Ver.1.3-8**（構造改良: 依存グラフ純化・env.ts分離・ContentSecurityPolicy移動・Core 10ファイル化 実装済み）
 
 ### VII-2. リリース計画
+
+#### Ver.1.3-8 — 構造改良（依存グラフ純化・型ドメイン分離・env.ts 分離）
+
+- **種別**: 機能改良・アーキテクチャ変更
+- **状態**: 実装済み（2026-04-12）
+
+| # | 種別 | 概要 | 状態 |
+|:-:|------|------|:----:|
+| 1 | アーキテクチャ変更（案A） | `server.ts` / `static.ts` の `response.ts` 依存を解消。エラーレスポンスをインライン構築に変更し Core が完全 DAG になった | 実装済 |
+| 2 | アーキテクチャ変更（案B） | `ContentSecurityPolicy` 型を `@adlaire/fw/types` → `@adlaire/fw/middleware` へ移動。ミドルウェア専用型を types.ts から分離 | 実装済 |
+| 3 | アーキテクチャ変更（案C） | `loadEnv()` / `EnvRule` / `EnvSchema` / `EnvResult` を独立モジュール `Core/env.ts`（`@adlaire/fw/env`）として分離。Core が 10 ファイル構成に拡張 | 実装済 |
 
 #### Ver.1.2-7 — Core 9ファイル化・mod.ts廃止・新機能・機能改良
 
@@ -1532,6 +1543,7 @@ cli.ts: printHelp（1件）/ routesCommand インポート（3件）/ routesComm
 
 | バージョン | リリース日 | 種別 | 概要 |
 |-----------|-----------|------|------|
+| **Ver.1.3-8** | 2026-04-12 | 機能改良・アーキテクチャ変更 | 構造改良: 依存グラフ純化・env.ts分離・ContentSecurityPolicy移動・Core 10ファイル化 |
 | **Ver.1.2-7** | 2026-04-12 | 追加機能・機能改良・アーキテクチャ変更 | Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 |
 | **Ver.1.1-6** | 2026-04-11 | バグ修正 | 全コード精査200件・致命的2件・重大12件・中程度10件・軽微14件 修正 |
 | **Ver.1.1-5** | 2026-04-11 | 追加機能・改良 | 型安全3件（TypedHandler/Simplify/StrictQueryResult）+ 機能改良2件（EnvRule enum/RouteGroup型推論） |

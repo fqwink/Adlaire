@@ -5,11 +5,31 @@
 // ============================================================
 
 import type {
-  ContentSecurityPolicy,
   Context,
   Method,
   Middleware,
 } from "./types.ts";
+
+// ------------------------------------------------------------
+// §8.10 ContentSecurityPolicy（secureHeaders 専用型）
+// Ver.1.3-8 にて types.ts から移動
+// ------------------------------------------------------------
+
+export interface ContentSecurityPolicy {
+  defaultSrc?: string[];
+  scriptSrc?: string[];
+  styleSrc?: string[];
+  imgSrc?: string[];
+  connectSrc?: string[];
+  fontSrc?: string[];
+  objectSrc?: string[];
+  frameSrc?: string[];
+  frameAncestors?: string[];
+  formAction?: string[];
+  baseUri?: string[];
+  upgradeInsecureRequests?: boolean;
+  reportUri?: string;
+}
 
 // ------------------------------------------------------------
 // §8.2 CORS ミドルウェア

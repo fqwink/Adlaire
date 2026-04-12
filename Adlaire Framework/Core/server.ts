@@ -1,19 +1,24 @@
 // ============================================================
 // Adlaire Framework — server.ts
-// App クラス・サーバー起動・エラーハンドラー・env 管理
+// App クラス・サーバー起動・エラーハンドラー
 // ============================================================
 
 import type {
   Context,
-  EnvResult,
-  EnvSchema,
   ErrorHandler,
   Method,
   Middleware,
 } from "./types.ts";
 import { HTTPError } from "./types.ts";
 import { Router } from "./router.ts";
-import { json } from "./response.ts";
+
+// JSON エラーレスポンスのインライン構築（response.ts への依存を排除）
+function jsonErr(data: unknown, status: number): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+  });
+}
 
 // ------------------------------------------------------------
 // Method 型ガード
@@ -107,7 +112,7 @@ export class App {
 
     // 未知のメソッドは 405 を返す
     if (!isMethod(rawMethod)) {
-      return json({ error: "Method Not Allowed" }, 405);
+      return jsonErr({ error: "Method Not Allowed" }, 405);
     }
 
     const method: Method = rawMethod;
@@ -126,9 +131,9 @@ export class App {
     if (matched === null) {
       // パスはマッチするがメソッド不一致かを確認（全メソッドで検索）
       if (this.router.hasPath(req.url)) {
-        return json({ error: "Method Not Allowed" }, 405);
+        return jsonErr({ error: "Method Not Allowed" }, 405);
       }
-      return json({ error: "Not Found" }, 404);
+      return jsonErr({ error: "Not Found" }, 404);
     }
 
     const ctx: Context = {
@@ -175,9 +180,9 @@ export class App {
     if (err instanceof HTTPError) {
       const body: { error: string; detail?: unknown } = { error: err.message };
       if (err.detail !== undefined) body.detail = err.detail;
-      return json(body, err.status);
+      return jsonErr(body, err.status);
     }
-    return json({ error: "Internal Server Error" }, 500);
+    return jsonErr({ error: "Internal Server Error" }, 500);
   };
 
   listen(port: number, cb?: () => void): Deno.HttpServer {
@@ -288,149 +293,4 @@ export function createServer(): App {
   return new App();
 }
 
-// ------------------------------------------------------------
-// §6.2 loadEnv()
-// ------------------------------------------------------------
-
-// オーバーロード: スキーマなし（単一ファイル）
-export function loadEnv(path?: string): Promise<void>;
-// オーバーロード: スキーマあり（単一ファイル）
-export function loadEnv<S extends EnvSchema>(options: {
-  path?: string;
-  schema: S;
-}): Promise<EnvResult<S>>;
-// オーバーロード: スキーマなし（複数ファイルマージ）
-export function loadEnv(options: { paths: string[] }): Promise<void>;
-// オーバーロード: スキーマあり（複数ファイルマージ）
-export function loadEnv<S extends EnvSchema>(options: {
-  paths: string[];
-  schema: S;
-}): Promise<EnvResult<S>>;
-
-export async function loadEnv<S extends EnvSchema>(
-  pathOrOptions?: string | { path?: string; schema?: S } | { paths: string[]; schema?: S },
-): Promise<void | EnvResult<S>> {
-  let filePaths: string[];
-  let schema: S | undefined;
-
-  if (typeof pathOrOptions === "string" || pathOrOptions === undefined) {
-    filePaths = [pathOrOptions ?? ".env"];
-    schema = undefined;
-  } else if ("paths" in pathOrOptions) {
-    filePaths = pathOrOptions.paths;
-    schema = pathOrOptions.schema;
-  } else {
-    filePaths = [pathOrOptions.path ?? ".env"];
-    schema = pathOrOptions.schema;
-  }
-
-  // 複数ファイルを順番に読み込み、後発ファイルが優先でマージする
-  let raw = "";
-  for (const filePath of filePaths) {
-    let fileContent: string;
-    try {
-      fileContent = await Deno.readTextFile(filePath);
-    } catch {
-      fileContent = "";
-    }
-    raw += (raw.length > 0 ? "\n" : "") + fileContent;
-  }
-
-  // パース（インラインコメント除去・クォート除去）
-  const envMap: Record<string, string> = {};
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    // 前後が同じクォートの場合のみ除去（"val" → val、'val' → val）
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
-    } else {
-      // クォートされていない値のインラインコメントを除去（PORT=8000 # comment → 8000）
-      const commentIdx = val.indexOf(" #");
-      if (commentIdx !== -1) {
-        val = val.slice(0, commentIdx).trimEnd();
-      }
-    }
-    envMap[key] = val;
-  }
-
-  // スキーマバリデーション完了後に Deno.env.set を行うため、まず全キーを収集する
-  // （バリデーション失敗時に環境変数が部分的に汚染されることを防ぐ）
-  if (schema === undefined) {
-    // スキーマなし: そのまま全キーを環境変数に設定
-    for (const [k, v] of Object.entries(envMap)) {
-      Deno.env.set(k, v);
-    }
-    return;
-  }
-
-  // スキーマあり: 型変換・バリデーション
-  const result: Record<string, string | number | boolean | undefined> = {};
-
-  for (const [key, rule] of Object.entries(schema)) {
-    const rawVal = envMap[key] ?? Deno.env.get(key);
-
-    if (rawVal === undefined) {
-      if (rule.required && !("default" in rule)) {
-        throw new Error(`loadEnv: 必須の環境変数 "${key}" が設定されていません`);
-      }
-      if (rule.default !== undefined) {
-        result[key] = rule.default;
-      } else {
-        // required でなく default もない場合: undefined を設定（T-4）
-        result[key] = undefined;
-      }
-      continue;
-    }
-
-    switch (rule.type) {
-      case "string":
-        result[key] = rawVal;
-        break;
-      case "number": {
-        const n = Number(rawVal);
-        if (Number.isNaN(n)) {
-          throw new Error(`loadEnv: "${key}" を数値に変換できません: "${rawVal}"`);
-        }
-        result[key] = n;
-        break;
-      }
-      case "port": {
-        const p = Number(rawVal);
-        if (!Number.isInteger(p) || p < 1 || p > 65535) {
-          throw new Error(
-            `loadEnv: "${key}" は 1〜65535 の整数である必要があります: "${rawVal}"`,
-          );
-        }
-        result[key] = p;
-        break;
-      }
-      case "boolean":
-        result[key] = rawVal === "true";
-        break;
-      case "enum": {
-        if (!(rule.values as readonly string[]).includes(rawVal)) {
-          throw new Error(
-            `loadEnv: "${key}" は ${(rule.values as readonly string[]).join(", ")} のいずれかである必要があります: "${rawVal}"`,
-          );
-        }
-        result[key] = rawVal;
-        break;
-      }
-    }
-  }
-
-  // バリデーション完了後に環境変数を反映する（途中失敗時の部分汚染を防ぐ）
-  for (const [k, v] of Object.entries(envMap)) {
-    Deno.env.set(k, v);
-  }
-
-  return result as EnvResult<S>;
-}
+// §6.2 loadEnv() は @adlaire/fw/env（Core/env.ts）に移動済み（Ver.1.3-8）
