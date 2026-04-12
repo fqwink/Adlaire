@@ -1,5 +1,21 @@
 # CHANGES - 変更履歴
 
+## Ver.3.0-48 (2026-04-12)
+
+### バグ修正
+
+#### Core/api.php
+* **[重大]** `apiPageSave()`: `status` 未送信時に `'published'` をデフォルト適用していた問題を修正。未送信時は既存ページのステータスを保持し、新規ページの場合は `'draft'` をデフォルトとする。自動保存（`flushSave`）によりドラフトページが公開状態に変更される不具合を解消
+* **[中程度]** `handleApiLicense()`: `defined('App::VERSION')` はクラス定数を検出不可のため常に空文字が返っていた問題を修正。`App::VERSION` を直接参照するよう変更
+
+#### Core/renderer.php
+* **[重大]** `renderBlocksToHtml()`: paragraph / heading / quote / list ブロックの text / items に `esc()` を適用していたため、`sanitizeHtml()` で保存済みのインライン HTML（`<strong>`, `<em>`, `<a>` 等）が二重エスケープされ文字参照として出力される不具合を修正。これらフィールドはサニタイズ済み HTML を直接出力するよう変更（`code` ブロックの `code` フィールドは `esc()` を継続適用）
+
+#### Core/app.php
+* **[軽微]** `handleAuth()`: `session_destroy()` 呼出し後に `session_status() === PHP_SESSION_ACTIVE` を再チェックする到達不能な dead code を削除
+
+---
+
 ## Ver.3.0-47 (2026-04-05)
 
 ### 基盤刷新（破壊的変更）

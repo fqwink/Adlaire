@@ -19,7 +19,7 @@
 
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
-| **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
+| **Adlaire Static CMS** | Ver.3.0-48 | 2026-04-12 | 本番稼働中 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -52,7 +52,7 @@
 
 ### 2. 現行バージョン
 
-**Ver.3.0-47**（2026-04-05）
+**Ver.3.0-48**（2026-04-12）
 
 ---
 
@@ -812,6 +812,142 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 | TS-36 | i18n.ts | has() がプロトタイプ汚染に脆弱（in 演算子使用） | **実装済** |
 | TS-42 | editInplace.ts | パスワードバリデーションが文字列長でバイト長を未確認 | **対策済** |
 | TS-21 | editor.ts | destroy() の WeakMap 手動削除が GC セマンティクスと冗長 | **対策済** |
+
+---
+
+#### 5.1.2 Ver.3.0-48 — バグ修正（81件精査・4件修正・77件対策済み確認）
+
+> Ver.3.0-47 全コード精査に基づくバグ修正。
+> PHP 62件 + TypeScript 19件 = 81件精査。
+> 修正4件（実装済）+ 対策済み確認77件。
+
+##### 精査サマリー
+
+| 区分 | PHP | TS | 合計 |
+|:----:|:---:|:--:|:----:|
+| 致命的 | 0 | 0 | 0 |
+| 重大 | 2 | 0 | 2 |
+| 中程度 | 1 | 0 | 1 |
+| 軽微 | 1 | 0 | 1 |
+| **合計（修正件数）** | **4** | **0** | **4** |
+
+| 区分 | PHP | TS | 合計 |
+|:----:|:---:|:--:|:----:|
+| 精査件数 | 62 | 19 | 81 |
+| 修正（実装済） | 4 | 0 | 4 |
+| 対策済み確認 | 58 | 19 | 77 |
+
+##### 重大バグ（PHP: 2件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-34 | api.php | `apiPageSave()` で `$_POST['status']` 未送信時に `'published'` がデフォルト。自動保存（`flushSave`）はステータスを送信しないため、ドラフトページが自動保存のたびに公開状態に変更される | **実装済** |
+| PHP-47 | renderer.php | `renderBlocksToHtml()` の paragraph / heading / quote / list ブロックの text / items に `esc()` を適用。`sanitizeHtml()` 保存済みのインライン HTML が二重エスケープされ `<strong>` 等が文字参照として出力される | **実装済** |
+
+##### 中程度バグ（PHP: 1件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-42 | api.php | `handleApiLicense()` で `defined('App::VERSION')` を使用。`defined()` はランタイム定数（`define()`）のみ検出し、クラス定数（`const`）は検出不可 → バージョンが常に空文字になる | **実装済** |
+
+##### 軽微バグ（PHP: 1件）
+
+| # | 対象 | バグ概要 | 状態 |
+|---|------|---------|:----:|
+| PHP-19 | app.php | `handleAuth()` の `session_destroy()` 呼出し後に `session_status() === PHP_SESSION_ACTIVE` の到達不能 dead code が存在。`session_destroy()` 後は常に `PHP_SESSION_NONE` になる | **実装済** |
+
+##### 精査結果一覧（全81件）
+
+###### PHP（62件）
+
+| # | 対象ファイル | 精査内容 | 状態 |
+|---|------------|---------|:----:|
+| PHP-1 | helpers.php | `esc()` — `htmlspecialchars(ENT_QUOTES\|ENT_SUBSTITUTE, 'UTF-8')` 適用 | **対策済** |
+| PHP-2 | helpers.php | `csrf_token()` — セッション存在確認後トークン生成 | **対策済** |
+| PHP-3 | helpers.php | `csrf_verify()` — `hash_equals()` 使用でタイミング攻撃対策 | **対策済** |
+| PHP-4 | helpers.php | `login_rate_check()` — アトミックファイル更新でレート管理 | **対策済** |
+| PHP-5 | core.php | `validateSlug()` — `/^[a-zA-Z0-9_-]{1,100}$/` 正規表現検証 | **対策済** |
+| PHP-6 | core.php | `atomicWrite()` — `tempnam` + `LOCK_EX` + `chmod` + `rename` パターン | **対策済** |
+| PHP-7 | core.php | `lockedRead()` — `LOCK_SH` 共有ロック使用 | **対策済** |
+| PHP-8 | core.php | `FileStorage::readPageData()` — `realpath` コンテインメント確認 | **対策済** |
+| PHP-9 | core.php | `FileStorage::writePage()` — スラッグ再バリデーション実施 | **対策済** |
+| PHP-10 | core.php | `FileStorage::deletePage()` — 削除前のファイル存在確認 | **対策済** |
+| PHP-11 | core.php | `FileStorage::listPages()` — glob パターン制限 | **対策済** |
+| PHP-12 | core.php | `FileStorage::saveRevision()` — `MAX_REVISIONS` によるリビジョン上限管理 | **対策済** |
+| PHP-13 | core.php | `FileStorage::listRevisions()` — タイムスタンプ `/^\d+$/` バリデーション | **対策済** |
+| PHP-14 | core.php | `UserStorage::getUser()` — ユーザー名 `/^[a-zA-Z0-9_-]{1,64}$/` 確認 | **対策済** |
+| PHP-15 | core.php | `UserStorage::listUsers()` — ファイル読込エラー時の空配列返却 | **対策済** |
+| PHP-16 | core.php | `UserStorage::writeUser()` — パスワードハッシュ必須確認 | **対策済** |
+| PHP-17 | core.php | `parse_size()` — メモリ制限パーシング単位処理（K/M/G） | **対策済** |
+| PHP-18 | app.php | `handleAuth()` — セッションタイムアウト `$lastActivity` `is_int()` 確認 | **対策済** |
+| PHP-19 | app.php | `handleAuth()` — `session_destroy()` 後の dead code（到達不能コード） | **実装済** |
+| PHP-20 | app.php | `login()` — CSRF トークン検証 | **対策済** |
+| PHP-21 | app.php | `login()` — レートリミット確認 | **対策済** |
+| PHP-22 | app.php | `login()` — `password_verify()` メインユーザー認証 | **対策済** |
+| PHP-23 | app.php | `login()` — `password_verify()` サブユーザー認証 | **対策済** |
+| PHP-24 | app.php | `login()` — `session_regenerate_id(true)` 使用 | **対策済** |
+| PHP-25 | app.php | `login()` — 新パスワード最小長バリデーション | **対策済** |
+| PHP-26 | app.php | `loadPlugins()` — `realpath` プラグインディレクトリ制限 | **対策済** |
+| PHP-27 | app.php | `loadLanguage()` — `ALLOWED_LANGUAGES` ホワイトリスト | **対策済** |
+| PHP-28 | app.php | `t()` — キー存在確認後翻訳 | **対策済** |
+| PHP-29 | app.php | `content()` / `menu()` — テンプレート変数の安全なエスケープ | **対策済** |
+| PHP-30 | api.php | `verifyApiAuth()` — 認証ヘッダー検証 | **対策済** |
+| PHP-31 | api.php | `handleEdit()` — フィールド名ホワイトリスト確認 | **対策済** |
+| PHP-32 | api.php | `handleApi()` — `match` エンドポイントルーティング | **対策済** |
+| PHP-33 | api.php | CORS Origin — `parse_url` + host 比較、null / 空 Origin 拒否 | **対策済** |
+| PHP-34 | api.php | `apiPageSave()` — `status` 未送信時に `'published'` デフォルト | **実装済** |
+| PHP-35 | api.php | `apiPageSave()` — `format` バリデーション | **対策済** |
+| PHP-36 | api.php | `apiPageSave()` — JSON デコード depth 512 制限 | **対策済** |
+| PHP-37 | api.php | search — スニペット生成の長さ制限 | **対策済** |
+| PHP-38 | api.php | export — パスワード / csrf フィールド除外 | **対策済** |
+| PHP-39 | api.php | import — ホワイトリストキー制限 | **対策済** |
+| PHP-40 | api.php | import — UTF-8 バリデーション | **対策済** |
+| PHP-41 | api.php | import — `data/revisions/` パスハードコード（FileStorage と一致） | **対策済** |
+| PHP-42 | api.php | `handleApiLicense()` — `defined('App::VERSION')` はクラス定数検出不可 | **実装済** |
+| PHP-43 | api.php | users — `password_hash()` 生成 | **対策済** |
+| PHP-44 | api.php | users — disable でメインマスターの無効化防止 | **対策済** |
+| PHP-45 | api.php | users — delete で自分自身の削除防止 | **対策済** |
+| PHP-46 | api.php | users — delete でメインマスターの削除防止 | **対策済** |
+| PHP-47 | renderer.php | `renderBlocksToHtml()` — paragraph / heading / quote / list に `esc()` 適用でインライン HTML 破壊 | **実装済** |
+| PHP-48 | renderer.php | `renderBlocksToHtml()` — image URL 危険スキーム検証 | **対策済** |
+| PHP-49 | renderer.php | `renderMarkdownToHtml()` — `htmlspecialchars` 先行後パターン適用 | **対策済** |
+| PHP-50 | renderer.php | `renderMarkdownToHtml()` — image リンク `html_entity_decode` 処理 | **対策済** |
+| PHP-51 | license.php | `check()` — グレース期間処理 | **対策済** |
+| PHP-52 | license.php | `write()` — アトミック書込 | **対策済** |
+| PHP-53 | license.php | `read()` — シンボリックリンク検出 | **対策済** |
+| PHP-54 | generator.php | `handleApiGenerate()` — clean 時のシンボリックリンク検出 | **対策済** |
+| PHP-55 | generator.php | diff ビルド `strtotime` 依存の変更検出 | **対策済** |
+| PHP-56 | generator.php | `generatePageHtml()` — menu `esc()` エスケープ | **対策済** |
+| PHP-57 | generator.php | `$host` — プロトコル相対 URL 組立（`'https' . ':' . '//'`） | **対策済** |
+| PHP-58 | admin-ui.php | `renderAdminDashboard()` — `App::VERSION` 直接参照 | **対策済** |
+| PHP-59 | admin-ui.php | `renderAdminEditor()` — スラッグバリデーション | **対策済** |
+| PHP-60 | admin-ui.php | `renderAdminUsers()` — `data-user` JSON エンコード安全確認 | **対策済** |
+| PHP-61 | admin-ui.php | `renderAdminLicense()` — CSRF インラインスクリプト埋め込み | **対策済** |
+| PHP-62 | index.php | CSP nonce / session hardening / ライセンスゲート / テーマ `realpath` 制限 | **対策済** |
+
+###### TypeScript（19件）
+
+| # | 対象ファイル | 精査内容 | 状態 |
+|---|------------|---------|:----:|
+| TS-1 | api.ts | `buildApiUrl` — エンドポイント `/^[a-zA-Z0-9_-]+$/` バリデーション | **対策済** |
+| TS-2 | api.ts | `extractApiError` — HTML タグ除去 | **対策済** |
+| TS-3 | api.ts | `savePage` — format バリデーション `['blocks', 'markdown', 'html']` | **対策済** |
+| TS-4 | api.ts | `restoreRevision` — タイムスタンプ `/^\d+$/` バリデーション | **対策済** |
+| TS-5 | api.ts | `updateMainPassword` — 最大 128 文字制限 | **対策済** |
+| TS-6 | editor.ts | `sanitizeHtml` — 多重ループ危険タグ除去 | **対策済** |
+| TS-7 | editor.ts | `sanitizeHtml` — フェーズ 1 Unicode エスケープデコード | **対策済** |
+| TS-8 | editor.ts | `UndoManager.push()` — 300ms デバウンス | **対策済** |
+| TS-9 | editor.ts | `Editor.destroy()` — 二重呼出し保護 | **対策済** |
+| TS-10 | editor.ts | `insertBlock` / `removeBlock` / `saveUndoState` — destroy 後保護 | **対策済** |
+| TS-11 | editor.ts | image — `isDangerousUrl()` クロージャスコープ修正（R5-22） | **対策済** |
+| TS-12 | editInplace.ts | `fieldSave()` — 1MB `FIELD_SAVE_MAX_LENGTH` 制限 | **対策済** |
+| TS-13 | editInplace.ts | `beforeunload` — `sendBeacon` + XHR 同期フォールバック | **対策済** |
+| TS-14 | editInplace.ts | `switchFormat()` — `FIELD_SAVE_MAX_LENGTH` チェック | **対策済** |
+| TS-15 | markdown.ts | コードブロック — `htmlspecialchars` 前に抽出 | **対策済** |
+| TS-16 | markdown.ts | テーブル DoS — 1000行 / 50列制限 | **対策済** |
+| TS-17 | markdown.ts | 危険 URL プロトコルチェック（画像・リンク） | **対策済** |
+| TS-18 | i18n.ts | `init()` — `'ja'` / `'en'` のみ許可 | **対策済** |
+| TS-19 | autosize.ts | `MutationObserver` + `WeakRef` クリーンアップ / `AbortController` | **対策済** |
 
 ---
 
