@@ -115,8 +115,12 @@ Adlaire Framework/
     ├── types.ts          # 全型定義
     ├── server.ts         # App クラス・起動・エラーハンドラー・env
     ├── router.ts         # Router
-    ├── middleware.ts     # バリデーター・各種ミドルウェア
-    └── response.ts       # レスポンスヘルパー・パースヘルパー
+    ├── middleware.ts     # cors / secureHeaders / hsts / ipFilter / csrfProtection
+    ├── transport.ts      # logger / rateLimit / etag / compress / bodyLimit / requestId / timeout
+    ├── validate.ts       # validate() / assertBody()
+    ├── response.ts       # json / text / html / send / redirect / sse / upgradeWebSocket
+    ├── static.ts         # serveStatic / getMimeType（内部）
+    └── helpers.ts        # parseQuery / parseParam / getCookie / setCookie / deleteCookie / accepts / sanitizeHtml
 ```
 
 `Core/` 内のファイルはすべて同格・同階層とする。サブディレクトリによる分割を禁止する。
@@ -141,7 +145,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```json
 {
   "name": "@adlaire/fw",
-  "version": "1.1.0",
+  "version": "1.2.7",
   "exports": {
     ".": "./mod.ts",
     "./cli": "./cli.ts"
@@ -181,7 +185,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 | `application/json` | `unknown` | `JSON.parse()` でパース |
 | `text/plain` | `string` | テキストとして読み込み |
 | `application/x-www-form-urlencoded` | `Record<string, string>` | `URLSearchParams` でパース |
-| `multipart/form-data` | `null` | Phase 3 実装予定。現在は `null` |
+| `multipart/form-data` | `FormData` | `Request.formData()` でパース。パース失敗時は `null` |
 | ボディなし（`GET` / `HEAD` / `DELETE` 等） | `null` | `null` |
 | パース失敗（不正 JSON 等） | `null` | `null`（エラーをスローしない） |
 
@@ -314,6 +318,16 @@ class HTTPError extends Error {
     public readonly detail?: unknown,
   ) {
     super(message ?? String(status));
+  }
+
+  /** HTTPError から JSON Response を直接生成する */
+  toResponse(): Response {
+    const body: { error: string; detail?: unknown } = { error: this.message };
+    if (this.detail !== undefined) body.detail = this.detail;
+    return new Response(JSON.stringify(body), {
+      status: this.status,
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+    });
   }
 }
 ```
@@ -588,6 +602,26 @@ server.router.get("/items", (ctx) => {
 });
 ```
 
+## 5.13 SSEMessage / WebSocketUpgradeOptions
+
+`sse()`（§9.8）および `upgradeWebSocket()`（§9.9）で使用する型。
+
+```typescript
+interface SSEMessage {
+  data: string;
+  event?: string;  // イベント名（省略時: message イベント）
+  id?: string;     // Last-Event-ID
+  retry?: number;  // 再接続間隔（ミリ秒）
+}
+
+interface WebSocketUpgradeOptions {
+  protocol?: string;  // WebSocket サブプロトコル
+}
+```
+
+- `SSEMessage` は `SSEWriter.send()` の引数型として使用する
+- `WebSocketUpgradeOptions` は `upgradeWebSocket()` のオプション型として使用する
+
 ---
 
 # 6. server.ts　[Core]
@@ -604,7 +638,37 @@ App クラス・サーバー起動・エラーハンドラー・env 管理を担
 | `fetch` | `(req: Request) => Promise<Response>` | Deno Deploy 向け Fetch ハンドラー |
 | `listen()` | `listen(port: number, cb?: () => void): Deno.HttpServer` | Adlaire Deploy 向け起動。`Deno.HttpServer` を返す |
 | `close()` | `close(): Promise<void>` | グレースフルシャットダウン。処理中リクエストの完了を待機してから停止 |
-| `testRequest()` | `testRequest(method: string, path: string, options?): Promise<Response>` | サーバー起動なしでルートをテスト。内部で `fetch` ハンドラーを直接呼び出す |
+| `onListen()` | `onListen(cb: () => void \| Promise<void>): this` | サーバー起動完了後に呼ぶコールバックを登録 |
+| `onClose()` | `onClose(cb: () => void \| Promise<void>): this` | `close()` 完了後に呼ぶコールバックを登録 |
+| `fetch` | `Deno.ServeHandler` | Deno Deploy 向け Fetch ハンドラー（明示的に `Deno.ServeHandler` 型に適合） |
+| `testRequest()` | `testRequest(method, path, options?): Promise<TestResponse>` | サーバー起動なしでルートをテスト。`TestResponse` ラッパーを返す |
+
+### onListen / onClose
+
+```typescript
+server.onListen(async () => {
+  await db.connect();        // DB 接続など起動時初期化
+});
+
+server.onClose(async () => {
+  await db.disconnect();     // シャットダウン時クリーンアップ
+});
+```
+
+### TestResponse
+
+`testRequest()` の戻り値。`Response` の代わりに返す軽量ラッパー。
+
+```typescript
+class TestResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly headers: Headers;
+
+  async json<T = unknown>(): Promise<T>;
+  async text(): Promise<string>;
+}
+```
 
 ### testRequest() オプション
 
@@ -633,9 +697,19 @@ function loadEnv<S extends EnvSchema>(options: {
   path?: string;
   schema: S;
 }): Promise<EnvResult<S>>;
+
+// 複数ファイルマージ（スキーマなし）
+function loadEnv(options: { paths: string[] }): Promise<void>;
+
+// 複数ファイルマージ（スキーマあり）
+function loadEnv<S extends EnvSchema>(options: {
+  paths: string[];
+  schema: S;
+}): Promise<EnvResult<S>>;
 ```
 
 - `path` 省略時は実行ディレクトリの `.env` を読み込む
+- `paths` を指定した場合、各ファイルを順番に読み込み後発ファイルが優先でマージする（`.env` < `.env.local` < `.env.production` 等）
 - スキーマあり呼び出し時: 各値を `EnvRule.type` に従い型変換する
   - `"number"` / `"port"`: `Number()` で変換。`"port"` は 1〜65535 の範囲を検証する
   - `"boolean"`: `"true"` → `true`、それ以外 → `false`
@@ -677,7 +751,9 @@ const env = await loadEnv({
 | メソッド | 説明 |
 |---------|------|
 | `get / post / put / delete / patch / head / options(path, handler)` | ルートを登録（メソッドチェーン対応） |
+| `all(path, handler)` | 全 HTTP メソッドに同一ハンドラーを一括登録 |
 | `group(prefix)` | プレフィクス付き `RouteGroup` を返す |
+| `mount(prefix, subRouter)` | サブルーターをプレフィックス付きでマウント（サブルーターのルート・ルートミドルウェアを引き継ぐ） |
 | `match(method, url)` | ハンドラーと `params` を返す。未一致は `null` |
 | `routes()` | 登録済みルートの一覧を返す（`ReadonlyArray<Route>`） |
 
@@ -737,7 +813,7 @@ const url = server.router.url("users.show", { id: "123" });
 
 | メソッド | 説明 |
 |---------|------|
-| `url(name, params?)` | 名前付きルートから URL を生成する。未登録の名前は `Error` を throw |
+| `url(name, params?, query?)` | 名前付きルートから URL を生成する。`query` を指定するとクエリ文字列を自動付与する。未登録の名前は `Error` を throw |
 
 ## 7.6 型付きルートパラメータ（ExtractRouteParams 連携）
 
@@ -791,6 +867,18 @@ admin.get("/users/:id", (ctx) => {
 関連性の高いユーティリティを単一ファイルに集約することで import コストを最小化する。
 
 ## 8.1 バリデーター
+
+```typescript
+function validate(body: unknown, schema: Schema, options?: ValidateOptions): ValidationError[]
+
+interface ValidateOptions {
+  /** スキーマ未定義フィールドを許可するか（デフォルト: false） */
+  allowUnknown?: boolean;
+}
+```
+
+- `allowUnknown: false`（デフォルト）: スキーマで定義されていないフィールドは無視する（エラーにしない）  
+- `allowUnknown: true` の場合: スキーマ未定義フィールドを明示的に無視してバリデーションを通過させる（動作は同じだが意図を明示）
 
 ### Rule 型（型定義は §5.3 参照）
 
@@ -860,6 +948,8 @@ interface CorsOptions {
   credentials?: boolean;
   /** プリフライトキャッシュ秒数（デフォルト: 5） */
   maxAge?: number;
+  /** オリジン拒否時に呼ばれるコールバック（ログ・メトリクス収集用） */
+  onBlock?: (origin: string, ctx: Context) => void;
 }
 ```
 
@@ -935,13 +1025,14 @@ interface LogInfo {
 }
 
 interface LoggerOptions {
-  level?: "silent" | "info" | "debug";      // デフォルト: "info"
-  format?: (info: LogInfo) => string;        // カスタムフォーマット（省略時はデフォルト書式）
+  level?: "silent" | "info" | "debug";            // デフォルト: "info"
+  format?: (info: LogInfo) => string;              // カスタムフォーマット（省略時はデフォルト書式）
+  onLog?: (info: LogInfo, line: string) => void;   // カスタム出力先（省略時: console.log）
 }
 ```
 
 - リクエストのメソッド・パス・ステータスコード・レスポンス時間をログ出力する
-- 出力先は `console.log`（外部依存なし）
+- 出力先は `console.log`（外部依存なし）。`onLog` 指定時は `onLog(info, line)` を呼ぶ
 - `level: "silent"` でログ出力を抑制
 - `level: "debug"` でヘッダー情報も出力（`format` 指定時はフォーマット後の文字列のみ出力）
 - `format` 省略時のデフォルト出力形式: `GET /users 200 12ms`
@@ -985,6 +1076,7 @@ interface RateLimitOptions {
   key?: (ctx: Context) => string;                  // クライアント識別キー（デフォルト: IP アドレス）
   message?: string;                                // 429 レスポンスメッセージ
   store?: RateLimitStore;                          // カスタムストア（省略時: インメモリ Map）
+  skip?: (ctx: Context) => boolean | Promise<boolean>; // true を返すとレート制限をスキップ
 }
 ```
 
@@ -1046,7 +1138,9 @@ interface CompressOptions {
 - `Accept-Encoding` ヘッダーに基づき `gzip` / `deflate` を適用する
 - Web 標準 `CompressionStream` API を使用（外部依存なし）
 - `Content-Encoding` / `Vary: Accept-Encoding` を付与する
-- `threshold` 未満のレスポンスは圧縮しない
+- `threshold` 未満のレスポンスは圧縮しない（`threshold: 0` を指定すると常に圧縮）
+- 画像・動画・音声・圧縮済みフォーマット（`image/*`, `video/*`, `audio/*`, `application/zip` 等）は `threshold` に関わらずスキップする
+- `Content-Encoding` ヘッダーが付与済みのレスポンスはスキップする
 
 ## 8.7 ボディサイズ制限ミドルウェア
 
@@ -1168,6 +1262,10 @@ interface SecureHeadersOptions {
   permissionsPolicy?: string | false;
   /** Content-Security-Policy（デフォルト: false） */
   contentSecurityPolicy?: ContentSecurityPolicy | false;
+  /** Cross-Origin-Opener-Policy（デフォルト: false） */
+  crossOriginOpenerPolicy?: "unsafe-none" | "same-origin-allow-popups" | "same-origin" | false;
+  /** Cross-Origin-Embedder-Policy（デフォルト: false） */
+  crossOriginEmbedderPolicy?: "unsafe-none" | "require-corp" | "credentialless" | false;
 }
 ```
 
@@ -1181,6 +1279,8 @@ interface SecureHeadersOptions {
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Permissions-Policy` | （付与しない） |
 | `Content-Security-Policy` | （付与しない） |
+| `Cross-Origin-Opener-Policy` | （付与しない） |
+| `Cross-Origin-Embedder-Policy` | （付与しない） |
 
 - 各オプションで `false` を設定したヘッダーは付与しない
 - `ContentSecurityPolicy` のプロパティは camelCase。ビルダー関数が対応する CSP ディレクティブ文字列に変換する
@@ -1416,7 +1516,9 @@ function serveStatic(options: StaticOptions): Handler
 
 ```typescript
 interface StaticOptions {
-  root: string;  // 配信ルートディレクトリ（絶対パスまたは実行ディレクトリ相対パス）
+  root: string;           // 配信ルートディレクトリ（絶対パスまたは実行ディレクトリ相対パス）
+  index?: string;         // ディレクトリ URL アクセス時のデフォルトファイル（例: "index.html"）
+  cacheControl?: string;  // Cache-Control ヘッダー値（デフォルト: "no-cache"）
 }
 ```
 
@@ -1424,11 +1526,17 @@ interface StaticOptions {
 - MIME タイプは拡張子から自動判定する
 - ディレクトリトラバーサル防御: パス正規化後に `root` 外を参照する場合は `403 Forbidden` を返す
 - ファイル未存在時は `404 Not Found` を返す
+- `index` が指定されている場合、`*path` が空文字またはディレクトリパスのとき `{root}/{path}/{index}` を配信する
+- `cacheControl` を指定することで任意の `Cache-Control` 値を設定できる（指定なし時: `"no-cache"`）
 
 ### 使用例
 
 ```typescript
-server.router.get("/static/*path", serveStatic({ root: "./public" }));
+server.router.get("/static/*path", serveStatic({
+  root: "./public",
+  index: "index.html",
+  cacheControl: "public, max-age=86400",
+}));
 ```
 
 ## 9.3 Cookie ヘルパー
@@ -1481,7 +1589,14 @@ server.router.get("/data", (ctx) => {
 function parseQuery<S extends QuerySchema>(
   query: Record<string, string>,
   schema: S,
+  options?: ParseQueryOptions,
 ): QueryResult<S>
+```
+
+```typescript
+interface ParseQueryOptions {
+  coerce?: boolean;  // true の場合、"true"/"false" を boolean に、数字文字列を number に自動変換（デフォルト: false）
+}
 ```
 
 - `ctx.query`（`Record<string, string>`）をスキーマに基づいて型変換する
@@ -1489,6 +1604,7 @@ function parseQuery<S extends QuerySchema>(
 - `required: true` の項目が存在しない場合、`HTTPError(400)` を throw する
 - `default` が指定されている場合、値が存在しないときにデフォルト値を使用する
 - 変換後の値は `QueryResult<S>` の型（`number` / `boolean` / `string` / `T | undefined`）で返す
+- `coerce: true` のとき、スキーマの `type` に関わらず `"true"` / `"false"` を `boolean`、数字文字列を `number` に前処理してから変換する
 
 ### 変換ルール
 
@@ -1584,6 +1700,99 @@ server.router.get("/greet", (ctx) => {
 });
 ```
 
+## 9.8 Server-Sent Events
+
+```typescript
+function sse(
+  handler: (writer: SSEWriter) => void | Promise<void>,
+): Response
+```
+
+```typescript
+interface SSEMessage {
+  data: string;
+  event?: string;  // イベント名（省略時: message イベント）
+  id?: string;     // Last-Event-ID
+  retry?: number;  // 再接続間隔（ミリ秒）
+}
+
+class SSEWriter {
+  send(message: SSEMessage): void    // SSE メッセージを送信する
+  close(): void                      // ストリームを閉じる
+}
+```
+
+- `Content-Type: text/event-stream` / `Cache-Control: no-cache` / `Connection: keep-alive` を自動付与する
+- `handler` に `SSEWriter` を渡してメッセージを逐次送信する
+- `writer.close()` を呼ぶか `handler` が完了するとストリームを終了する
+- `SSEMessage.data` が複数行の場合、各行に `data:` プレフィックスを付与する
+
+### フィールド変換ルール
+
+| SSEMessage フィールド | 出力形式 |
+|----------------------|---------|
+| `data` | `data: {値}\n` |
+| `event` | `event: {値}\n` |
+| `id` | `id: {値}\n` |
+| `retry` | `retry: {値}\n` |
+
+各メッセージの末尾に空行（`\n\n`）を付与してブラウザに通知する。
+
+### 使用例
+
+```typescript
+import { createServer, sse } from "@adlaire/fw";
+
+const server = createServer();
+
+server.router.get("/events", (_ctx) => {
+  return sse(async (writer) => {
+    for (let i = 0; i < 5; i++) {
+      writer.send({ data: `count: ${i}`, event: "tick" });
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    writer.close();
+  });
+});
+```
+
+## 9.9 WebSocket アップグレード
+
+```typescript
+function upgradeWebSocket(
+  req: Request,
+  handler: (ws: WebSocket) => void,
+  options?: WebSocketUpgradeOptions,
+): Response
+```
+
+```typescript
+interface WebSocketUpgradeOptions {
+  protocol?: string;  // WebSocket サブプロトコル
+}
+```
+
+- `Deno.upgradeWebSocket()` を使用して HTTP 接続を WebSocket にアップグレードする
+- `handler` はアップグレード完了後に `WebSocket` インスタンスを受け取る
+- アップグレード失敗時（`Upgrade: websocket` ヘッダーがない等）は `HTTPError(400)` を throw する
+- `WebSocket` の `onopen` / `onmessage` / `onerror` / `onclose` は `handler` 内で設定する
+
+### 使用例
+
+```typescript
+import { createServer, upgradeWebSocket } from "@adlaire/fw";
+
+const server = createServer();
+
+server.router.get("/ws", (ctx) => {
+  return upgradeWebSocket(ctx.req, (ws) => {
+    ws.onopen = () => ws.send("connected");
+    ws.onmessage = (e) => ws.send(`echo: ${e.data}`);
+    ws.onclose = () => console.log("disconnected");
+  });
+});
+```
+
 ---
 
 # 10. エラーハンドリング
@@ -1646,7 +1855,7 @@ server.router.get("/admin", (ctx) => {
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
-| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する |
+| **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する（9 ファイル構成: types / server / router / middleware / transport / validate / response / static / helpers） |
 | **Web 標準ベース** | `Request` / `Response` / `URL` / `ReadableStream` を使用。Node.js API 不使用 |
 | **デュアルデプロイ対応** | Fetch ハンドラー形式（Deno Deploy）と `Deno.serve`（Adlaire Deploy）を両サポート |
 | **Handler は Response を返す** | `void` 禁止。すべてのハンドラーは `Response` を返す |
