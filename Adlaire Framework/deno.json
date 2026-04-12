@@ -1,6 +1,6 @@
 {
   "name": "@adlaire/fw",
-  "version": "1.4.9",
+  "version": "1.5.10",
   "exports": {
     "./server":     "./Core/server.ts",
     "./env":        "./Core/env.ts",

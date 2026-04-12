@@ -328,3 +328,21 @@ export class RouteGroup {
     return new RouteGroup(this.#prefix + prefix, this.#router, [...this.#middlewares]);
   }
 }
+
+// ------------------------------------------------------------
+// §0.6 defineHandler — 型付け絶対原則ファクトリ関数
+// ------------------------------------------------------------
+
+/**
+ * ルートハンドラーを型付きで定義するファクトリ関数（§0.6 型付け絶対原則）。
+ * すべてのハンドラーはこの関数か Handler<P> 型注釈付き変数宣言を使用すること。
+ * インラインラムダをルート登録メソッドに直接渡すことを禁止する。
+ */
+export function defineHandler<
+  P extends Record<string, string> = Record<string, string>,
+  B = unknown,
+  Q extends Record<string, string> = Record<string, string>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(fn: Handler<P, B, Q, S>): Handler<P, B, Q, S> {
+  return fn;
+}

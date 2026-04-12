@@ -56,6 +56,31 @@
 - `TypedHandler<Path>` のようなパスリテラルを型引数に取るハンドラー型エイリアスの定義禁止
 - 型付けが必要な場合は `Handler<P>` の `P` を利用者が明示的に指定する
 
+## 0.6 型付け絶対原則
+
+すべてのルートハンドラーに型注釈を必須とする。型注釈の省略を禁止する。いかなる理由があっても例外を認めない。
+
+- **`defineHandler<P>()`** ファクトリ関数経由での定義、または **`Handler<P>`** 型注釈付き変数宣言のいずれかを使用すること
+- インラインラムダ `(ctx) => ...` をルート登録メソッドに直接渡すことを禁止する
+- `P`（パスパラメータ型）の型引数は常に明示的に指定する。パスパラメータを持たないルートでも `defineHandler<Record<string, string>>()` または無引数で明示的に呼び出す
+- `B`（ボディ型）/ `Q`（クエリ型）/ `S`（state 型）も型付けが必要な場合は明示的に指定する
+
+```typescript
+// ✅ 正しい — defineHandler<P>() を使用
+server.router.get("/users/:id", defineHandler<{ id: string }>((ctx) => {
+  return json({ id: ctx.params.id });
+}));
+
+// ✅ 正しい — Handler<P> 型注釈付き変数宣言
+const userHandler: Handler<{ id: string }> = (ctx) => {
+  return json({ id: ctx.params.id });
+};
+server.router.get("/users/:id", userHandler);
+
+// ❌ 禁止 — インラインラムダの直接渡し
+server.router.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
+```
+
 ---
 
 # 1. 概要
@@ -170,6 +195,7 @@ import { logger, rateLimit } from "@adlaire/fw/transport";
 import { validate, assertBody } from "@adlaire/fw/validate";
 import { serveStatic } from "@adlaire/fw/static";
 import { parseQuery, getCookie } from "@adlaire/fw/helpers";
+import { defineHandler } from "@adlaire/fw/router";
 import type { Handler, HTTPError } from "@adlaire/fw/types";
 
 // ✅ CLI エントリーポイント（adlaire-fw コマンド用）
@@ -184,7 +210,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```json
 {
   "name": "@adlaire/fw",
-  "version": "1.4.9",
+  "version": "1.5.10",
   "exports": {
     "./server":     "./Core/server.ts",
     "./env":        "./Core/env.ts",
@@ -210,7 +236,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 |---------|---------|----------------|
 | `@adlaire/fw/server` | `Core/server.ts` | `createServer` / `App` / `TestResponse` |
 | `@adlaire/fw/env` | `Core/env.ts` | `loadEnv` / `EnvRule` / `EnvSchema` / `EnvResult` |
-| `@adlaire/fw/router` | `Core/router.ts` | `Router` / `RouteGroup` |
+| `@adlaire/fw/router` | `Core/router.ts` | `Router` / `RouteGroup` / `defineHandler` |
 | `@adlaire/fw/middleware` | `Core/middleware.ts` | `cors` / `secureHeaders` / `hsts` / `ipFilter` / `csrfProtection` / `ContentSecurityPolicy` |
 | `@adlaire/fw/transport` | `Core/transport.ts` | `logger` / `rateLimit` / `etag` / `compress` / `bodyLimit` / `requestId` / `timeout` |
 | `@adlaire/fw/validate` | `Core/validate.ts` | `validate` / `assertBody` |
@@ -859,30 +885,40 @@ const url = server.router.url("users.show", { id: "123" });
 ## 7.6 パスパラメータの型付け
 
 > **パスリテラル型からの自動推論は廃止済み（Ver.1.4-9）**。
+> **インラインラムダの直接渡しは禁止（Ver.1.5-10 / §0.6 型付け絶対原則）**。
 >
 > `ctx.params` は常に `Record<string, string>`。パラメータキーが存在しない場合は `undefined` ではなく実行時エラーとなる（ルーター側で保証）。
 
-パラメータに型付けが必要な場合はハンドラー型の第 1 引数 `P` を明示的に指定する。
+すべてのハンドラーは `defineHandler<P>()` ファクトリ関数または `Handler<P>` 型注釈付き変数宣言を使用すること。
 
 ```typescript
 import { createServer } from "@adlaire/fw/server";
 import { json } from "@adlaire/fw/response";
+import { defineHandler } from "@adlaire/fw/router";
 import type { Handler } from "@adlaire/fw/types";
 
 const server = createServer();
 
-// 型付けなし（デフォルト: Record<string, string>）
-server.router.get("/users/:id", (ctx) => {
-  const id = ctx.params.id;  // string
-  return json({ id });
-});
+// ✅ 正しい — defineHandler<P>() を使用（パスパラメータなし）
+server.router.get("/users", defineHandler((ctx) => {
+  return json({ path: ctx.req.url });
+}));
 
-// 明示的な型指定
+// ✅ 正しい — defineHandler<P>() を使用（パスパラメータあり）
+server.router.get("/users/:id", defineHandler<{ id: string }>((ctx) => {
+  const { id } = ctx.params;
+  return json({ id });
+}));
+
+// ✅ 正しい — Handler<P> 型注釈付き変数宣言
 const handler: Handler<{ postId: string; commentId: string }> = (ctx) => {
   const { postId, commentId } = ctx.params;
   return json({ postId, commentId });
 };
 server.router.get("/posts/:postId/comments/:commentId", handler);
+
+// ❌ 禁止 — インラインラムダの直接渡し（§0.6 違反）
+server.router.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
 ```
 
 ---
@@ -1911,6 +1947,7 @@ server.router.get("/admin", (ctx) => {
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
 | **自動型推論禁止（絶対原則）** | パスリテラル型を利用した `ctx.params` の自動推論を禁止。`ExtractRouteParams` / `ParamKeys` / `TypedHandler` 相当の機構の再実装を禁止。`ctx.params` は常に `Record<string, string>`（§0.5・§5.8 参照） |
+| **型付け絶対原則（絶対原則）** | インラインラムダのルート登録メソッドへの直接渡しを禁止。すべてのハンドラーは `defineHandler<P>()` または `Handler<P>` 型注釈を使用する（§0.6 参照） |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
 | **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する（10 ファイル構成: types / server / env / router / middleware / transport / validate / response / static / helpers） |
 | **Core 依存グラフ** | `types.ts` / `env.ts` は他の Core ファイルに依存しない。`server.ts` / `static.ts` は `response.ts` に依存しない（§3.1 依存グラフ制約参照） |

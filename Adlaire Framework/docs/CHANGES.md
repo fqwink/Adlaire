@@ -5,6 +5,47 @@
 
 ---
 
+## Ver.1.5-10 — 型付け絶対原則・defineHandler 追加
+
+**日付**: 2026-04-12
+**種別**: 追加機能・設計原則追加
+
+### 追加機能
+
+- `defineHandler<P, B, Q, S>()`: ルートハンドラーを型付きで定義するファクトリ関数（`@adlaire/fw/router`）。インラインラムダの直接渡しを回避し、型注釈を強制する
+
+### 設計原則追加（§0.6）
+
+- **§0.6 追加（絶対原則）**: 型付け絶対原則。すべてのルートハンドラーに型注釈を必須とし、インラインラムダのルート登録メソッドへの直接渡しを禁止する
+- `defineHandler<P>()` または `Handler<P>` 型注釈付き変数宣言のいずれかを使用すること
+
+### 使用方法
+
+```typescript
+import { createServer } from "@adlaire/fw/server";
+import { json } from "@adlaire/fw/response";
+import { defineHandler } from "@adlaire/fw/router";
+import type { Handler } from "@adlaire/fw/types";
+
+const server = createServer();
+
+// ✅ defineHandler<P>() を使用
+server.router.get("/users/:id", defineHandler<{ id: string }>((ctx) => {
+  return json({ id: ctx.params.id });
+}));
+
+// ✅ Handler<P> 型注釈付き変数宣言
+const listHandler: Handler = (ctx) => {
+  return json({ path: ctx.req.url });
+};
+server.router.get("/users", listHandler);
+
+// ❌ 禁止 — インラインラムダの直接渡し（§0.6 違反）
+server.router.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
+```
+
+---
+
 ## Ver.1.4-9 — パスリテラル型自動推論廃止・禁止化
 
 **日付**: 2026-04-12
