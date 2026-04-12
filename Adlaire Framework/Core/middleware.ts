@@ -1,163 +1,34 @@
 // ============================================================
 // Adlaire Framework — middleware.ts
-// バリデーター・各種ミドルウェア
+// セキュリティ・ネットワーク制御ミドルウェア
+// cors / secureHeaders / hsts / ipFilter / csrfProtection
 // ============================================================
 
 import type {
-  ContentSecurityPolicy,
   Context,
   Method,
   Middleware,
-  Rule,
-  Schema,
-  ValidationError,
 } from "./types.ts";
-import { HTTPError } from "./types.ts";
 
 // ------------------------------------------------------------
-// §8.1 バリデーター
+// §8.10 ContentSecurityPolicy（secureHeaders 専用型）
+// Ver.1.3-8 にて types.ts から移動
 // ------------------------------------------------------------
 
-function validateValue(
-  field: string,
-  value: unknown,
-  rule: Rule,
-  errors: ValidationError[],
-): void {
-  const absent = value === undefined || value === null;
-
-  if (absent) {
-    if (value === null && rule.nullable) return;
-    if (rule.required) {
-      errors.push({ field, message: rule.message ?? `${field} は必須です` });
-    }
-    return;
-  }
-
-  switch (rule.type) {
-    case "string": {
-      if (typeof value !== "string") {
-        errors.push({ field, message: rule.message ?? `${field} は文字列である必要があります` });
-        return;
-      }
-      if (rule.min !== undefined && value.length < rule.min) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.min} 文字以上である必要があります` });
-      }
-      if (rule.max !== undefined && value.length > rule.max) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.max} 文字以下である必要があります` });
-      }
-      if (rule.pattern !== undefined) {
-        rule.pattern.lastIndex = 0; // g フラグ付き RegExp 対策
-      }
-      if (rule.pattern !== undefined && !rule.pattern.test(value)) {
-        errors.push({ field, message: rule.message ?? `${field} の形式が正しくありません` });
-      }
-      if (rule.enum !== undefined && !rule.enum.includes(value)) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.enum.join(", ")} のいずれかである必要があります` });
-      }
-      break;
-    }
-    case "number": {
-      if (typeof value !== "number" || Number.isNaN(value)) {
-        errors.push({ field, message: rule.message ?? `${field} は数値である必要があります` });
-        return;
-      }
-      if (rule.integer && !Number.isInteger(value)) {
-        errors.push({ field, message: rule.message ?? `${field} は整数である必要があります` });
-      }
-      if (rule.min !== undefined && value < rule.min) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.min} 以上である必要があります` });
-      }
-      if (rule.max !== undefined && value > rule.max) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.max} 以下である必要があります` });
-      }
-      break;
-    }
-    case "boolean": {
-      if (typeof value !== "boolean") {
-        errors.push({ field, message: rule.message ?? `${field} は真偽値である必要があります` });
-      }
-      break;
-    }
-    case "email": {
-      if (typeof value !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        errors.push({ field, message: rule.message ?? `${field} は有効なメールアドレスである必要があります` });
-      }
-      break;
-    }
-    case "url": {
-      if (typeof value !== "string") {
-        errors.push({ field, message: rule.message ?? `${field} は文字列である必要があります` });
-        return;
-      }
-      let parsed: URL;
-      try {
-        parsed = new URL(value);
-      } catch {
-        errors.push({ field, message: rule.message ?? `${field} は有効な URL である必要があります` });
-        return;
-      }
-      const allowed = rule.allowedProtocols ?? ["http:", "https:"];
-      // URL.protocol には末尾コロンが付く（例: "https:"）
-      const normalizedAllowed = allowed.map((p) => p.endsWith(":") ? p : `${p}:`);
-      if (!normalizedAllowed.includes(parsed.protocol)) {
-        const displayProtocols = normalizedAllowed.map((p) => p.replace(/:$/, ""));
-        errors.push({ field, message: rule.message ?? `${field} のプロトコルは ${displayProtocols.join(", ")} である必要があります` });
-      }
-      break;
-    }
-    case "object": {
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        errors.push({ field, message: rule.message ?? `${field} はオブジェクトである必要があります` });
-        return;
-      }
-      if (rule.fields) {
-        // typeof + null + !Array チェック済みのため Record として安全に扱える
-        const obj: Record<string, unknown> = value;
-        for (const [key, subRule] of Object.entries(rule.fields)) {
-          validateValue(`${field}.${key}`, obj[key], subRule, errors);
-        }
-      }
-      break;
-    }
-    case "array": {
-      if (!Array.isArray(value)) {
-        errors.push({ field, message: rule.message ?? `${field} は配列である必要があります` });
-        return;
-      }
-      if (rule.min !== undefined && value.length < rule.min) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.min} 件以上である必要があります` });
-      }
-      if (rule.max !== undefined && value.length > rule.max) {
-        errors.push({ field, message: rule.message ?? `${field} は ${rule.max} 件以下である必要があります` });
-      }
-      if (rule.items) {
-        for (let i = 0; i < value.length; i++) {
-          validateValue(`${field}[${i}]`, value[i], rule.items, errors);
-        }
-      }
-      break;
-    }
-    case "custom": {
-      const result = rule.validate(value);
-      if (result !== true) {
-        errors.push({ field, message: rule.message ?? result });
-      }
-      break;
-    }
-  }
-}
-
-export function validate(body: unknown, schema: Schema): ValidationError[] {
-  const errors: ValidationError[] = [];
-  let obj: Record<string, unknown> = {};
-  if (typeof body === "object" && body !== null && !Array.isArray(body)) {
-    obj = body;
-  }
-  for (const [field, rule] of Object.entries(schema)) {
-    validateValue(field, obj[field], rule, errors);
-  }
-  return errors;
+export interface ContentSecurityPolicy {
+  defaultSrc?: string[];
+  scriptSrc?: string[];
+  styleSrc?: string[];
+  imgSrc?: string[];
+  connectSrc?: string[];
+  fontSrc?: string[];
+  objectSrc?: string[];
+  frameSrc?: string[];
+  frameAncestors?: string[];
+  formAction?: string[];
+  baseUri?: string[];
+  upgradeInsecureRequests?: boolean;
+  reportUri?: string;
 }
 
 // ------------------------------------------------------------
@@ -171,6 +42,7 @@ export interface CorsOptions {
   exposedHeaders?: string[];
   credentials?: boolean;
   maxAge?: number;
+  onBlock?: (ctx: Context) => void;
 }
 
 function resolveOrigin(
@@ -187,7 +59,6 @@ function resolveOrigin(
   if (option instanceof RegExp) {
     return option.test(requestOrigin) ? requestOrigin : null;
   }
-  // function
   return option(requestOrigin) ? requestOrigin : null;
 }
 
@@ -237,24 +108,33 @@ export function cors(options?: CorsOptions): Middleware {
         if (requestDependent) {
           headers.set("Vary", "Origin");
         }
+      } else {
+        opts.onBlock?.(ctx);
       }
       return new Response(null, { status: 204, headers });
     }
 
     // 通常リクエスト
     const response = await next();
-    if (resolvedOrigin === null) return response;
+
+    if (resolvedOrigin === null) {
+      opts.onBlock?.(ctx);
+      // オリジン拒否時でもオリジン依存設定の場合は Vary: Origin を付与する
+      if (requestDependent) {
+        const headers = new Headers(response.headers);
+        headers.set("Vary", "Origin");
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+      return response;
+    }
 
     const headers = new Headers(response.headers);
     headers.set("Access-Control-Allow-Origin", resolvedOrigin);
-    headers.set(
-      "Access-Control-Allow-Methods",
-      methods.join(", "),
-    );
-    headers.set(
-      "Access-Control-Allow-Headers",
-      allowedHeaders.join(", "),
-    );
+    // Access-Control-Allow-Methods / Allow-Headers はプリフライト専用ヘッダー
     if (opts.exposedHeaders && opts.exposedHeaders.length > 0) {
       headers.set("Access-Control-Expose-Headers", opts.exposedHeaders.join(", "));
     }
@@ -274,266 +154,6 @@ export function cors(options?: CorsOptions): Middleware {
 }
 
 // ------------------------------------------------------------
-// §8.3 ロガーミドルウェア
-// ------------------------------------------------------------
-
-export interface LogInfo {
-  method: string;
-  path: string;
-  status: number;
-  durationMs: number;
-}
-
-export interface LoggerOptions {
-  level?: "silent" | "info" | "debug";
-  format?: (info: LogInfo) => string;
-}
-
-export function logger(options?: LoggerOptions): Middleware {
-  const level = options?.level ?? "info";
-  const fmt = options?.format;
-
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    if (level === "silent") return await next();
-
-    const start = performance.now();
-    const method = ctx.req.method;
-    const url = new URL(ctx.req.url);
-    const path = url.pathname;
-
-    if (level === "debug" && fmt === undefined) {
-      const headers: Record<string, string> = {};
-      ctx.req.headers.forEach((v, k) => { headers[k] = v; });
-      console.log(`→ ${method} ${path}`, headers);
-    }
-
-    const response = await next();
-    const durationMs = Math.round(performance.now() - start);
-    const info: LogInfo = { method, path, status: response.status, durationMs };
-
-    if (fmt !== undefined) {
-      console.log(fmt(info));
-    } else {
-      console.log(`${method} ${path} ${response.status} ${durationMs}ms`);
-    }
-
-    return response;
-  };
-}
-
-// ------------------------------------------------------------
-// §8.4 レートリミッター
-// ------------------------------------------------------------
-
-export interface RateLimitStore {
-  increment(key: string, windowMs: number): { count: number; resetAt: number } | Promise<{ count: number; resetAt: number }>;
-  reset(key: string): void | Promise<void>;
-}
-
-export interface RateLimitOptions {
-  windowMs: number;
-  max: number;
-  key?: (ctx: Context) => string;
-  message?: string;
-  store?: RateLimitStore;
-}
-
-// デフォルトのインメモリストア実装
-function createInMemoryStore(): RateLimitStore {
-  const map = new Map<string, { count: number; resetAt: number }>();
-
-  return {
-    increment(key: string, windowMs: number) {
-      const now = Date.now();
-      let entry = map.get(key);
-
-      if (!entry || now >= entry.resetAt) {
-        // 期限切れエントリを清掃（メモリリーク防止）
-        for (const [k, v] of map) {
-          if (now >= v.resetAt) map.delete(k);
-        }
-        entry = { count: 0, resetAt: now + windowMs };
-        map.set(key, entry);
-      }
-
-      entry.count++;
-      return { count: entry.count, resetAt: entry.resetAt };
-    },
-    reset(key: string) {
-      map.delete(key);
-    },
-  };
-}
-
-export function rateLimit(options: RateLimitOptions): Middleware {
-  const store = options.store ?? createInMemoryStore();
-  const keyFn = options.key ?? ((ctx: Context) =>
-    ctx.req.headers.get("x-forwarded-for") ?? "unknown"
-  );
-
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    const clientKey = keyFn(ctx);
-    const { count, resetAt } = await store.increment(clientKey, options.windowMs);
-
-    if (count > options.max) {
-      const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);
-      return new Response(
-        JSON.stringify({ error: options.message ?? "Too Many Requests" }),
-        {
-          status: 429,
-          headers: {
-            "Content-Type": "application/json; charset=UTF-8",
-            "Retry-After": String(retryAfter),
-          },
-        },
-      );
-    }
-
-    return await next();
-  };
-}
-
-// ------------------------------------------------------------
-// §8.5 ETag ミドルウェア
-// ------------------------------------------------------------
-
-export function etag(): Middleware {
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    const response = await next();
-
-    // arrayBuffer でボディ全体を一度だけ読み取る
-    const bodyBytes = new Uint8Array(await response.arrayBuffer());
-    if (bodyBytes.length === 0) {
-      return new Response(bodyBytes, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
-    }
-
-    const hashBuffer = await crypto.subtle.digest("SHA-256", bodyBytes);
-    const hashArray = new Uint8Array(hashBuffer);
-    let hashHex = "";
-    for (const b of hashArray) hashHex += b.toString(16).padStart(2, "0");
-    const etagValue = `W/"${hashHex.slice(0, 16)}"`;
-
-    // If-None-Match チェック
-    const ifNoneMatch = ctx.req.headers.get("If-None-Match");
-    if (ifNoneMatch === etagValue) {
-      return new Response(null, { status: 304, headers: { "ETag": etagValue } });
-    }
-
-    const headers = new Headers(response.headers);
-    headers.set("ETag", etagValue);
-
-    return new Response(bodyBytes, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  };
-}
-
-// ------------------------------------------------------------
-// §8.7 ボディサイズ制限ミドルウェア
-// ------------------------------------------------------------
-
-export interface BodyLimitOptions {
-  maxBytes: number;
-  message?: string;
-}
-
-export function bodyLimit(options: BodyLimitOptions): Middleware {
-  const message = options.message ?? "Payload Too Large";
-
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    const contentLength = ctx.req.headers.get("Content-Length");
-    if (contentLength !== null) {
-      const len = parseInt(contentLength, 10);
-      if (!Number.isNaN(len) && len > options.maxBytes) {
-        return new Response(
-          JSON.stringify({ error: message }),
-          {
-            status: 413,
-            headers: { "Content-Type": "application/json; charset=UTF-8" },
-          },
-        );
-      }
-    }
-    return await next();
-  };
-}
-
-// ------------------------------------------------------------
-// §8.8 リクエスト ID ミドルウェア
-// ------------------------------------------------------------
-
-export interface RequestIdOptions {
-  header?: string;
-  generator?: () => string;
-}
-
-export function requestId(
-  options?: RequestIdOptions,
-): Middleware<{ requestId: string }> {
-  const headerName = options?.header ?? "X-Request-ID";
-  const generate = options?.generator ?? (() => crypto.randomUUID());
-
-  return async (
-    ctx: Context<Record<string, string>, unknown, Record<string, string>, { requestId: string }>,
-    next: () => Promise<Response>,
-  ): Promise<Response> => {
-    const id = ctx.req.headers.get(headerName) ?? generate();
-    ctx.state.requestId = id;
-
-    const response = await next();
-    const headers = new Headers(response.headers);
-    headers.set(headerName, id);
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  };
-}
-
-// ------------------------------------------------------------
-// §8.9 タイムアウトミドルウェア
-// ------------------------------------------------------------
-
-export interface TimeoutOptions {
-  ms: number;
-  message?: string;
-  status?: 408 | 503 | 504;
-}
-
-export function timeout(options: TimeoutOptions): Middleware {
-  const message = options.message ?? "Request Timeout";
-  const status = options.status ?? 503;
-
-  return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    let timerId: number | undefined;
-    const timeoutPromise = new Promise<Response>((resolve) => {
-      timerId = setTimeout(() => {
-        resolve(
-          new Response(
-            JSON.stringify({ error: message }),
-            {
-              status,
-              headers: { "Content-Type": "application/json; charset=UTF-8" },
-            },
-          ),
-        );
-      }, options.ms);
-    });
-
-    const result = await Promise.race([next(), timeoutPromise]);
-    clearTimeout(timerId);
-    return result;
-  };
-}
-
-// ------------------------------------------------------------
 // §8.10 セキュリティヘッダーミドルウェア
 // ------------------------------------------------------------
 
@@ -544,6 +164,8 @@ export interface SecureHeadersOptions {
   referrerPolicy?: string | false;
   permissionsPolicy?: string | false;
   contentSecurityPolicy?: ContentSecurityPolicy | false;
+  crossOriginOpenerPolicy?: string | false;
+  crossOriginEmbedderPolicy?: "require-corp" | "unsafe-none" | false;
 }
 
 function buildCsp(csp: ContentSecurityPolicy): string {
@@ -578,6 +200,8 @@ export function secureHeaders(options?: SecureHeadersOptions): Middleware {
   const permissionsPolicy = opts.permissionsPolicy ?? false;
   const csp = opts.contentSecurityPolicy ?? false;
   const cspValue = csp !== false ? buildCsp(csp) : false;
+  const coop = opts.crossOriginOpenerPolicy ?? false;
+  const coep = opts.crossOriginEmbedderPolicy ?? false;
 
   return async (_ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const response = await next();
@@ -601,59 +225,14 @@ export function secureHeaders(options?: SecureHeadersOptions): Middleware {
     if (cspValue !== false && cspValue.length > 0) {
       headers.set("Content-Security-Policy", cspValue);
     }
+    if (coop !== false) {
+      headers.set("Cross-Origin-Opener-Policy", coop);
+    }
+    if (coep !== false) {
+      headers.set("Cross-Origin-Embedder-Policy", coep);
+    }
 
     return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  };
-}
-
-// ------------------------------------------------------------
-// §8.6 応答圧縮ミドルウェア
-// ------------------------------------------------------------
-
-export interface CompressOptions {
-  threshold?: number;
-}
-
-export function compress(options?: CompressOptions): Middleware {
-  const threshold = options?.threshold ?? 1024;
-
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    const response = await next();
-    if (response.body === null) return response;
-
-    const acceptEncoding = ctx.req.headers.get("Accept-Encoding") ?? "";
-
-    let encoding: string | null = null;
-    let format: CompressionFormat | null = null;
-
-    if (acceptEncoding.includes("gzip")) {
-      encoding = "gzip";
-      format = "gzip";
-    } else if (acceptEncoding.includes("deflate")) {
-      encoding = "deflate";
-      format = "deflate";
-    }
-
-    if (format === null) return response;
-
-    // Content-Length チェック（ヘッダーがある場合）
-    const contentLength = response.headers.get("Content-Length");
-    if (contentLength !== null) {
-      const len = parseInt(contentLength, 10);
-      if (!Number.isNaN(len) && len < threshold) return response;
-    }
-
-    const compressedStream = response.body.pipeThrough(new CompressionStream(format));
-    const headers = new Headers(response.headers);
-    headers.set("Content-Encoding", encoding);
-    headers.append("Vary", "Accept-Encoding");
-    headers.delete("Content-Length");
-
-    return new Response(compressedStream, {
       status: response.status,
       statusText: response.statusText,
       headers,
@@ -706,7 +285,6 @@ export function csrfProtection(options?: CsrfOptions): Middleware {
     const method = ctx.req.method;
 
     if (protectedMethods.has(method)) {
-      // 保護対象メソッド: トークン照合
       const cookieToken = readCsrfCookie(ctx.req, cookieName);
       if (cookieToken === null) {
         return new Response(
@@ -724,7 +302,6 @@ export function csrfProtection(options?: CsrfOptions): Middleware {
       return await next();
     }
 
-    // セーフメソッド: トークン未設定の場合のみ新規生成して Set-Cookie
     const response = await next();
     const existingToken = readCsrfCookie(ctx.req, cookieName);
     if (existingToken !== null) return response;
@@ -748,19 +325,6 @@ export function csrfProtection(options?: CsrfOptions): Middleware {
 }
 
 // ------------------------------------------------------------
-// §8.12 型付きボディアサーション
-// ------------------------------------------------------------
-
-export function assertBody<T>(body: unknown, schema: Schema): T {
-  const errors: ValidationError[] = validate(body, schema);
-  if (errors.length > 0) {
-    throw new HTTPError(400, "Validation Failed", errors);
-  }
-  // 実行時バリデーション済みのため型アサーションを使用する（§8.12 仕様に定める例外）
-  return body as T;
-}
-
-// ------------------------------------------------------------
 // §8.13 HSTS ミドルウェア
 // ------------------------------------------------------------
 
@@ -774,6 +338,20 @@ export function hsts(options?: HstsOptions): Middleware {
   const maxAge = options?.maxAge ?? 31536000;
   const includeSubDomains = options?.includeSubDomains !== false;
   const preload = options?.preload ?? false;
+
+  // preload: true は includeSubDomains: true かつ maxAge >= 31536000 (1年) が必須
+  if (preload) {
+    if (!includeSubDomains) {
+      throw new TypeError(
+        "hsts(): preload: true を使用するには includeSubDomains: true が必要です",
+      );
+    }
+    if (maxAge < 31536000) {
+      throw new TypeError(
+        "hsts(): preload: true を使用するには maxAge >= 31536000 (1年) が必要です",
+      );
+    }
+  }
 
   let headerValue = `max-age=${maxAge}`;
   if (includeSubDomains) headerValue += "; includeSubDomains";
@@ -802,7 +380,6 @@ export interface IpFilterOptions {
   message?: string;
 }
 
-// IPv4 アドレスを 32bit 数値に変換する
 function parseIpv4(ip: string): number | null {
   const parts = ip.split(".");
   if (parts.length !== 4) return null;
@@ -815,11 +392,9 @@ function parseIpv4(ip: string): number | null {
   return num;
 }
 
-// IPv4 CIDR マッチング（例: "192.168.0.0/24"）
 function matchesCidr(ip: string, cidr: string): boolean {
   const slashIdx = cidr.indexOf("/");
   if (slashIdx === -1) {
-    // CIDR 記法なし: 完全一致
     return ip === cidr;
   }
   const network = cidr.slice(0, slashIdx);
@@ -849,7 +424,7 @@ export function ipFilter(options: IpFilterOptions): Middleware {
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const ip = getIpFn(ctx);
 
-    // allow リストが指定されている場合: 一致しない場合は拒否
+    // IPv6 アドレスは現在 IPv4 CIDR ルールの対象外（完全一致のみ評価）
     if (allow !== undefined && allow.length > 0) {
       if (!matchesAnyRule(ip, allow)) {
         return new Response(
@@ -859,7 +434,6 @@ export function ipFilter(options: IpFilterOptions): Middleware {
       }
     }
 
-    // deny リストが指定されている場合: 一致する場合は拒否
     if (deny !== undefined && deny.length > 0) {
       if (matchesAnyRule(ip, deny)) {
         return new Response(

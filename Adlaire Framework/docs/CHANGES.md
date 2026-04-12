@@ -5,6 +5,200 @@
 
 ---
 
+## Ver.1.5-10 — 型付け絶対原則・defineHandler 追加
+
+**日付**: 2026-04-12
+**種別**: 追加機能・設計原則追加
+
+### 追加機能
+
+- `defineHandler<P, B, Q, S>()`: ルートハンドラーを型付きで定義するファクトリ関数（`@adlaire/fw/router`）。インラインラムダの直接渡しを回避し、型注釈を強制する
+
+### 設計原則追加（§0.6）
+
+- **§0.6 追加（絶対原則）**: 型付け絶対原則。すべてのルートハンドラーに型注釈を必須とし、インラインラムダのルート登録メソッドへの直接渡しを禁止する
+- `defineHandler<P>()` または `Handler<P>` 型注釈付き変数宣言のいずれかを使用すること
+
+### 使用方法
+
+```typescript
+import { createServer } from "@adlaire/fw/server";
+import { json } from "@adlaire/fw/response";
+import { defineHandler } from "@adlaire/fw/router";
+import type { Handler } from "@adlaire/fw/types";
+
+const server = createServer();
+
+// ✅ defineHandler<P>() を使用
+server.router.get("/users/:id", defineHandler<{ id: string }>((ctx) => {
+  return json({ id: ctx.params.id });
+}));
+
+// ✅ Handler<P> 型注釈付き変数宣言
+const listHandler: Handler = (ctx) => {
+  return json({ path: ctx.req.url });
+};
+server.router.get("/users", listHandler);
+
+// ❌ 禁止 — インラインラムダの直接渡し（§0.6 違反）
+server.router.get("/users/:id", (ctx) => json({ id: ctx.params.id }));
+```
+
+---
+
+## Ver.1.4-9 — パスリテラル型自動推論廃止・禁止化
+
+**日付**: 2026-04-12
+**種別**: 機能廃止・アーキテクチャ変更
+
+### 廃止
+
+- `ExtractRouteParams<Path>` / `ParamKeys<Path>` 型を削除（`@adlaire/fw/types`）
+- `TypedHandler<Path>` 型を削除（`@adlaire/fw/types`）
+- `Router` / `RouteGroup` の全ルート登録メソッド（`get` / `post` / `put` / `delete` / `patch` / `head` / `options` / `all`）から `<Path extends string>` オーバーロードを削除
+
+### 設計原則追加（§0.2 / §0.5）
+
+- **§0.2 強化**: 型安全はフレームワークが事前決定する。各 `ctx` プロパティの型はフレームワークが決定し利用者は変更できない
+- **§0.5 追加（絶対原則）**: パスリテラル型を利用した自動型推論をフレームワーク全域で禁止。`ExtractRouteParams` 相当の機構の再実装を禁止
+
+### 移行
+
+```typescript
+// ❌ 廃止前（自動推論）
+server.router.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;  // string（自動推論）
+});
+
+// ✅ 廃止後（ctx.params は Record<string, string>）
+server.router.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;  // string（常に string）
+});
+
+// ✅ 型付けが必要な場合は Handler<P> を明示指定
+const handler: Handler<{ id: string }> = (ctx) => {
+  const id = ctx.params.id;  // string
+};
+```
+
+---
+
+## Ver.1.3-8 — 構造改良（依存グラフ純化・型ドメイン分離・env.ts 分離）
+
+**日付**: 2026-04-12
+**種別**: 機能改良・アーキテクチャ変更
+
+### アーキテクチャ変更
+
+- **案A — 依存グラフ純化**: `server.ts` / `static.ts` の `response.ts` 依存を解消。エラーレスポンスをインライン構築に変更し、Core が完全 DAG（有向非巡回グラフ）になった
+- **案B — ContentSecurityPolicy 移動**: `@adlaire/fw/types` → `@adlaire/fw/middleware` へ移動。ミドルウェア専用型を types.ts から分離
+- **案C — env.ts 分離**: `loadEnv()` / `EnvRule` / `EnvSchema` / `EnvResult` を `server.ts` / `types.ts` から `Core/env.ts`（`@adlaire/fw/env`）として独立モジュール化。Core が 9 ファイルから 10 ファイル構成に拡張
+
+### 依存グラフ（変更後）
+
+| モジュール | 依存先 |
+|-----------|--------|
+| `types.ts` | なし（完全自己完結） |
+| `env.ts` | なし（完全自己完結・新規） |
+| `server.ts` | `types.ts` / `router.ts` のみ |
+| `static.ts` | `types.ts` のみ |
+| その他 | `types.ts` のみ |
+
+### 破壊的変更
+
+- `loadEnv()` のインポート元が `@adlaire/fw/server` → `@adlaire/fw/env` に変更
+- `EnvRule` / `EnvSchema` / `EnvResult` のインポート元が `@adlaire/fw/types` → `@adlaire/fw/env` に変更
+- `ContentSecurityPolicy` のインポート元が `@adlaire/fw/types` → `@adlaire/fw/middleware` に変更
+
+---
+
+## Ver.1.2-7 — Core 9 ファイル化・mod.ts 廃止・新機能・機能改良
+
+**日付**: 2026-04-12
+**種別**: 追加機能・機能改良・アーキテクチャ変更
+
+### アーキテクチャ変更
+
+- `mod.ts` を全面廃止。`deno.json` サブパスエクスポート方式に移行（`@adlaire/fw/server` / `@adlaire/fw/response` 等 10 サブパス）
+- Core を 5 ファイルから 9 ファイルに拡張（`transport.ts` / `validate.ts` / `static.ts` / `helpers.ts` 追加）
+
+### 追加機能（5件）
+
+- `HTTPError.toResponse()`: HTTPError を直接 Response に変換するインスタンスメソッド追加
+- `sse()` / `SSEWriter`: Server-Sent Events レスポンスヘルパー追加（`@adlaire/fw/response`）
+- `upgradeWebSocket()`: WebSocket アップグレードヘルパー追加（`@adlaire/fw/response`）
+- `Router.all()`: 全 HTTP メソッドに同一ハンドラーを登録するメソッド追加
+- `Router.mount()`: 別 Router のルートをプレフィックス付きでマウントするメソッド追加
+
+### 機能改良（15件）
+
+- `App.onListen()`: サーバー起動完了コールバックを登録するメソッド追加
+- `App.onClose()`: シャットダウン完了コールバックを登録するメソッド追加
+- `App.testRequest()`: 戻り値を `Response` から `TestResponse` ラッパーに変更（`.json()` / `.text()` メソッド付き）
+- `loadEnv()`: `paths: string[]` オプション追加。複数 `.env` ファイルのマージ読み込みに対応
+- `validate()`: `ValidateOptions.allowUnknown` オプション追加
+- `cors()`: `CorsOptions.onBlock` コールバック追加（オリジン拒否時に呼ばれる）
+- `serveStatic()`: `StaticOptions.index` オプション追加（ディレクトリデフォルトファイル指定）
+- `serveStatic()`: `StaticOptions.cacheControl` オプション追加（`Cache-Control` ヘッダー値指定）
+- `logger()`: `LoggerOptions.onLog` コールバック追加（カスタムログ処理）
+- `rateLimit()`: `RateLimitOptions.skip` 関数オプション追加（条件付きスキップ）
+- `compress()`: `threshold: 0` を「常に圧縮する」と明示的に定義
+- `parseQuery()`: `ParseQueryOptions.coerce` オプション追加（enum 大文字小文字無視マッチング）
+- `Router.url()`: 第 3 引数 `query?: Record<string, string>` 追加（クエリ文字列自動付与）
+- `secureHeaders()`: `crossOriginOpenerPolicy` / `crossOriginEmbedderPolicy` オプション追加（COOP / COEP 対応）
+- `parseBody()`: `multipart/form-data` 対応追加（`FormData` を返す）
+
+---
+
+## Ver.1.1-6 — 全コード精査・バグ修正
+
+**日付**: 2026-04-11
+**種別**: バグ修正
+**精査件数**: 200件
+
+### 致命的バグ修正（2件）
+
+- `loadEnv()`: `.env` のインラインコメント（`PORT=8000 # comment`）が除去されず、数値・ポートパースで NaN エラーが発生していた問題を修正
+- `loadEnv()`: スキーマバリデーション前に `Deno.env.set()` を呼び出していた問題を修正。バリデーション失敗時に環境変数が部分的に汚染されることを防ぐ
+
+### 重大バグ修正（12件）
+
+- `timeout()`: `next()` が reject した場合に `clearTimeout` が実行されずタイマーがリークしていた問題を修正（try/finally で保証）
+- `Router.match()`: リクエストごとにルート配列を `O(n log n)` でソートしていた問題を修正。ソート結果をキャッシュしルート追加時のみ再計算する
+- `etag()` 304: RFC 7232 で必須の `Cache-Control` / `Content-Location` / `Date` / `Expires` / `Vary` が 304 レスポンスに含まれていなかった問題を修正
+- `etag()` エラー: 4xx/5xx エラーレスポンスにも ETag を付与していた問題を修正（エラーレスポンスはスキップ）
+- `rateLimit()`: `Retry-After` ヘッダー値が 0 以下になりうる境界値バグを修正（`Math.max(1, ...)` でクランプ）
+- `compress()`: `headers.append("Vary", ...)` による重複 Vary ヘッダー生成を修正（`headers.set` に変更）
+- `compress()`: 画像・動画・音声・圧縮済みファイルを誤って圧縮しようとしていた問題を修正（MIME タイプでスキップ判定）
+- `compress()`: `Accept-Encoding` ヘッダーの文字列部分一致から正確なトークン照合に変更
+- `requestId()`: 受信 `X-Request-ID` 値の制御文字・改行を除去してヘッダーインジェクション脆弱性を修正
+- `cors()`: 通常レスポンスから `Access-Control-Allow-Methods` / `Access-Control-Allow-Headers` を削除（プリフライト専用ヘッダー）
+- `cors()`: オリジン依存設定でオリジンが拒否された場合でも `Vary: Origin` を付与するように修正（プロキシキャッシュ汚染防止）
+- `hsts()`: `preload: true` 指定時に `includeSubDomains: true` かつ `maxAge >= 31536000` の必須条件を検証するバリデーションを追加
+
+### 中程度バグ修正（10件）
+
+- `newCommand()`: `Deno.mkdir({ recursive: false })` でネスト名が失敗していた問題を修正（`recursive: true` に変更）
+- `json()`: `JSON.stringify()` の例外（循環参照・BigInt）を try/catch でキャッチして 500 レスポンスを返すように修正
+- `parseParam("number")`: `Infinity` / `-Infinity` が通過していた問題を修正（`Number.isFinite()` チェックを追加）
+- `App.#handleError`: エラーハンドラー自体がスローした場合にサイレントだった問題を修正（`console.error` でログ出力）
+- `logger()`: `new URL(ctx.req.url)` のパース失敗を try/catch で保護
+- `ipFilter()`: IPv6 アドレスが IPv4 CIDR ルールを意図せずバイパスしていた動作について動作仕様をコメントで明文化
+- `getMimeType()`: `.mp4` / `.webm` / `.mp3` / `.ogg` / `.wav` / `.flac` / `.avif` の MIME タイプを追加
+- `bodyLimit()`: チャンクエンコードによる回避が既知制限であることをコメントで明文化
+- `rateLimit()` デフォルト key: `x-forwarded-for` 偽装リスクをコメントで明文化
+- `loadEnv()` 検証条件: `rule.required && rule.default === undefined` を `rule.required && !("default" in rule)` に修正
+
+### 軽微修正（14件）
+
+- `deno.json`: バージョンを `1.1.0` → `1.1.6` に更新
+- `methodColorOf()`: `HEAD`（シアン）/ `OPTIONS`（ホワイト）のカラーを追加
+- `newCommand()` テンプレート: 生成 `deno.json` の import バージョンを `^1.1.6` に更新
+- `RouteGroup` コンストラクタ: `@internal` JSDoc を付与して `router.group()` 経由のみが正規使用であることを明示
+- `deleteCookie()`: `SameSite=Lax` 属性を付与
+
+---
+
 ## Ver.1.1-5 — 型安全強化・機能改良
 
 **日付**: 2026-04-11

@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { App } from "./Core/server.ts";
+import type { Router } from "./Core/router.ts";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -57,7 +58,7 @@ async function routesCommand(args: string[]): Promise<void> {
     !app ||
     typeof app !== "object" ||
     !("router" in app) ||
-    typeof (app as { router: unknown }).router !== "object"
+    typeof (app as { router: Router }).router !== "object"
   ) {
     console.error(
       `${RED}エラー: server インスタンスが見つかりません。${RESET}`,
@@ -105,12 +106,14 @@ async function routesCommand(args: string[]): Promise<void> {
 
 function methodColorOf(method: string): string {
   switch (method) {
-    case "GET":    return "\x1b[32m"; // green
-    case "POST":   return "\x1b[33m"; // yellow
-    case "PUT":    return "\x1b[34m"; // blue
-    case "DELETE": return "\x1b[31m"; // red
-    case "PATCH":  return "\x1b[35m"; // magenta
-    default:       return DIM;
+    case "GET":     return "\x1b[32m"; // green
+    case "POST":    return "\x1b[33m"; // yellow
+    case "PUT":     return "\x1b[34m"; // blue
+    case "DELETE":  return "\x1b[31m"; // red
+    case "PATCH":   return "\x1b[35m"; // magenta
+    case "HEAD":    return "\x1b[36m"; // cyan
+    case "OPTIONS": return "\x1b[37m"; // white
+    default:        return DIM;
   }
 }
 
@@ -149,14 +152,26 @@ async function newCommand(args: string[]): Promise<void> {
   const dir = `./${name}`;
 
   try {
-    await Deno.mkdir(dir, { recursive: false });
+    await Deno.mkdir(dir, { recursive: true });
   } catch {
-    console.error(`${RED}エラー: ディレクトリ "${dir}" はすでに存在します。${RESET}`);
+    console.error(`${RED}エラー: ディレクトリ "${dir}" を作成できませんでした。${RESET}`);
     Deno.exit(1);
   }
 
+  // ディレクトリが既存の場合は上書きを防止する
+  try {
+    const stat = await Deno.stat(`${dir}/main.ts`);
+    if (stat.isFile) {
+      console.error(`${RED}エラー: "${dir}/main.ts" はすでに存在します。${RESET}`);
+      Deno.exit(1);
+    }
+  } catch {
+    // ファイルが存在しない場合は続行
+  }
+
   const mainTs = `// ${name} — main.ts
-import { createServer, json } from "@adlaire/fw";
+import { createServer } from "@adlaire/fw/server";
+import { json } from "@adlaire/fw/response";
 
 export const server = createServer();
 
@@ -175,7 +190,7 @@ if (import.meta.main) {
       name,
       version: "0.1.0",
       imports: {
-        "@adlaire/fw": "jsr:@adlaire/fw@^1.1.0",
+        "@adlaire/fw": "jsr:@adlaire/fw@^1.2.7",
       },
       tasks: {
         dev: "deno run -A jsr:@adlaire/fw/cli dev ./main.ts",

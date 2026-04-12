@@ -97,6 +97,15 @@ export class HTTPError extends Error {
     super(message ?? String(status));
     this.name = "HTTPError";
   }
+
+  toResponse(): Response {
+    const body: { error: string; detail?: unknown } = { error: this.message };
+    if (this.detail !== undefined) body.detail = this.detail;
+    return new Response(JSON.stringify(body), {
+      status: this.status,
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+    });
+  }
 }
 
 // ------------------------------------------------------------
@@ -112,33 +121,9 @@ export interface Route {
 }
 
 // ------------------------------------------------------------
-// §5.6 EnvRule / EnvSchema / EnvResult
+// §5.6 EnvRule / EnvSchema / EnvResult → @adlaire/fw/env
 // ------------------------------------------------------------
-
-export type EnvRule =
-  | { type: "string"; required?: boolean; default?: string }
-  | { type: "number"; required?: boolean; default?: number }
-  | { type: "boolean"; required?: boolean; default?: boolean }
-  | { type: "port"; required?: boolean; default?: number }
-  | { type: "enum"; values: readonly string[]; required?: boolean; default?: string };
-
-export type EnvSchema = Record<string, EnvRule>;
-
-// ルール単体から値の TypeScript 型を導出するヘルパー型
-// enum は values の要素リテラル Union 型を生成する
-type EnvValueOf<R extends EnvRule> =
-  R extends { type: "number" | "port" } ? number :
-  R extends { type: "boolean" } ? boolean :
-  R extends { type: "enum"; values: infer V extends readonly string[] } ? V[number] :
-  string;
-
-// required: true または default 指定があれば非 undefined。それ以外は T | undefined
-export type EnvResult<S extends EnvSchema> = {
-  readonly [K in keyof S]:
-    S[K] extends ({ required: true } | { default: unknown })
-      ? EnvValueOf<S[K]>
-      : EnvValueOf<S[K]> | undefined
-};
+// Ver.1.3-8 にて env.ts へ移動。import { loadEnv } from "@adlaire/fw/env" を使用する。
 
 // ------------------------------------------------------------
 // §5.7 QueryRule / QuerySchema / QueryResult
@@ -168,24 +153,10 @@ export type QueryResult<S extends QuerySchema> = {
 };
 
 // ------------------------------------------------------------
-// §5.8 ExtractRouteParams
+// §5.8 ExtractRouteParams / ParamKeys → 廃止・禁止（Ver.1.4-9）
 // ------------------------------------------------------------
-
-// パスリテラル型からパラメータキー名を再帰的に抽出するヘルパー型
-type ParamKeys<Path extends string> =
-  Path extends `${string}:${infer Param}/${infer Rest}`
-    ? Param | ParamKeys<`/${Rest}`>
-    : Path extends `${string}:${infer Param}`
-    ? Param
-    : Path extends `${string}*${infer WildName}`
-    ? (WildName extends "" ? "wildcard" : WildName)
-    : never;
-
-// パスリテラル型からパスパラメータオブジェクト型を導出する
-export type ExtractRouteParams<Path extends string> =
-  string extends Path ? Record<string, string> :
-  [ParamKeys<Path>] extends [never] ? Record<string, string> :
-  { [K in ParamKeys<Path>]: string };
+// パスリテラル型からの自動型推論は §0.5 により全面禁止。
+// ctx.params は Record<string, string>。型付けは Handler<P> の P を明示的に指定する。
 
 // ------------------------------------------------------------
 // §5.9 InferSchema
@@ -216,15 +187,9 @@ export type InferSchema<S extends Schema> =
   { [K in keyof S as S[K] extends { required: true } ? never : K]?: InferRuleValue<S[K]> };
 
 // ------------------------------------------------------------
-// §5.10 TypedHandler
+// §5.10 TypedHandler → 廃止・禁止（Ver.1.4-9）
 // ------------------------------------------------------------
-
-export type TypedHandler<
-  Path extends string,
-  B = unknown,
-  Q extends Record<string, string> = Record<string, string>,
-  S extends Record<string, unknown> = Record<string, unknown>,
-> = Handler<ExtractRouteParams<Path>, B, Q, S>;
+// ExtractRouteParams 廃止に伴い削除。§0.5 により再実装を禁止。
 
 // ------------------------------------------------------------
 // §5.11 Simplify
@@ -241,21 +206,21 @@ export type StrictQueryResult<S extends QuerySchema> = {
 };
 
 // ------------------------------------------------------------
-// §8.10 ContentSecurityPolicy（secureHeaders 用）
+// §5.13 SSEMessage / WebSocketUpgradeOptions
 // ------------------------------------------------------------
 
-export interface ContentSecurityPolicy {
-  defaultSrc?: string[];
-  scriptSrc?: string[];
-  styleSrc?: string[];
-  imgSrc?: string[];
-  connectSrc?: string[];
-  fontSrc?: string[];
-  objectSrc?: string[];
-  frameSrc?: string[];
-  frameAncestors?: string[];
-  formAction?: string[];
-  baseUri?: string[];
-  upgradeInsecureRequests?: boolean;
-  reportUri?: string;
+export interface SSEMessage {
+  data: string;
+  event?: string;
+  id?: string;
+  retry?: number;
 }
+
+export interface WebSocketUpgradeOptions {
+  protocol?: string;
+}
+
+// ------------------------------------------------------------
+// §8.10 ContentSecurityPolicy → @adlaire/fw/middleware
+// ------------------------------------------------------------
+// Ver.1.3-8 にて middleware.ts へ移動。import type { ContentSecurityPolicy } from "@adlaire/fw/middleware" を使用する。

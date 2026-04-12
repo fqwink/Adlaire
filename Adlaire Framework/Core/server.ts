@@ -1,19 +1,24 @@
 // ============================================================
 // Adlaire Framework — server.ts
-// App クラス・サーバー起動・エラーハンドラー・env 管理
+// App クラス・サーバー起動・エラーハンドラー
 // ============================================================
 
 import type {
   Context,
-  EnvResult,
-  EnvSchema,
   ErrorHandler,
   Method,
   Middleware,
 } from "./types.ts";
 import { HTTPError } from "./types.ts";
 import { Router } from "./router.ts";
-import { json } from "./response.ts";
+
+// JSON エラーレスポンスのインライン構築（response.ts への依存を排除）
+function jsonErr(data: unknown, status: number): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+  });
+}
 
 // ------------------------------------------------------------
 // Method 型ガード
@@ -36,10 +41,42 @@ export interface TestRequestOptions {
   headers?: Record<string, string>;
 }
 
+// ------------------------------------------------------------
+// §6.1 TestResponse
+// ------------------------------------------------------------
+
+export class TestResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly headers: Headers;
+  readonly #response: Response;
+
+  constructor(response: Response) {
+    this.#response = response;
+    this.status = response.status;
+    this.ok = response.ok;
+    this.headers = response.headers;
+  }
+
+  async json<T = unknown>(): Promise<T> {
+    return this.#response.json() as Promise<T>;
+  }
+
+  async text(): Promise<string> {
+    return this.#response.text();
+  }
+}
+
+// ------------------------------------------------------------
+// §6.1 App クラス
+// ------------------------------------------------------------
+
 export class App {
   readonly router: Router;
   readonly #middlewares: Middleware[] = [];
   readonly #errorHandlers: ErrorHandler[] = [];
+  readonly #listenCallbacks: (() => void | Promise<void>)[] = [];
+  readonly #closeCallbacks: (() => void | Promise<void>)[] = [];
   #server: Deno.HttpServer | null = null;
 
   constructor() {
@@ -59,13 +96,23 @@ export class App {
     return this;
   }
 
-  fetch = async (req: Request): Promise<Response> => {
+  onListen(cb: () => void | Promise<void>): this {
+    this.#listenCallbacks.push(cb);
+    return this;
+  }
+
+  onClose(cb: () => void | Promise<void>): this {
+    this.#closeCallbacks.push(cb);
+    return this;
+  }
+
+  fetch: Deno.ServeHandler = async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const rawMethod = req.method;
 
     // 未知のメソッドは 405 を返す
     if (!isMethod(rawMethod)) {
-      return json({ error: "Method Not Allowed" }, 405);
+      return jsonErr({ error: "Method Not Allowed" }, 405);
     }
 
     const method: Method = rawMethod;
@@ -84,9 +131,9 @@ export class App {
     if (matched === null) {
       // パスはマッチするがメソッド不一致かを確認（全メソッドで検索）
       if (this.router.hasPath(req.url)) {
-        return json({ error: "Method Not Allowed" }, 405);
+        return jsonErr({ error: "Method Not Allowed" }, 405);
       }
-      return json({ error: "Not Found" }, 404);
+      return jsonErr({ error: "Not Found" }, 404);
     }
 
     const ctx: Context = {
@@ -124,22 +171,29 @@ export class App {
       try {
         const res = await handler(err, ctx);
         if (res instanceof Response) return res;
-      } catch {
-        // このエラーハンドラーが失敗した場合は次へ
+      } catch (handlerErr) {
+        // エラーハンドラー自体が失敗した場合はログに残して次へ
+        console.error("[Adlaire Framework] onError ハンドラーがエラーをスローしました:", handlerErr);
       }
     }
     // フォールバック
     if (err instanceof HTTPError) {
       const body: { error: string; detail?: unknown } = { error: err.message };
       if (err.detail !== undefined) body.detail = err.detail;
-      return json(body, err.status);
+      return jsonErr(body, err.status);
     }
-    return json({ error: "Internal Server Error" }, 500);
+    return jsonErr({ error: "Internal Server Error" }, 500);
   };
 
   listen(port: number, cb?: () => void): Deno.HttpServer {
     this.#server = Deno.serve({ port }, this.fetch);
     cb?.();
+    // onListen コールバックを起動後に実行する（非同期エラーは握りつぶさずにログ出力）
+    for (const cb of this.#listenCallbacks) {
+      Promise.resolve(cb()).catch((e) =>
+        console.error("[Adlaire Framework] onListen コールバックでエラーが発生しました:", e)
+      );
+    }
     return this.#server;
   }
 
@@ -147,6 +201,13 @@ export class App {
     if (this.#server !== null) {
       await this.#server.shutdown();
       this.#server = null;
+      for (const cb of this.#closeCallbacks) {
+        try {
+          await cb();
+        } catch (e) {
+          console.error("[Adlaire Framework] onClose コールバックでエラーが発生しました:", e);
+        }
+      }
     }
   }
 
@@ -154,7 +215,7 @@ export class App {
     method: string,
     path: string,
     options?: TestRequestOptions,
-  ): Promise<Response> {
+  ): Promise<TestResponse> {
     const url = `http://localhost${path}`;
     const headers = new Headers(options?.headers);
     let body: BodyInit | null = null;
@@ -165,7 +226,8 @@ export class App {
       }
     }
     const req = new Request(url, { method, headers, body });
-    return this.fetch(req);
+    const response = await this.fetch(req);
+    return new TestResponse(response);
   }
 }
 
@@ -218,7 +280,9 @@ async function parseBody(req: Request, method: Method): Promise<unknown> {
       }
       return result;
     }
-    // multipart/form-data は Phase 3 実装予定
+    if (baseType === "multipart/form-data") {
+      return await req.formData();
+    }
     return null;
   } catch {
     return null;
@@ -229,117 +293,4 @@ export function createServer(): App {
   return new App();
 }
 
-// ------------------------------------------------------------
-// §6.2 loadEnv()
-// ------------------------------------------------------------
-
-// オーバーロード: スキーマなし
-export function loadEnv(path?: string): Promise<void>;
-// オーバーロード: スキーマあり
-export function loadEnv<S extends EnvSchema>(options: {
-  path?: string;
-  schema: S;
-}): Promise<EnvResult<S>>;
-
-export async function loadEnv<S extends EnvSchema>(
-  pathOrOptions?: string | { path?: string; schema: S },
-): Promise<void | EnvResult<S>> {
-  let filePath: string;
-  let schema: S | undefined;
-
-  if (typeof pathOrOptions === "string" || pathOrOptions === undefined) {
-    filePath = pathOrOptions ?? ".env";
-    schema = undefined;
-  } else {
-    filePath = pathOrOptions.path ?? ".env";
-    schema = pathOrOptions.schema;
-  }
-
-  // .env ファイルを読み込む
-  let raw: string;
-  try {
-    raw = await Deno.readTextFile(filePath);
-  } catch {
-    raw = "";
-  }
-
-  // パース（インラインコメント対応・クォート除去）
-  const envMap: Record<string, string> = {};
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    // 前後が同じクォートの場合のみ除去（"val" → val、'val' → val）
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
-    }
-    envMap[key] = val;
-    Deno.env.set(key, val);
-  }
-
-  if (schema === undefined) return;
-
-  // スキーマあり: 型変換・バリデーション
-  const result: Record<string, string | number | boolean | undefined> = {};
-
-  for (const [key, rule] of Object.entries(schema)) {
-    const rawVal = envMap[key] ?? Deno.env.get(key);
-
-    if (rawVal === undefined) {
-      if (rule.required && rule.default === undefined) {
-        throw new Error(`loadEnv: 必須の環境変数 "${key}" が設定されていません`);
-      }
-      if (rule.default !== undefined) {
-        result[key] = rule.default;
-      } else {
-        // required でなく default もない場合: undefined を設定（T-4）
-        result[key] = undefined;
-      }
-      continue;
-    }
-
-    switch (rule.type) {
-      case "string":
-        result[key] = rawVal;
-        break;
-      case "number": {
-        const n = Number(rawVal);
-        if (Number.isNaN(n)) {
-          throw new Error(`loadEnv: "${key}" を数値に変換できません: "${rawVal}"`);
-        }
-        result[key] = n;
-        break;
-      }
-      case "port": {
-        const p = Number(rawVal);
-        if (!Number.isInteger(p) || p < 1 || p > 65535) {
-          throw new Error(
-            `loadEnv: "${key}" は 1〜65535 の整数である必要があります: "${rawVal}"`,
-          );
-        }
-        result[key] = p;
-        break;
-      }
-      case "boolean":
-        result[key] = rawVal === "true";
-        break;
-      case "enum": {
-        if (!(rule.values as readonly string[]).includes(rawVal)) {
-          throw new Error(
-            `loadEnv: "${key}" は ${(rule.values as readonly string[]).join(", ")} のいずれかである必要があります: "${rawVal}"`,
-          );
-        }
-        result[key] = rawVal;
-        break;
-      }
-    }
-  }
-
-  return result as EnvResult<S>;
-}
+// §6.2 loadEnv() は @adlaire/fw/env（Core/env.ts）に移動済み（Ver.1.3-8）

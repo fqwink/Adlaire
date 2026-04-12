@@ -8,6 +8,10 @@
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| Ver.1.0 | 2026-04-12 | Ver.1.5-10 仕様策定（型付け絶対原則。§0.6追加。defineHandler追加。§3.2/§3.3/§7.6更新） |
+| Ver.1.0 | 2026-04-12 | Ver.1.4-9 仕様策定（パスリテラル型自動推論廃止・禁止化。§0.2強化・§0.5追加。ExtractRouteParams/TypedHandler削除） |
+| Ver.1.0 | 2026-04-12 | Ver.1.3-8 仕様策定（構造改良: 依存グラフ純化・ContentSecurityPolicy移動・env.ts分離・Core 10ファイル化） |
+| Ver.1.0 | 2026-04-12 | Ver.1.2-7 仕様策定（mod.ts廃止・9ファイルCore・サブパスエクスポート・新機能5件・機能改良15件） |
 | Ver.1.0 | 2026-04-11 | 初版策定 |
 | Ver.1.0 | 2026-04-11 | §8.2 CORS ミドルウェア仕様追加 |
 | Ver.1.0 | 2026-04-11 | 改良8項目追加（§4.1 / §5.1 / §5.2 / §5.3 / §5.5 / §7.2 / §7.3 / §8.1 / §8.2 / §9） |
@@ -17,3 +21,4 @@
 | Ver.1.0 | 2026-04-11 | セキュリティ・型安全強化（§5.7 QueryResult リテラル型 / §8.10 ContentSecurityPolicy / §8.11 csrfProtection / §8.12 assertBody / §9.7 sanitizeHtml） |
 | Ver.1.0 | 2026-04-11 | セキュリティ・型安全・機能改良（§5.6 EnvResult 刷新 / §5.8 ExtractRouteParams / §5.9 InferSchema / §7.6 型付きルートパラメータ / §8.3 LogInfo・format / §8.4 RateLimitStore / §8.13 hsts / §8.14 ipFilter） |
 | Ver.1.0 | 2026-04-11 | 型安全強化・機能改良（§5.6 EnvRule enum型追加 / §5.10 TypedHandler / §5.11 Simplify / §5.12 StrictQueryResult / §7.6 RouteGroup型付きオーバーロード） |
+| Ver.1.0 | 2026-04-11 | バグ修正（全コード精査200件・致命的2件・重大12件・中程度10件・軽微14件修正 / §4.1 / §6.2 / §7 / §8.2〜§8.14 / §9 / §12） |

@@ -1,9 +1,18 @@
 {
   "name": "@adlaire/fw",
-  "version": "1.1.0",
+  "version": "1.5.10",
   "exports": {
-    ".": "./mod.ts",
-    "./cli": "./cli.ts"
+    "./server":     "./Core/server.ts",
+    "./env":        "./Core/env.ts",
+    "./router":     "./Core/router.ts",
+    "./middleware": "./Core/middleware.ts",
+    "./transport":  "./Core/transport.ts",
+    "./validate":   "./Core/validate.ts",
+    "./response":   "./Core/response.ts",
+    "./static":     "./Core/static.ts",
+    "./helpers":    "./Core/helpers.ts",
+    "./types":      "./Core/types.ts",
+    "./cli":        "./cli.ts"
   },
   "compilerOptions": {
     "strict": true,

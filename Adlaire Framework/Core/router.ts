@@ -3,7 +3,7 @@
 // ルート登録・グループ化・パスマッチング・名前付きルート
 // ============================================================
 
-import type { ExtractRouteParams, Handler, Method, Middleware, Route } from "./types.ts";
+import type { Handler, Method, Middleware, Route } from "./types.ts";
 
 export interface MatchResult {
   handler: Handler;
@@ -93,6 +93,8 @@ interface StoredRoute {
 export class Router {
   readonly #routes: StoredRoute[] = [];
   readonly #namedRoutes: Map<string, StoredRoute> = new Map();
+  // ソート済みルートキャッシュ（ルート追加時に無効化）
+  #sortedRoutes: StoredRoute[] | null = null;
 
   #add(
     method: Method,
@@ -117,59 +119,63 @@ export class Router {
       name: options?.name,
     };
     this.#routes.push(route);
+    this.#sortedRoutes = null; // キャッシュを無効化
     if (options?.name) {
       this.#namedRoutes.set(options.name, route);
     }
     return this;
   }
 
-  get<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  get<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   get(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("GET", path, fnArgs, options);
   }
 
-  post<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  post<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   post(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("POST", path, fnArgs, options);
   }
 
-  put<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  put<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   put(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("PUT", path, fnArgs, options);
   }
 
-  delete<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  delete<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   delete(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("DELETE", path, fnArgs, options);
   }
 
-  patch<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  patch<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   patch(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("PATCH", path, fnArgs, options);
   }
 
-  head<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  head<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   head(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("HEAD", path, fnArgs, options);
   }
 
-  options<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  options<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   options(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     const { fnArgs, options } = splitArgs(args);
     return this.#add("OPTIONS", path, fnArgs, options);
+  }
+
+  all(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
+    const methods: Method[] = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+    for (const method of methods) {
+      const { fnArgs, options } = splitArgs(args);
+      this.#add(method, path, fnArgs, options);
+    }
+    return this;
+  }
+
+  mount(prefix: string, router: Router): this {
+    for (const route of router.#routes) {
+      const newPath = prefix + route.rawPath;
+      this.#add(route.method, newPath, [...route.middlewares, route.handler], { name: route.name });
+    }
+    return this;
   }
 
   group(prefix: string): RouteGroup {
@@ -179,7 +185,11 @@ export class Router {
   match(method: Method, url: string): MatchResult | null {
     const parsedUrl = new URL(url, "http://localhost");
     const pathParts = parsedUrl.pathname.split("/").filter((s) => s !== "");
-    const sorted = [...this.#routes].sort((a, b) => b.priority - a.priority);
+    // ソート済みキャッシュを使用（リクエストごとの O(n log n) ソートを回避）
+    if (this.#sortedRoutes === null) {
+      this.#sortedRoutes = [...this.#routes].sort((a, b) => b.priority - a.priority);
+    }
+    const sorted = this.#sortedRoutes;
 
     let headFallback: MatchResult | null = null;
 
@@ -211,11 +221,11 @@ export class Router {
     return this.#routes.some((r) => matchPath(r.segments, pathParts) !== null);
   }
 
-  url(name: string, params?: Record<string, string>): string {
+  url(name: string, params?: Record<string, string>, query?: Record<string, string>): string {
     const route = this.#namedRoutes.get(name);
     if (!route) throw new Error(`名前付きルート "${name}" は登録されていません`);
     const p = params ?? {};
-    return "/" + route.segments.map((seg) => {
+    const path = "/" + route.segments.map((seg) => {
       if (seg.kind === "static") return seg.value;
       if (seg.kind === "param") {
         const v = p[seg.name];
@@ -229,6 +239,12 @@ export class Router {
       }
       return "";
     }).join("/");
+
+    if (query !== undefined && Object.keys(query).length > 0) {
+      const qs = new URLSearchParams(query).toString();
+      return `${path}?${qs}`;
+    }
+    return path;
   }
 
   routes(): ReadonlyArray<Route> {
@@ -262,6 +278,7 @@ export class RouteGroup {
   readonly #router: Router;
   readonly #middlewares: Middleware[];
 
+  /** @internal router.group() 経由でのみ生成すること */
   constructor(prefix: string, router: Router, middlewares: Middleware[]) {
     this.#prefix = prefix;
     this.#router = router;
@@ -279,44 +296,30 @@ export class RouteGroup {
     return [...this.#middlewares, ...fnArgs, ...(options ? [options] : [])];
   }
 
-  get<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  get<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   get(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.get(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  post<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  post<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   post(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.post(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  put<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  put<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   put(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.put(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  delete<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  delete<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   delete(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.delete(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  patch<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  patch<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   patch(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.patch(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  head<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  head<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   head(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.head(this.#prefix + path, ...this.#wrap(args)); return this;
   }
 
-  options<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
-  options<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
   options(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
     this.#router.options(this.#prefix + path, ...this.#wrap(args)); return this;
   }
@@ -324,4 +327,22 @@ export class RouteGroup {
   group(prefix: string): RouteGroup {
     return new RouteGroup(this.#prefix + prefix, this.#router, [...this.#middlewares]);
   }
+}
+
+// ------------------------------------------------------------
+// §0.6 defineHandler — 型付け絶対原則ファクトリ関数
+// ------------------------------------------------------------
+
+/**
+ * ルートハンドラーを型付きで定義するファクトリ関数（§0.6 型付け絶対原則）。
+ * すべてのハンドラーはこの関数か Handler<P> 型注釈付き変数宣言を使用すること。
+ * インラインラムダをルート登録メソッドに直接渡すことを禁止する。
+ */
+export function defineHandler<
+  P extends Record<string, string> = Record<string, string>,
+  B = unknown,
+  Q extends Record<string, string> = Record<string, string>,
+  S extends Record<string, unknown> = Record<string, unknown>,
+>(fn: Handler<P, B, Q, S>): Handler<P, B, Q, S> {
+  return fn;
 }
