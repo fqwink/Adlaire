@@ -19,11 +19,19 @@
 
 ## 0.2 型安全
 
-**型安全の方針はフレームワーク開発者が決定し、アーキテクチャで保証する。**
+**型安全の方針はフレームワーク開発者が決定し、アーキテクチャで保証する。利用者が型を拡張・変更する余地をフレームワーク API 設計に組み込まない。**
 
 - 公開 API（各サブパスエクスポート）に `any` 型を含めない
 - エスケープハッチ（`any` を返す関数・型アサーションを強いる設計）を提供しない
 - `any` 型の具体的な使用禁止規則は §0.4 で定める
+- **各プロパティの型はフレームワークが事前決定する**。利用者はその型を前提として実装する
+
+| プロパティ | フレームワーク事前決定型 | 利用者側での変更 |
+|-----------|----------------------|----------------|
+| `ctx.params` | `Record<string, string>` | 不可（§0.5 で禁止） |
+| `ctx.body` | `unknown`（Content-Type によりランタイム決定） | `assertBody<T>()` で利用者が絞り込む |
+| `ctx.query` | `Record<string, string>` | `parseQuery()` で利用者が変換する |
+| `ctx.state` | `Record<string, unknown>` | `Middleware<S>` の `S` で利用者が型付けする |
 
 ## 0.3 npm 禁止
 
@@ -38,6 +46,15 @@
 - `// @ts-ignore`・`// @ts-expect-error` による型エラー抑制禁止
 - `as unknown as T` 等の型安全を迂回するキャストチェーン禁止
 - 動的な値には `unknown` を使用し、型ガードで絞り込む
+
+## 0.5 自動型推論禁止
+
+パスリテラル型を利用した自動型推論をフレームワーク全域で禁止する。いかなる理由があっても例外を認めない。
+
+- パスリテラル型（`"/users/:id"` 等）から `ctx.params` のキーを推論する機構の実装禁止
+- `infer` を使用したパスセグメント抽出型の定義禁止（`ParamKeys` / `ExtractRouteParams` 相当）
+- `TypedHandler<Path>` のようなパスリテラルを型引数に取るハンドラー型エイリアスの定義禁止
+- 型付けが必要な場合は `Handler<P>` の `P` を利用者が明示的に指定する
 
 ---
 
@@ -167,7 +184,7 @@ import { ... } from "@adlaire/fw/Core/types.ts";
 ```json
 {
   "name": "@adlaire/fw",
-  "version": "1.3.8",
+  "version": "1.4.9",
   "exports": {
     "./server":     "./Core/server.ts",
     "./env":        "./Core/env.ts",
@@ -435,52 +452,24 @@ type QueryResult<S extends QuerySchema> = {
 };
 ```
 
-## 5.8 ExtractRouteParams
+## 5.8 ExtractRouteParams / ParamKeys
 
-ルートパスのリテラル型からパスパラメータのオブジェクト型を導出するユーティリティ型。
-
-```typescript
-// パスリテラル型からパラメータキー名を抽出するヘルパー型
-// /:param セグメントと /*wildcard セグメントを再帰的に抽出する
-type ParamKeys<Path extends string> =
-  Path extends `${string}:${infer Param}/${infer Rest}`
-    ? Param | ParamKeys<`/${Rest}`>
-    : Path extends `${string}:${infer Param}`
-    ? Param
-    : Path extends `${string}*${infer WildName}`
-    ? (WildName extends "" ? "wildcard" : WildName)
-    : never;
-
-// パスリテラル型からパラメータオブジェクト型を導出する
-// string 型（リテラルでない）の場合は Record<string, string> にフォールバックする
-type ExtractRouteParams<Path extends string> =
-  string extends Path ? Record<string, string> :
-  [ParamKeys<Path>] extends [never] ? Record<string, string> :
-  { [K in ParamKeys<Path>]: string };
-```
-
-### 使用例
+> **廃止・禁止（Ver.1.4-9）**。パスリテラル型からの自動型推論を廃止し、以降の実装・追加を禁止する。
+>
+> **禁止原則**: パスリテラル型を利用したいかなる自動推論機構も導入してはならない。
+>
+> `ctx.params` は常に `Record<string, string>` として扱う。
+> パラメータの型付けが必要な場合は `Handler<{ id: string }>` のように明示的に指定する。
 
 ```typescript
-import type { ExtractRouteParams, Handler } from "@adlaire/fw/types";
+// ✅ 明示的な型指定（廃止後の推奨パターン）
+import type { Handler } from "@adlaire/fw/types";
 
-type UserParams = ExtractRouteParams<"/users/:id">;
-// → { id: string }
-
-type PostParams = ExtractRouteParams<"/posts/:postId/comments/:commentId">;
-// → { postId: string; commentId: string }
-
-type StaticParams = ExtractRouteParams<"/static/*path">;
-// → { path: string }
-
-// ハンドラーの型引数として使用する
-const userHandler: Handler<ExtractRouteParams<"/users/:id">> = (ctx) => {
-  const id = ctx.params.id;   // string（型付き）
+const userHandler: Handler<{ id: string }> = (ctx) => {
+  const id = ctx.params.id;  // string
   return json({ id });
 };
 ```
-
-- `Router` のルート登録メソッド（`get / post / put / delete / patch / head / options`）はパスリテラルから自動推論する（§7.6 参照）
 
 ## 5.9 InferSchema
 
@@ -520,6 +509,8 @@ import { json } from "@adlaire/fw/response";
 import { assertBody } from "@adlaire/fw/validate";
 import type { InferSchema, Schema } from "@adlaire/fw/types";
 
+const server = createServer();
+
 const createUserSchema = {
   name:  { type: "string",  required: true, min: 1, max: 50 } as const,
   age:   { type: "number",  required: true, min: 0, integer: true } as const,
@@ -540,34 +531,18 @@ server.router.post("/users", (ctx) => {
 
 ## 5.10 TypedHandler
 
-パスリテラル型から `ctx.params` の型を自動推論するハンドラー型エイリアス。`Handler<ExtractRouteParams<Path>, ...>` の省略形。
+> **廃止済み（Ver.1.4-9）**。`ExtractRouteParams` 廃止に伴い削除。
+>
+> パスパラメータに型付けが必要な場合は `Handler<P, B, Q, S>` の第 1 引数 `P` を明示的に指定する。
 
 ```typescript
-type TypedHandler<
-  Path extends string,
-  B = unknown,
-  Q extends Record<string, string> = Record<string, string>,
-  S extends Record<string, unknown> = Record<string, unknown>,
-> = Handler<ExtractRouteParams<Path>, B, Q, S>;
-```
+// ✅ 廃止後の推奨パターン
+import type { Handler } from "@adlaire/fw/types";
 
-### 使用例
-
-```typescript
-import { json } from "@adlaire/fw/response";
-import type { TypedHandler } from "@adlaire/fw/types";
-
-// Handler<ExtractRouteParams<"/users/:id">> の省略形
-const userHandler: TypedHandler<"/users/:id"> = (ctx) => {
-  const id = ctx.params.id;   // string（型付き）
-  return json({ id });
-};
-
-// Body や State も型付けする場合
 type AuthState = { userId: string };
-const postHandler: TypedHandler<"/posts/:postId", { title: string }, Record<string, string>, AuthState> = (ctx) => {
-  const postId = ctx.params.postId;       // string
-  const userId = ctx.state.userId;        // string
+const handler: Handler<{ postId: string }, { title: string }, Record<string, string>, AuthState> = (ctx) => {
+  const postId = ctx.params.postId;  // string
+  const userId = ctx.state.userId;   // string
   return json({ postId, userId });
 };
 ```
@@ -881,49 +856,33 @@ const url = server.router.url("users.show", { id: "123" });
 |---------|------|
 | `url(name, params?, query?)` | 名前付きルートから URL を生成する。`query` を指定するとクエリ文字列を自動付与する。未登録の名前は `Error` を throw |
 
-## 7.6 型付きルートパラメータ（ExtractRouteParams 連携）
+## 7.6 パスパラメータの型付け
 
-ルート登録メソッドはパスリテラル型から `ExtractRouteParams<Path>`（§5.8）を自動推論し、ハンドラーの `ctx.params` を型付けする。
+> **パスリテラル型からの自動推論は廃止済み（Ver.1.4-9）**。
+>
+> `ctx.params` は常に `Record<string, string>`。パラメータキーが存在しない場合は `undefined` ではなく実行時エラーとなる（ルーター側で保証）。
 
-```typescript
-// get<Path extends string> のシグネチャ概念
-get<Path extends string>(
-  path: Path,
-  handler: Handler<ExtractRouteParams<Path>>,
-): this;
-```
-
-### 使用例
+パラメータに型付けが必要な場合はハンドラー型の第 1 引数 `P` を明示的に指定する。
 
 ```typescript
 import { createServer } from "@adlaire/fw/server";
 import { json } from "@adlaire/fw/response";
+import type { Handler } from "@adlaire/fw/types";
 
 const server = createServer();
 
-// ctx.params.id が string として型付けされる
+// 型付けなし（デフォルト: Record<string, string>）
 server.router.get("/users/:id", (ctx) => {
-  const id = ctx.params.id;       // string（型付き）
+  const id = ctx.params.id;  // string
   return json({ id });
 });
 
-// ctx.params.postId と ctx.params.commentId が string として型付けされる
-server.router.get("/posts/:postId/comments/:commentId", (ctx) => {
+// 明示的な型指定
+const handler: Handler<{ postId: string; commentId: string }> = (ctx) => {
   const { postId, commentId } = ctx.params;
   return json({ postId, commentId });
-});
-```
-
-- ルートレベルミドルウェア付きオーバーロードでも同様に型推論が機能する
-- `{ name: "..." }` の RouteOptions を渡す場合も型推論を維持する
-- `RouteGroup` の各ルート登録メソッドも同様の型付きオーバーロードをサポートする
-
-```typescript
-const admin = server.router.group("/admin");
-admin.get("/users/:id", (ctx) => {
-  const id = ctx.params.id;   // string（型付き）
-  return json({ id });
-});
+};
+server.router.get("/posts/:postId/comments/:commentId", handler);
 ```
 
 ---
@@ -1951,6 +1910,7 @@ server.router.get("/admin", (ctx) => {
 | **外部変更禁止（絶対原則）** | Adlaire Group のみがフレームワークの実装・設計方針を決定する。`deno.json` に定義されたサブパス以外からのインポートはパッケージ構造上不可能 |
 | **型安全（絶対原則）** | 型安全はフレームワークのアーキテクチャが構造的に保証する。公開 API に `any` を含めない。エスケープハッチを提供しない |
 | **any 使用禁止（絶対原則）** | `any` 型・`as any`・`// @ts-ignore`・`// @ts-expect-error`・型安全を迂回するキャストチェーンをフレームワーク全域で禁止。例外なし |
+| **自動型推論禁止（絶対原則）** | パスリテラル型を利用した `ctx.params` の自動推論を禁止。`ExtractRouteParams` / `ParamKeys` / `TypedHandler` 相当の機構の再実装を禁止。`ctx.params` は常に `Record<string, string>`（§0.5・§5.8 参照） |
 | **npm 禁止（絶対原則）** | `npm:` スペシャライザー禁止。`jsr:@std/*` と Web 標準 API のみ |
 | **Core フラット構成** | `Core/` 内はサブディレクトリ分割禁止。すべてのファイルを同階層に配置する（10 ファイル構成: types / server / env / router / middleware / transport / validate / response / static / helpers） |
 | **Core 依存グラフ** | `types.ts` / `env.ts` は他の Core ファイルに依存しない。`server.ts` / `static.ts` は `response.ts` に依存しない（§3.1 依存グラフ制約参照） |

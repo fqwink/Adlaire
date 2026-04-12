@@ -153,24 +153,10 @@ export type QueryResult<S extends QuerySchema> = {
 };
 
 // ------------------------------------------------------------
-// §5.8 ExtractRouteParams
+// §5.8 ExtractRouteParams / ParamKeys → 廃止・禁止（Ver.1.4-9）
 // ------------------------------------------------------------
-
-// パスリテラル型からパラメータキー名を再帰的に抽出するヘルパー型
-type ParamKeys<Path extends string> =
-  Path extends `${string}:${infer Param}/${infer Rest}`
-    ? Param | ParamKeys<`/${Rest}`>
-    : Path extends `${string}:${infer Param}`
-    ? Param
-    : Path extends `${string}*${infer WildName}`
-    ? (WildName extends "" ? "wildcard" : WildName)
-    : never;
-
-// パスリテラル型からパスパラメータオブジェクト型を導出する
-export type ExtractRouteParams<Path extends string> =
-  string extends Path ? Record<string, string> :
-  [ParamKeys<Path>] extends [never] ? Record<string, string> :
-  { [K in ParamKeys<Path>]: string };
+// パスリテラル型からの自動型推論は §0.5 により全面禁止。
+// ctx.params は Record<string, string>。型付けは Handler<P> の P を明示的に指定する。
 
 // ------------------------------------------------------------
 // §5.9 InferSchema
@@ -201,15 +187,9 @@ export type InferSchema<S extends Schema> =
   { [K in keyof S as S[K] extends { required: true } ? never : K]?: InferRuleValue<S[K]> };
 
 // ------------------------------------------------------------
-// §5.10 TypedHandler
+// §5.10 TypedHandler → 廃止・禁止（Ver.1.4-9）
 // ------------------------------------------------------------
-
-export type TypedHandler<
-  Path extends string,
-  B = unknown,
-  Q extends Record<string, string> = Record<string, string>,
-  S extends Record<string, unknown> = Record<string, unknown>,
-> = Handler<ExtractRouteParams<Path>, B, Q, S>;
+// ExtractRouteParams 廃止に伴い削除。§0.5 により再実装を禁止。
 
 // ------------------------------------------------------------
 // §5.11 Simplify

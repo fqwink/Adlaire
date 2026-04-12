@@ -5,6 +5,43 @@
 
 ---
 
+## Ver.1.4-9 — パスリテラル型自動推論廃止・禁止化
+
+**日付**: 2026-04-12
+**種別**: 機能廃止・アーキテクチャ変更
+
+### 廃止
+
+- `ExtractRouteParams<Path>` / `ParamKeys<Path>` 型を削除（`@adlaire/fw/types`）
+- `TypedHandler<Path>` 型を削除（`@adlaire/fw/types`）
+- `Router` / `RouteGroup` の全ルート登録メソッド（`get` / `post` / `put` / `delete` / `patch` / `head` / `options` / `all`）から `<Path extends string>` オーバーロードを削除
+
+### 設計原則追加（§0.2 / §0.5）
+
+- **§0.2 強化**: 型安全はフレームワークが事前決定する。各 `ctx` プロパティの型はフレームワークが決定し利用者は変更できない
+- **§0.5 追加（絶対原則）**: パスリテラル型を利用した自動型推論をフレームワーク全域で禁止。`ExtractRouteParams` 相当の機構の再実装を禁止
+
+### 移行
+
+```typescript
+// ❌ 廃止前（自動推論）
+server.router.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;  // string（自動推論）
+});
+
+// ✅ 廃止後（ctx.params は Record<string, string>）
+server.router.get("/users/:id", (ctx) => {
+  const id = ctx.params.id;  // string（常に string）
+});
+
+// ✅ 型付けが必要な場合は Handler<P> を明示指定
+const handler: Handler<{ id: string }> = (ctx) => {
+  const id = ctx.params.id;  // string
+};
+```
+
+---
+
 ## Ver.1.3-8 — 構造改良（依存グラフ純化・型ドメイン分離・env.ts 分離）
 
 **日付**: 2026-04-12
