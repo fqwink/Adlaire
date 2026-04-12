@@ -20,7 +20,7 @@
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
 | **Adlaire Static CMS** | Ver.3.0-47 | 2026-04-05 | 本番稼働中 |
-| **Adlaire Framework** | Ver.1.1-6 | 2026-04-11 | 全コード精査200件・バグ修正38件 実装済み |
+| **Adlaire Framework** | Ver.1.2-7 | 2026-04-12 | Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 実装済み |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1320,9 +1320,37 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ### VII-1. 現行バージョン
 
-**Ver.1.1-6**（全コード精査200件・バグ修正38件 実装済み）
+**Ver.1.2-7**（Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 実装済み）
 
 ### VII-2. リリース計画
+
+#### Ver.1.2-7 — Core 9ファイル化・mod.ts廃止・新機能・機能改良
+
+- **種別**: 追加機能・機能改良・アーキテクチャ変更
+- **状態**: 実装済み（2026-04-12）
+
+| # | 種別 | 概要 | 状態 |
+|:-:|------|------|:----:|
+| 1 | アーキテクチャ変更 | mod.ts 全面廃止・deno.json サブパスエクスポート（10サブパス）に移行 | 実装済 |
+| 2 | アーキテクチャ変更 | Core を 9 ファイルに拡張（transport.ts / validate.ts / static.ts / helpers.ts 追加） | 実装済 |
+| 3 | 追加機能 | HTTPError.toResponse() メソッド追加 | 実装済 |
+| 4 | 追加機能 | sse() / SSEWriter — Server-Sent Events ヘルパー | 実装済 |
+| 5 | 追加機能 | upgradeWebSocket() — WebSocket アップグレードヘルパー | 実装済 |
+| 6 | 追加機能 | Router.all() — 全 HTTP メソッドに同一ハンドラーを登録 | 実装済 |
+| 7 | 追加機能 | Router.mount() — 別 Router のルートをプレフィックス付きでマウント | 実装済 |
+| 8 | 機能改良 | App.onListen() / App.onClose() コールバック追加 | 実装済 |
+| 9 | 機能改良 | App.testRequest() → TestResponse ラッパーを返すように変更 | 実装済 |
+| 10 | 機能改良 | loadEnv() paths[] オプション追加（複数 .env マージ） | 実装済 |
+| 11 | 機能改良 | validate() ValidateOptions.allowUnknown 追加 | 実装済 |
+| 12 | 機能改良 | cors() onBlock コールバック追加 | 実装済 |
+| 13 | 機能改良 | serveStatic() index / cacheControl オプション追加 | 実装済 |
+| 14 | 機能改良 | logger() onLog コールバック追加 | 実装済 |
+| 15 | 機能改良 | rateLimit() skip 関数オプション追加 | 実装済 |
+| 16 | 機能改良 | compress() threshold:0 = 常に圧縮の明示的定義 | 実装済 |
+| 17 | 機能改良 | parseQuery() ParseQueryOptions.coerce オプション追加 | 実装済 |
+| 18 | 機能改良 | Router.url() query パラメータ引数追加 | 実装済 |
+| 19 | 機能改良 | secureHeaders() COOP / COEP オプション追加 | 実装済 |
+| 20 | 機能改良 | parseBody() multipart/form-data 対応（FormData を返す） | 実装済 |
 
 #### Ver.1.1-6 — 全コード精査・バグ修正
 
@@ -1504,6 +1532,7 @@ cli.ts: printHelp（1件）/ routesCommand インポート（3件）/ routesComm
 
 | バージョン | リリース日 | 種別 | 概要 |
 |-----------|-----------|------|------|
+| **Ver.1.2-7** | 2026-04-12 | 追加機能・機能改良・アーキテクチャ変更 | Core 9ファイル化・mod.ts廃止・新機能5件・機能改良15件 |
 | **Ver.1.1-6** | 2026-04-11 | バグ修正 | 全コード精査200件・致命的2件・重大12件・中程度10件・軽微14件 修正 |
 | **Ver.1.1-5** | 2026-04-11 | 追加機能・改良 | 型安全3件（TypedHandler/Simplify/StrictQueryResult）+ 機能改良2件（EnvRule enum/RouteGroup型推論） |
 | **Ver.1.1-4** | 2026-04-11 | 追加機能・改良・破壊的変更 | セキュリティ2件（hsts/ipFilter）+ 型安全4件（ExtractRouteParams/InferSchema/EnvResult刷新/ルート型推論）+ 機能改良2件（logger format/RateLimitStore） |
