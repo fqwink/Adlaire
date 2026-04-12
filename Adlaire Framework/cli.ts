@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { App } from "./Core/server.ts";
+import type { Router } from "./Core/router.ts";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -57,7 +58,7 @@ async function routesCommand(args: string[]): Promise<void> {
     !app ||
     typeof app !== "object" ||
     !("router" in app) ||
-    typeof (app as { router: unknown }).router !== "object"
+    typeof (app as { router: Router }).router !== "object"
   ) {
     console.error(
       `${RED}エラー: server インスタンスが見つかりません。${RESET}`,
@@ -169,7 +170,8 @@ async function newCommand(args: string[]): Promise<void> {
   }
 
   const mainTs = `// ${name} — main.ts
-import { createServer, json } from "@adlaire/fw";
+import { createServer } from "@adlaire/fw/server";
+import { json } from "@adlaire/fw/response";
 
 export const server = createServer();
 
@@ -188,7 +190,7 @@ if (import.meta.main) {
       name,
       version: "0.1.0",
       imports: {
-        "@adlaire/fw": "jsr:@adlaire/fw@^1.1.6",
+        "@adlaire/fw": "jsr:@adlaire/fw@^1.2.7",
       },
       tasks: {
         dev: "deno run -A jsr:@adlaire/fw/cli dev ./main.ts",

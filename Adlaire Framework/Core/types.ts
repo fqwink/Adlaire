@@ -97,6 +97,15 @@ export class HTTPError extends Error {
     super(message ?? String(status));
     this.name = "HTTPError";
   }
+
+  toResponse(): Response {
+    const body: { error: string; detail?: unknown } = { error: this.message };
+    if (this.detail !== undefined) body.detail = this.detail;
+    return new Response(JSON.stringify(body), {
+      status: this.status,
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+    });
+  }
 }
 
 // ------------------------------------------------------------
@@ -239,6 +248,21 @@ export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 export type StrictQueryResult<S extends QuerySchema> = {
   readonly [K in keyof QueryResult<S>]-?: NonNullable<QueryResult<S>[K]>
 };
+
+// ------------------------------------------------------------
+// §5.13 SSEMessage / WebSocketUpgradeOptions
+// ------------------------------------------------------------
+
+export interface SSEMessage {
+  data: string;
+  event?: string;
+  id?: string;
+  retry?: number;
+}
+
+export interface WebSocketUpgradeOptions {
+  protocol?: string;
+}
 
 // ------------------------------------------------------------
 // §8.10 ContentSecurityPolicy（secureHeaders 用）

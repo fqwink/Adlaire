@@ -175,6 +175,25 @@ export class Router {
     return this.#add("OPTIONS", path, fnArgs, options);
   }
 
+  all<Path extends string>(path: Path, handler: Handler<ExtractRouteParams<Path>>, options?: RouteOptions): this;
+  all<Path extends string>(path: Path, ...args: (Middleware | Handler<ExtractRouteParams<Path>> | RouteOptions)[]): this;
+  all(path: string, ...args: (Middleware | Handler | RouteOptions)[]): this {
+    const methods: Method[] = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+    for (const method of methods) {
+      const { fnArgs, options } = splitArgs(args);
+      this.#add(method, path, fnArgs, options);
+    }
+    return this;
+  }
+
+  mount(prefix: string, router: Router): this {
+    for (const route of router.#routes) {
+      const newPath = prefix + route.rawPath;
+      this.#add(route.method, newPath, [...route.middlewares, route.handler], { name: route.name });
+    }
+    return this;
+  }
+
   group(prefix: string): RouteGroup {
     return new RouteGroup(prefix, this, []);
   }
@@ -218,11 +237,11 @@ export class Router {
     return this.#routes.some((r) => matchPath(r.segments, pathParts) !== null);
   }
 
-  url(name: string, params?: Record<string, string>): string {
+  url(name: string, params?: Record<string, string>, query?: Record<string, string>): string {
     const route = this.#namedRoutes.get(name);
     if (!route) throw new Error(`名前付きルート "${name}" は登録されていません`);
     const p = params ?? {};
-    return "/" + route.segments.map((seg) => {
+    const path = "/" + route.segments.map((seg) => {
       if (seg.kind === "static") return seg.value;
       if (seg.kind === "param") {
         const v = p[seg.name];
@@ -236,6 +255,12 @@ export class Router {
       }
       return "";
     }).join("/");
+
+    if (query !== undefined && Object.keys(query).length > 0) {
+      const qs = new URLSearchParams(query).toString();
+      return `${path}?${qs}`;
+    }
+    return path;
   }
 
   routes(): ReadonlyArray<Route> {

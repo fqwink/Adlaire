@@ -5,6 +5,44 @@
 
 ---
 
+## Ver.1.2-7 — Core 9 ファイル化・mod.ts 廃止・新機能・機能改良
+
+**日付**: 2026-04-12
+**種別**: 追加機能・機能改良・アーキテクチャ変更
+
+### アーキテクチャ変更
+
+- `mod.ts` を全面廃止。`deno.json` サブパスエクスポート方式に移行（`@adlaire/fw/server` / `@adlaire/fw/response` 等 10 サブパス）
+- Core を 5 ファイルから 9 ファイルに拡張（`transport.ts` / `validate.ts` / `static.ts` / `helpers.ts` 追加）
+
+### 追加機能（5件）
+
+- `HTTPError.toResponse()`: HTTPError を直接 Response に変換するインスタンスメソッド追加
+- `sse()` / `SSEWriter`: Server-Sent Events レスポンスヘルパー追加（`@adlaire/fw/response`）
+- `upgradeWebSocket()`: WebSocket アップグレードヘルパー追加（`@adlaire/fw/response`）
+- `Router.all()`: 全 HTTP メソッドに同一ハンドラーを登録するメソッド追加
+- `Router.mount()`: 別 Router のルートをプレフィックス付きでマウントするメソッド追加
+
+### 機能改良（15件）
+
+- `App.onListen()`: サーバー起動完了コールバックを登録するメソッド追加
+- `App.onClose()`: シャットダウン完了コールバックを登録するメソッド追加
+- `App.testRequest()`: 戻り値を `Response` から `TestResponse` ラッパーに変更（`.json()` / `.text()` メソッド付き）
+- `loadEnv()`: `paths: string[]` オプション追加。複数 `.env` ファイルのマージ読み込みに対応
+- `validate()`: `ValidateOptions.allowUnknown` オプション追加
+- `cors()`: `CorsOptions.onBlock` コールバック追加（オリジン拒否時に呼ばれる）
+- `serveStatic()`: `StaticOptions.index` オプション追加（ディレクトリデフォルトファイル指定）
+- `serveStatic()`: `StaticOptions.cacheControl` オプション追加（`Cache-Control` ヘッダー値指定）
+- `logger()`: `LoggerOptions.onLog` コールバック追加（カスタムログ処理）
+- `rateLimit()`: `RateLimitOptions.skip` 関数オプション追加（条件付きスキップ）
+- `compress()`: `threshold: 0` を「常に圧縮する」と明示的に定義
+- `parseQuery()`: `ParseQueryOptions.coerce` オプション追加（enum 大文字小文字無視マッチング）
+- `Router.url()`: 第 3 引数 `query?: Record<string, string>` 追加（クエリ文字列自動付与）
+- `secureHeaders()`: `crossOriginOpenerPolicy` / `crossOriginEmbedderPolicy` オプション追加（COOP / COEP 対応）
+- `parseBody()`: `multipart/form-data` 対応追加（`FormData` を返す）
+
+---
+
 ## Ver.1.1-6 — 全コード精査・バグ修正
 
 **日付**: 2026-04-11

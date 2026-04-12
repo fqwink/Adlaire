@@ -36,10 +36,42 @@ export interface TestRequestOptions {
   headers?: Record<string, string>;
 }
 
+// ------------------------------------------------------------
+// §6.1 TestResponse
+// ------------------------------------------------------------
+
+export class TestResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly headers: Headers;
+  readonly #response: Response;
+
+  constructor(response: Response) {
+    this.#response = response;
+    this.status = response.status;
+    this.ok = response.ok;
+    this.headers = response.headers;
+  }
+
+  async json<T = unknown>(): Promise<T> {
+    return this.#response.json() as Promise<T>;
+  }
+
+  async text(): Promise<string> {
+    return this.#response.text();
+  }
+}
+
+// ------------------------------------------------------------
+// §6.1 App クラス
+// ------------------------------------------------------------
+
 export class App {
   readonly router: Router;
   readonly #middlewares: Middleware[] = [];
   readonly #errorHandlers: ErrorHandler[] = [];
+  readonly #listenCallbacks: (() => void | Promise<void>)[] = [];
+  readonly #closeCallbacks: (() => void | Promise<void>)[] = [];
   #server: Deno.HttpServer | null = null;
 
   constructor() {
@@ -59,7 +91,17 @@ export class App {
     return this;
   }
 
-  fetch = async (req: Request): Promise<Response> => {
+  onListen(cb: () => void | Promise<void>): this {
+    this.#listenCallbacks.push(cb);
+    return this;
+  }
+
+  onClose(cb: () => void | Promise<void>): this {
+    this.#closeCallbacks.push(cb);
+    return this;
+  }
+
+  fetch: Deno.ServeHandler = async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const rawMethod = req.method;
 
@@ -141,6 +183,12 @@ export class App {
   listen(port: number, cb?: () => void): Deno.HttpServer {
     this.#server = Deno.serve({ port }, this.fetch);
     cb?.();
+    // onListen コールバックを起動後に実行する（非同期エラーは握りつぶさずにログ出力）
+    for (const cb of this.#listenCallbacks) {
+      Promise.resolve(cb()).catch((e) =>
+        console.error("[Adlaire Framework] onListen コールバックでエラーが発生しました:", e)
+      );
+    }
     return this.#server;
   }
 
@@ -148,6 +196,13 @@ export class App {
     if (this.#server !== null) {
       await this.#server.shutdown();
       this.#server = null;
+      for (const cb of this.#closeCallbacks) {
+        try {
+          await cb();
+        } catch (e) {
+          console.error("[Adlaire Framework] onClose コールバックでエラーが発生しました:", e);
+        }
+      }
     }
   }
 
@@ -155,7 +210,7 @@ export class App {
     method: string,
     path: string,
     options?: TestRequestOptions,
-  ): Promise<Response> {
+  ): Promise<TestResponse> {
     const url = `http://localhost${path}`;
     const headers = new Headers(options?.headers);
     let body: BodyInit | null = null;
@@ -166,7 +221,8 @@ export class App {
       }
     }
     const req = new Request(url, { method, headers, body });
-    return this.fetch(req);
+    const response = await this.fetch(req);
+    return new TestResponse(response);
   }
 }
 
@@ -219,7 +275,9 @@ async function parseBody(req: Request, method: Method): Promise<unknown> {
       }
       return result;
     }
-    // multipart/form-data は Phase 3 実装予定
+    if (baseType === "multipart/form-data") {
+      return await req.formData();
+    }
     return null;
   } catch {
     return null;
@@ -234,34 +292,48 @@ export function createServer(): App {
 // §6.2 loadEnv()
 // ------------------------------------------------------------
 
-// オーバーロード: スキーマなし
+// オーバーロード: スキーマなし（単一ファイル）
 export function loadEnv(path?: string): Promise<void>;
-// オーバーロード: スキーマあり
+// オーバーロード: スキーマあり（単一ファイル）
 export function loadEnv<S extends EnvSchema>(options: {
   path?: string;
   schema: S;
 }): Promise<EnvResult<S>>;
+// オーバーロード: スキーマなし（複数ファイルマージ）
+export function loadEnv(options: { paths: string[] }): Promise<void>;
+// オーバーロード: スキーマあり（複数ファイルマージ）
+export function loadEnv<S extends EnvSchema>(options: {
+  paths: string[];
+  schema: S;
+}): Promise<EnvResult<S>>;
 
 export async function loadEnv<S extends EnvSchema>(
-  pathOrOptions?: string | { path?: string; schema: S },
+  pathOrOptions?: string | { path?: string; schema?: S } | { paths: string[]; schema?: S },
 ): Promise<void | EnvResult<S>> {
-  let filePath: string;
+  let filePaths: string[];
   let schema: S | undefined;
 
   if (typeof pathOrOptions === "string" || pathOrOptions === undefined) {
-    filePath = pathOrOptions ?? ".env";
+    filePaths = [pathOrOptions ?? ".env"];
     schema = undefined;
+  } else if ("paths" in pathOrOptions) {
+    filePaths = pathOrOptions.paths;
+    schema = pathOrOptions.schema;
   } else {
-    filePath = pathOrOptions.path ?? ".env";
+    filePaths = [pathOrOptions.path ?? ".env"];
     schema = pathOrOptions.schema;
   }
 
-  // .env ファイルを読み込む
-  let raw: string;
-  try {
-    raw = await Deno.readTextFile(filePath);
-  } catch {
-    raw = "";
+  // 複数ファイルを順番に読み込み、後発ファイルが優先でマージする
+  let raw = "";
+  for (const filePath of filePaths) {
+    let fileContent: string;
+    try {
+      fileContent = await Deno.readTextFile(filePath);
+    } catch {
+      fileContent = "";
+    }
+    raw += (raw.length > 0 ? "\n" : "") + fileContent;
   }
 
   // パース（インラインコメント除去・クォート除去）
