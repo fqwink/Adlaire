@@ -34,6 +34,7 @@
 | Ver.1.2 | 2026-04-02 | 関連文書セクション追加 |
 | Ver.1.3 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | Ver.1.4 | 2026-04-02 | §13 Ver.2.5 エディタ高度化仕様を新設（#25 Undo/Redo、#26 D&D、#27 Copy&Paste、#28 heading cycle、#29 list toggle、#46 execCommand 置換）、§15 関連文書の参照先を Ver.2.5 に更新 |
+| Ver.1.5 | 2026-04-13 | **Ver.3.5 エディタ強化仕様を策定**。§14 Ver.3.5 エディタ強化仕様を新設: §14.1 テーブルブロック（data 構造・最大列/行制約・Tab ナビ・HTML 出力形式）、§14.2 アコーディオンブロック（data 構造・`<details>/<summary>` HTML 出力）、§14.3 既存 UX 改善（許可/禁止範囲を明記）。旧 §14 最終規則 → §15、旧 §15 関連文書 → §16 に繰り下げ。 |
 
 ## LIFECYCLE_SYSTEM_RULEBOOK.md（ライフサイクルシステム）
 
@@ -73,7 +74,8 @@
 | Ver.1.1 | 2026-04-02 | §2.6 required_files を Core/ パスに更新、§6.5 admin-ui.php パス修正、ヘッダー移行元記載整理、関連文書セクション追加 |
 | Ver.1.2 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | Ver.1.3 | 2026-04-03 | §2.1 config.jsonからpasswordキー廃止、§2.7 users.jsonをメイン/サブマスター対応に更新、§4.8 ユーザー管理API新設 |
-| Ver.1.4 | 2026-04-13 | **Ver.3.1/3.2 ブログ機能仕様策定**。§2.1 `blog_posts_per_page` 追加。§2.2 ページデータに `type`, `posted_at`, `category`, `tags`, `author` フィールド追加。§2.4 インデックスキャッシュに `type`/`posted_at` を含める仕様追記。§3.1 `listPublishedPages()` の type 限定を明記・`listPublishedPosts()` 追加。§4.1 `type` クエリフィルタ・POST パラメータ拡張。§6.2 コンテンツタイプフィルタ追加。§6.3 投稿メタデータパネル仕様追加。§6.4 type 選択追加。§7.1 ブログ投稿タイプ・フィルタUIを「計画（Ver.3.1）」として追記。 |
+| Ver.1.4 | 2026-04-13 | **Ver.3.1/3.2 ブログ機能仕様策定**。§2.1 `blog_posts_per_page` 追加。§2.2 ページデータに `type`, `posted_at`, `category`, `tags`, `author` フィールド追加。§2.4 インデックスキャッシュに `type`/`posted_at` を含める仕様追記。§3.1 `listPublishedPages()` の type 限定を明記・`listPublishedPosts()` 追加。§4.1 `type` クエリフィルタ・POST パラメータ拡張。§6.2 コンテンツタイプフィルタ追加。§6.3 投稿メタデータパネル仕様追加。§6.4 type 選択追加。§7.1 ブログ投稿タイプ・フィルタUIを「計画（Ver.3.1）」として追記。（※ 本改訂を Ver.1.3 と誤記していたため Ver.1.4 に修正済み） |
+| Ver.1.5 | 2026-04-13 | **Ver.3.5/3.7 仕様策定**。§2.1 `media_max_size`・`theme_settings` キー追加。§2.8 メディアデータ仕様（保存先・許可拡張子・ファイル名サニタイズ・最大サイズ）を新設。§4.9 メディア管理 API（一覧・アップロード・削除）を新設。§4.10 テーマ設定 API（取得・保存）を新設。§5.3.2 テーブルブロック（table）・アコーディオンブロック（accordion）を追加。§7.1 Ver.3.5/3.7 計画機能を追記（テーブル・アコーディオン・メディア管理・テーマ設定UI・検索インデックス）。 |
 
 ## GENERATOR_RULEBOOK.md（静的サイト生成）
 
@@ -82,6 +84,7 @@
 | Ver.1.0 | 2026-04-02 | 初版（ARCHITECTURE_RULEBOOK から分離新設） |
 | Ver.1.1 | 2026-04-02 | 対象製品名を Adlaire Static CMS に変更 |
 | Ver.1.2 | 2026-04-13 | **Ver.3.1/3.2 ブログ機能生成仕様策定**。§3.2 dist 生成物一覧に `blog/` ディレクトリ構造追加（一覧・ページネーション・カテゴリ/タグ/日付アーカイブ）。§7 PHP 関数に `generateBlogListHtml()`, `generateBlogPages()`, `generateArchivePages()` 追加・`generatePageHtml()` のシグネチャ拡張（`meta` 引数追加）。§9 ブログ機能（Ver.3.1〜3.2）を新設: §9.1 基本方針、§9.2 ブログ一覧ページ生成（テンプレート変数・抜粋生成ルール・投稿メタデータ変数）、§9.3 アーカイブページ生成、§9.4 前後ナビ。§10 ブログテーマ要件新設（blog.php / blog-archive.php / フォールバック順位）。§11 関連文書に API_RULEBOOK.md §2.2 を追加。 |
+| Ver.1.3 | 2026-04-13 | **Ver.3.5/3.7 仕様策定**。§3.2 生成物一覧に `search-index.json` 追加（Ver.3.7）。§5.1 新設: テーブル・アコーディオンブロックのサーバーサイドレンダリング仕様（Ver.3.5）。§7 `generateSearchIndex()` 関数を追加（Ver.3.7）。§8 RSS 不採用を「将来拡張として検討可能」→「DIRECTION_RULEBOOK §7.11 により不採用確定」に修正。§11 検索インデックス生成仕様を新設（対象・タイミング・出力フォーマット・title 抽出規則・PHP 関数）。旧 §11 関連文書 → §12 に繰り下げ。 |
 
 ## RELEASE_PLAN_RULEBOOK.md（リリース計画）
 

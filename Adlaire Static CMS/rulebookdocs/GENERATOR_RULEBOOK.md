@@ -1,7 +1,7 @@
 # Adlaire Generator RULEBOOK
 
 - 文書名: Adlaire Generator RULEBOOK
-- 文書バージョン: Ver.1.2
+- 文書バージョン: Ver.1.3
 - 作成日: 2026-04-02
 - 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
@@ -63,6 +63,7 @@ dist/
 │   ├── ja.json
 │   └── en.json
 ├── sitemap.xml              # サイトマップ（公開ページ + 公開投稿）
+├── search-index.json        # 全文検索インデックス（Ver.3.7 以降）
 └── .build_state.json        # ビルド状態（差分ビルド用、内部管理）
 ```
 
@@ -108,6 +109,18 @@ dist/
 - 変換後の HTML にテーマテンプレートを適用し、完全な HTML ページとして出力する。
 - XSS エスケープは変換関数内で適用済み。
 
+## 5.1 ブロック型レンダリング（Ver.3.5 以降追加）
+
+`renderBlocksToHtml()` は以下のブロック型を追加で処理する。
+
+| type | レンダリング結果 | 備考 |
+|------|--------------|------|
+| `table` | `<table>` + `<thead>`（withHeadings=true 時）+ `<tbody>` + `<td>` | セル内テキストは `esc()` 適用 |
+| `accordion` | `<details class="ce-accordion"><summary>{title}</summary><div>{content}</div></details>` | title は `esc()`、content はサニタイズ済みインライン HTML |
+
+- `table` の制約: 最大 20列 / 100行（EDITOR_RULEBOOK.md §14.1 準拠）。
+- `accordion` の content はエディタ保存時にサニタイズ済みとして扱う。サーバーサイドで追加エスケープは行わない。
+
 ---
 
 # 6. REST API
@@ -146,6 +159,7 @@ dist/
 | `generateBlogListHtml(app, posts, page, totalPages, theme)` | `Core/generator.php` | ブログ一覧ページ HTML 生成（テーマの `blog.php` / `theme.php` を適用）（Ver.3.1 以降） |
 | `generateBlogPages(app, storage, theme)` | `Core/generator.php` | ブログ一覧・ページネーションページを `dist/blog/` に一括生成（Ver.3.1 以降） |
 | `generateArchivePages(app, storage, theme)` | `Core/generator.php` | カテゴリ・タグ・日付アーカイブページを `dist/blog/` に生成（Ver.3.2 以降） |
+| `generateSearchIndex(storage)` | `Core/generator.php` | 全文検索インデックスファイル `dist/search-index.json` を生成（Ver.3.7 以降） |
 
 ---
 
@@ -158,7 +172,7 @@ dist/
 | CDN 連携・自動デプロイ | 外部サービス依存を避ける |
 | インクリメンタルビルド（ファイル監視） | サーバーサイドでのファイル監視は不適切 |
 | テンプレートエンジン切替 | theme.php による統一を維持 |
-| RSS / Atom フィード生成 | 将来拡張として検討可能 |
+| RSS / Atom フィード生成 | DIRECTION_RULEBOOK.md §7.11 により不採用確定（今後も計画なし） |
 | 画像最適化・リサイズ | 外部ツールの責務 |
 
 ---
@@ -294,7 +308,69 @@ dist/
 
 ---
 
-# 11. 関連文書
+# 11. 検索インデックス生成（Ver.3.7 以降）
+
+## 11.1 概要
+
+静的サイト生成時に、全文検索用のインデックスファイル `dist/search-index.json` を生成する。
+フロントエンド JavaScript から読み込んで使用する。
+
+## 11.2 生成タイミング
+
+`handleApiGenerate()` の実行に含まれる（個別のエンドポイントではない）。
+CSS / sitemap と同様に、常に全件再生成する（差分ビルドの対象外）。
+
+## 11.3 対象コンテンツ
+
+- `status: "published"` のページ・投稿を対象とする（下書きは除外）。
+
+## 11.4 出力フォーマット
+
+```json
+[
+    {
+        "slug": "about",
+        "title": "About",
+        "excerpt": "This is a short excerpt...",
+        "type": "page",
+        "updated_at": "ISO 8601"
+    },
+    {
+        "slug": "post-slug",
+        "title": "Post Title",
+        "excerpt": "Post excerpt...",
+        "type": "post",
+        "updated_at": "ISO 8601"
+    }
+]
+```
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `slug` | string | ページスラッグ |
+| `title` | string | ページタイトル（最初の heading ブロックのテキスト、または Markdown の先頭 `#` 見出し） |
+| `excerpt` | string | 抜粋（先頭 120文字、HTML タグ除去済み。§9.2.5 の excerpt 生成ルールに準拠） |
+| `type` | string | `"page"` または `"post"` |
+| `updated_at` | string | 最終更新日時（ISO 8601） |
+
+## 11.5 title 抽出規則
+
+| format | 抽出方法 |
+|--------|---------|
+| `blocks` | 最初の `heading` ブロックの `text` を使用。存在しない場合は slug をタイトルとする。 |
+| `markdown` | 先頭の `# 見出し` を使用。存在しない場合は slug をタイトルとする。 |
+
+## 11.6 PHP 関数
+
+`generateSearchIndex(storage): void`
+
+- `storage->listPublishedPages()` + `storage->listPublishedPosts()` から全公開コンテンツを取得。
+- 各コンテンツの title・excerpt を生成し、`dist/search-index.json` に JSON 出力する。
+- JSON 出力は `json_encode()` の `JSON_UNESCAPED_UNICODE` を使用する。
+
+---
+
+# 12. 関連文書
 
 | 文書 | 内容 |
 |------|------|

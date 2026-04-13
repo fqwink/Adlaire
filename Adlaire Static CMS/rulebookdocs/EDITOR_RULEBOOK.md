@@ -1,8 +1,9 @@
 # Adlaire Editor RULEBOOK
 
 - 文書名: Adlaire Editor RULEBOOK
-- 文書バージョン: Ver.1.4
+- 文書バージョン: Ver.1.5
 - 作成日: 2026-04-01
+- 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
 - 対象領域: Editor / Block Editor / Markdown 連携 / Revision / Draft-Publish / Publish Quality Check / Editor UI
 - 文書種別: エディタ設計・改良・保守方針を定義する上位規範文書
@@ -312,20 +313,120 @@ UI 改良の優先順位は、次の順とする。
 
 ---
 
-# 14. 最終規則
+# 14. Ver.3.5 エディタ強化仕様
 
-## 14.1 上位規範性
+> 本セクションは `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（統合リポジトリルート）Part I §5.6 の実装仕様を定義する。
+
+## 14.1 テーブルブロック (`table`)
+
+### 14.1.1 データ構造
+
+```json
+{
+    "type": "table",
+    "data": {
+        "withHeadings": true,
+        "content": [
+            ["見出し1", "見出し2", "見出し3"],
+            ["行1列1", "行1列2", "行1列3"]
+        ]
+    }
+}
+```
+
+- **`withHeadings`**: `true` のとき1行目を `<thead>`/`<th>` として扱う。デフォルト `false`。
+- **`content`**: セルテキストの2次元配列。セル内容はプレーンテキスト（インラインHTMLなし）。
+- **最大サイズ**: 列数 20列まで、行数 100行まで。
+
+### 14.1.2 エディタ操作
+
+- セルをクリックすると `contenteditable` で直接編集可能。
+- **Tab** で次のセルに移動、**Shift+Tab** で前のセルに移動。
+- **最終セルで Tab** を押すと新規行を追加する。
+- ブロックツールバーに列追加・行追加・列削除・行削除ボタンを設ける。
+- `withHeadings` の切替ボタンを提供する。
+
+### 14.1.3 静的生成・サーバーサイドレンダリング
+
+- `withHeadings: true` のとき:
+  ```html
+  <table><thead><tr><th>見出し1</th>...</tr></thead><tbody>...</tbody></table>
+  ```
+- `withHeadings: false` のとき:
+  ```html
+  <table><tbody><tr><td>...</td></tr></tbody></table>
+  ```
+- セルテキストは `esc()` でエスケープして出力する。
+
+---
+
+## 14.2 アコーディオンブロック (`accordion`)
+
+### 14.2.1 データ構造
+
+```json
+{
+    "type": "accordion",
+    "data": {
+        "title": "タイトルテキスト",
+        "content": "サニタイズ済みインラインHTML"
+    }
+}
+```
+
+- **`title`**: プレーンテキスト。`esc()` でエスケープして出力。
+- **`content`**: `sanitizeHtml()` でサニタイズ済みのインラインHTML（`paragraph` ブロックと同様の処理）。
+
+### 14.2.2 エディタ操作
+
+- タイトル入力フィールドと本文入力エリア（2段構成）を表示する。
+- エディタ上では展開/折りたたみボタンで本文の表示を切り替えられる。
+- 本文エリアはインラインツールバー（太字/斜体/リンク）をサポートする。
+
+### 14.2.3 静的生成・サーバーサイドレンダリング
+
+`<details>`/`<summary>` HTML 要素を使用して出力する:
+
+```html
+<details class="ce-accordion">
+    <summary class="ce-accordion__title">タイトルテキスト</summary>
+    <div class="ce-accordion__content">サニタイズ済みHTML</div>
+</details>
+```
+
+---
+
+## 14.3 既存エディタ UX 改善（Ver.3.5）
+
+### 14.3.1 許容する改善範囲
+
+- ツールボックスへのキーボードショートカット表示
+- ブロック間スペーシングの調整
+- モバイル操作性の向上（タップターゲット拡大等）
+- インラインツールバーの位置・表示精度の改善
+
+### 14.3.2 禁止事項
+
+- 既存ブロック（paragraph, heading, list, code, quote, delimiter, image）のデータ構造変更
+- 既存ページデータとの非互換を生む変更
+- エディタの全面的な再設計
+
+---
+
+# 15. 最終規則
+
+## 15.1 上位規範性
 本 RULEBOOK は、Adlaire のエディタに関する上位規範文書である。
 
-## 14.2 優先順位
+## 15.2 優先順位
 個別提案、開発都合、暫定 UI 改善案、実装容易性と、本 RULEBOOK が衝突する場合、本 RULEBOOK を優先しなければならない。
 
-## 14.3 結論
+## 15.3 結論
 Adlaire のエディタは、大規模分離を行わず、最小限の基盤改善に留めつつ、構造化編集強化と公開品質連携を主対象として開発され、バグ修正・軽微修正・安定化完了までを含めて収束しなければならない。
 
 ---
 
-# 15. 関連文書
+# 16. 関連文書
 
 | 文書 | 内容 |
 |------|------|
@@ -333,4 +434,5 @@ Adlaire のエディタは、大規模分離を行わず、最小限の基盤改
 | `API_RULEBOOK.md` §6.3 | 管理 UI ページ編集画面仕様 |
 | `ARCHITECTURE_RULEBOOK.md` | Core ファイル構成（editor.ts / editInplace.ts 配置） |
 | `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（統合リポジトリルート）Part I §4.5 | Ver.2.5 エディタ高度化計画 |
+| `rulebookdocs/RELEASE_PLAN_RULEBOOK.md`（統合リポジトリルート）Part I §5.6 | Ver.3.5 エディタ強化計画 |
 | `REVISION_HISTORY.md` | 全ルールブック改訂履歴 |

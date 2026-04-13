@@ -1,7 +1,7 @@
 # Adlaire API RULEBOOK
 
 - 文書名: Adlaire API RULEBOOK
-- 文書バージョン: Ver.1.3
+- 文書バージョン: Ver.1.5
 - 作成日: 2026-04-02
 - 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
@@ -41,6 +41,8 @@
 | `keywords` | string | キーワード |
 | `copyright` | string | 著作権表示 |
 | `blog_posts_per_page` | int | ブログ一覧の1ページあたり表示件数（デフォルト: 10） |
+| `media_max_size` | int | メディアアップロードの最大ファイルサイズ（バイト、デフォルト: 10485760 = 10MB）（Ver.3.5 以降） |
+| `theme_settings` | object | テーマ固有の設定値（キー: テーマ名、値: 設定オブジェクト）（Ver.3.7 以降） |
 
 ## 2.2 ページデータ (`data/pages/{slug}.json`)
 
@@ -156,6 +158,31 @@
 - **単一管理者モード**: 廃止。users.json が存在しない場合は強制マイグレーションを実行する。
 - **ファイルロック**: config.json と同様に排他ロック + アトミック書き込みを使用する。
 - **ファイル権限**: 0600（owner のみ読み書き可）。
+
+## 2.8 メディアデータ (`data/media/`)
+
+メディアファイル（画像等）はサーバーファイルシステムに保存する（Ver.3.5 以降）。
+
+### 保存先
+
+| パス | 説明 |
+|------|------|
+| `data/media/{filename}` | アップロードされたメディアファイル本体 |
+
+### 許可拡張子
+
+`jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`
+
+### ファイル名サニタイズ規則
+
+- 拡張子を小文字に正規化する。
+- アルファベット・数字・ハイフン・アンダースコア・ドット以外の文字を除去する。
+- ファイル名の重複時は `{name}-{timestamp}.{ext}` 形式にリネームする。
+- パストラバーサルを防ぐため、ディレクトリセパレータ（`/`, `\`）を除去する。
+
+### 最大ファイルサイズ
+
+`config.json` の `media_max_size`（デフォルト: 10,485,760 バイト = 10MB）。
 
 ---
 
@@ -320,6 +347,56 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 - サブマスター生成時のレスポンスに平文の ID・パスワード・トークンを含む。この情報はサーバー側にハッシュのみ保存され、以後取得不可。
 - クライアント側は生成レスポンス受信時に認証情報ファイルを自動ダウンロード（1回のみ）。
 
+## 4.9 メディア管理 API（Ver.3.5 以降）
+
+> 認証必須。
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `GET` | `?api=media` | メディアファイル一覧（ファイル名・サイズ・更新日時） |
+| `POST` | `?api=media&action=upload` | ファイルアップロード（multipart/form-data） |
+| `DELETE` | `?api=media&file={filename}` | ファイル削除 |
+
+POST パラメータ: `file`（ファイルフィールド）、`csrf`
+
+レスポンス（一覧）:
+```json
+{ "files": [{ "name": "example.jpg", "size": 102400, "updated_at": "ISO 8601" }] }
+```
+
+レスポンス（アップロード成功）:
+```json
+{ "status": "ok", "filename": "example.jpg", "url": "/data/media/example.jpg" }
+```
+
+- アップロード時はファイル名をサニタイズしてから保存する（§2.8 参照）。
+- 許可拡張子以外はアップロードを拒否する（§2.8 参照）。
+- ファイルサイズが `media_max_size` を超える場合はエラーを返す。
+
+## 4.10 テーマ設定 API（Ver.3.7 以降）
+
+> 認証必須。
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `POST` | `?api=theme-settings` | テーマ設定を保存 |
+| `GET` | `?api=theme-settings&theme={name}` | 指定テーマの設定を取得 |
+
+POST パラメータ: `theme`（テーマ名）、`settings`（JSON オブジェクト文字列）、`csrf`
+
+レスポンス（取得）:
+```json
+{ "theme": "AP-Default", "settings": { "key": "value" } }
+```
+
+レスポンス（保存成功）:
+```json
+{ "status": "ok", "theme": "AP-Default" }
+```
+
+- 保存先は `config.json` の `theme_settings[{theme}]`（§2.1 参照）。
+- テーマ名は `basename()` でサニタイズし、実在テーマのみ許可する。
+
 ---
 
 # 5. TypeScript モジュール仕様
@@ -372,6 +449,8 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | `quote` | 引用 | `{ text: string }` |
 | `delimiter` | 水平線 | `{}` |
 | `image` | 画像（URL入力 + キャプション） | `{ url: string, caption?: string }` |
+| `table` | テーブル（Ver.3.5 以降） | `{ withHeadings: bool, content: string[][] }` |
+| `accordion` | アコーディオン（Ver.3.5 以降） | `{ title: string, content: string }` |
 
 ### 5.3.3 エディタ API
 
@@ -482,6 +561,11 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | ページインデックスキャッシュ | 実装済 |
 | ブログ投稿タイプ（type: post）・投稿メタデータ | 計画（Ver.3.1） |
 | 管理UI コンテンツタイプフィルタ | 計画（Ver.3.1） |
+| テーブルブロック（table） | 計画（Ver.3.5） |
+| アコーディオンブロック（accordion） | 計画（Ver.3.5） |
+| メディア管理（アップロード・一覧・削除） | 計画（Ver.3.5） |
+| テーマ設定 UI / API | 計画（Ver.3.7） |
+| 全文検索インデックスファイル生成（search-index.json） | 計画（Ver.3.7） |
 
 ## 7.2 認証・セキュリティ
 
