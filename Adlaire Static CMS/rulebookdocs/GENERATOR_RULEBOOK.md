@@ -1,7 +1,7 @@
 # Adlaire Generator RULEBOOK
 
 - 文書名: Adlaire Generator RULEBOOK
-- 文書バージョン: Ver.1.3
+- 文書バージョン: Ver.1.4
 - 作成日: 2026-04-02
 - 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
@@ -49,11 +49,11 @@ dist/
 │   ├── page/
 │   │   ├── 2/index.html     # ページネーション（2ページ目以降）
 │   │   └── {n}/index.html
-│   ├── category/            # カテゴリアーカイブ（Ver.3.2 以降）
+│   ├── category/            # カテゴリアーカイブ（Ver.3.3 以降）
 │   │   └── {name}/index.html
-│   ├── tag/                 # タグアーカイブ（Ver.3.2 以降）
+│   ├── tag/                 # タグアーカイブ（Ver.3.3 以降）
 │   │   └── {name}/index.html
-│   └── {year}/              # 日付アーカイブ（Ver.3.2 以降）
+│   └── {year}/              # 日付アーカイブ（Ver.3.3 以降）
 │       └── {month}/index.html
 ├── style.css                # テーマ CSS
 ├── js/                      # JS（レンダリング用のみ）
@@ -158,7 +158,7 @@ dist/
 | `generatePageHtml(app, slug, contentHtml, theme, meta)` | `Core/generator.php` | テーマテンプレートを適用した完全な HTML ページを生成。`meta` は投稿メタデータ配列（Ver.3.1 以降、省略可） |
 | `generateBlogListHtml(app, posts, page, totalPages, theme)` | `Core/generator.php` | ブログ一覧ページ HTML 生成（テーマの `blog.php` / `theme.php` を適用）（Ver.3.1 以降） |
 | `generateBlogPages(app, storage, theme)` | `Core/generator.php` | ブログ一覧・ページネーションページを `dist/blog/` に一括生成（Ver.3.1 以降） |
-| `generateArchivePages(app, storage, theme)` | `Core/generator.php` | カテゴリ・タグ・日付アーカイブページを `dist/blog/` に生成（Ver.3.2 以降） |
+| `generateArchivePages(app, storage, theme)` | `Core/generator.php` | カテゴリ・タグ・日付アーカイブページを `dist/blog/` に生成（Ver.3.3 以降） |
 | `generateSearchIndex(storage)` | `Core/generator.php` | 全文検索インデックスファイル `dist/search-index.json` を生成（Ver.3.7 以降） |
 
 ---
@@ -237,7 +237,7 @@ dist/
 
 ---
 
-## 9.3 アーカイブページ生成（Ver.3.2）
+## 9.3 アーカイブページ生成（Ver.3.3）
 
 ### 9.3.1 概要
 
@@ -272,7 +272,7 @@ dist/
 
 ---
 
-## 9.4 前後ナビ（Ver.3.2）
+## 9.4 前後ナビ（Ver.3.3）
 
 `type: post` の個別ページを `generatePageHtml()` で生成する際、テーマ `theme.php` に以下の変数を追加で渡す:
 
@@ -294,7 +294,7 @@ dist/
 |---------|:--------:|------|
 | `theme.php` | **必須** | 通常ページ・投稿ページ共通テンプレート（既存） |
 | `blog.php` | 任意 | ブログ一覧テンプレート。未存在時は `theme.php` を使用。 |
-| `blog-archive.php` | 任意 | アーカイブテンプレート（Ver.3.2）。未存在時は `blog.php` → `theme.php` を使用。 |
+| `blog-archive.php` | 任意 | アーカイブテンプレート（Ver.3.3）。未存在時は `blog.php` → `theme.php` を使用。 |
 
 ## 10.2 フォールバック順位
 
