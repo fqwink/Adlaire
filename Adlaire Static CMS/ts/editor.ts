@@ -43,6 +43,251 @@ interface BlockToolData {
 }
 type BlockToolFactory = (data: BlockToolData) => BlockToolConfig;
 
+// --- Portable Text types (Ver.3.1) ---
+
+export interface PTSpan {
+    _type: 'span';
+    _key: string;
+    text: string;
+    marks: string[];
+}
+
+export interface PTMarkDef {
+    _type: string;
+    _key: string;
+    href?: string;
+}
+
+export interface PTBlock {
+    _type: 'block';
+    _key: string;
+    style: string;
+    listItem?: string;
+    level?: number;
+    markDefs: PTMarkDef[];
+    children: PTSpan[];
+}
+
+export interface PTCode {
+    _type: 'code';
+    _key: string;
+    code: string;
+    language?: string;
+}
+
+export interface PTDelimiter {
+    _type: 'delimiter';
+    _key: string;
+}
+
+export interface PTImage {
+    _type: 'image';
+    _key: string;
+    url: string;
+    caption?: string;
+    alt?: string;
+}
+
+export type PortableTextNode = PTBlock | PTCode | PTDelimiter | PTImage;
+
+let _ptKeyCounter = 0;
+function _nextKey(): string {
+    return `k${Date.now().toString(36)}${(_ptKeyCounter++).toString(36)}`;
+}
+
+/** Convert Portable Text body to internal EditorData for editing. */
+export function ptToEditorData(body: PortableTextNode[]): EditorData {
+    const blocks: BlockData[] = [];
+    let pendingList: { style: string; items: string[] } | null = null;
+
+    const flushList = (): void => {
+        if (!pendingList) return;
+        blocks.push({
+            type: 'list',
+            data: { style: pendingList.style === 'number' ? 'ordered' : 'unordered', items: pendingList.items },
+        });
+        pendingList = null;
+    };
+
+    for (const node of body) {
+        if (node._type === 'block') {
+            const block = node as PTBlock;
+            const text = block.children.map(c => c.text).join('');
+            if (block.listItem) {
+                const listStyle = block.listItem;
+                if (!pendingList || pendingList.style !== listStyle) {
+                    flushList();
+                    pendingList = { style: listStyle, items: [] };
+                }
+                pendingList.items.push(text);
+                continue;
+            }
+            flushList();
+            if (block.style === 'h1' || block.style === 'h2' || block.style === 'h3') {
+                blocks.push({ type: 'heading', data: { text, level: parseInt(block.style.slice(1), 10) } });
+            } else if (block.style === 'blockquote') {
+                blocks.push({ type: 'quote', data: { text } });
+            } else {
+                blocks.push({ type: 'paragraph', data: { text } });
+            }
+        } else if (node._type === 'code') {
+            flushList();
+            const code = node as PTCode;
+            blocks.push({ type: 'code', data: { code: code.code, language: code.language || '' } });
+        } else if (node._type === 'delimiter') {
+            flushList();
+            blocks.push({ type: 'delimiter', data: {} });
+        } else if (node._type === 'image') {
+            flushList();
+            const img = node as PTImage;
+            blocks.push({ type: 'image', data: { url: img.url, caption: img.caption || '', alt: img.alt || '' } });
+        }
+    }
+    flushList();
+
+    return {
+        time: Date.now(),
+        version: '1.0',
+        blocks: blocks.length > 0 ? blocks : [{ type: 'paragraph', data: { text: '' } }],
+    };
+}
+
+/** Convert internal EditorData blocks to Portable Text body. */
+export function editorDataToPT(data: EditorData): PortableTextNode[] {
+    const pt: PortableTextNode[] = [];
+
+    for (const block of data.blocks) {
+        const d = block.data;
+        switch (block.type) {
+            case 'paragraph':
+                pt.push({
+                    _type: 'block',
+                    _key: _nextKey(),
+                    style: 'normal',
+                    markDefs: [],
+                    children: [{ _type: 'span', _key: _nextKey(), text: String(d.text ?? ''), marks: [] }],
+                });
+                break;
+            case 'heading': {
+                const level = Math.max(1, Math.min(3, (d.level as number) || 2));
+                pt.push({
+                    _type: 'block',
+                    _key: _nextKey(),
+                    style: `h${level}`,
+                    markDefs: [],
+                    children: [{ _type: 'span', _key: _nextKey(), text: String(d.text ?? ''), marks: [] }],
+                });
+                break;
+            }
+            case 'list': {
+                const items = (d.items as string[]) || [];
+                const listStyle = (d.style as string) === 'ordered' ? 'number' : 'bullet';
+                for (const item of items) {
+                    pt.push({
+                        _type: 'block',
+                        _key: _nextKey(),
+                        style: 'normal',
+                        listItem: listStyle,
+                        level: 1,
+                        markDefs: [],
+                        children: [{ _type: 'span', _key: _nextKey(), text: item, marks: [] }],
+                    });
+                }
+                break;
+            }
+            case 'code':
+                pt.push({
+                    _type: 'code',
+                    _key: _nextKey(),
+                    code: String(d.code ?? ''),
+                    ...(d.language ? { language: String(d.language) } : {}),
+                });
+                break;
+            case 'quote':
+                pt.push({
+                    _type: 'block',
+                    _key: _nextKey(),
+                    style: 'blockquote',
+                    markDefs: [],
+                    children: [{ _type: 'span', _key: _nextKey(), text: String(d.text ?? ''), marks: [] }],
+                });
+                break;
+            case 'delimiter':
+                pt.push({ _type: 'delimiter', _key: _nextKey() });
+                break;
+            case 'image':
+                pt.push({
+                    _type: 'image',
+                    _key: _nextKey(),
+                    url: String(d.url ?? ''),
+                    ...(d.caption ? { caption: String(d.caption) } : {}),
+                    ...(d.alt ? { alt: String(d.alt) } : {}),
+                });
+                break;
+        }
+    }
+    return pt;
+}
+
+const _ptEsc = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Render Portable Text body to HTML string (client-side, visitor display). */
+export function renderPortableText(body: PortableTextNode[]): string {
+    let html = '';
+    let pendingListItems: string[] = [];
+    let pendingListType = '';
+
+    const flushList = (): void => {
+        if (pendingListItems.length === 0) return;
+        const tag = pendingListType === 'number' ? 'ol' : 'ul';
+        html += `<${tag}>${pendingListItems.map(i => `<li>${i}</li>`).join('')}</${tag}>\n`;
+        pendingListItems = [];
+        pendingListType = '';
+    };
+
+    for (const node of body) {
+        if (node._type === 'block') {
+            const block = node as PTBlock;
+            const inner = block.children.map(c => _ptEsc(c.text)).join('');
+            if (block.listItem) {
+                if (block.listItem !== pendingListType && pendingListItems.length > 0) {
+                    flushList();
+                }
+                pendingListType = block.listItem;
+                pendingListItems.push(inner);
+                continue;
+            }
+            flushList();
+            switch (block.style) {
+                case 'h1': html += `<h1>${inner}</h1>\n`; break;
+                case 'h2': html += `<h2>${inner}</h2>\n`; break;
+                case 'h3': html += `<h3>${inner}</h3>\n`; break;
+                case 'blockquote': html += `<blockquote>${inner}</blockquote>\n`; break;
+                default: html += `<p>${inner}</p>\n`;
+            }
+        } else if (node._type === 'code') {
+            flushList();
+            html += `<pre><code>${_ptEsc((node as PTCode).code)}</code></pre>\n`;
+        } else if (node._type === 'delimiter') {
+            flushList();
+            html += '<hr>\n';
+        } else if (node._type === 'image') {
+            flushList();
+            const img = node as PTImage;
+            const safeUrl = img.url && !/^\s*(javascript|data|vbscript)\s*:/i.test(img.url) && !/^\s*\/\//.test(img.url) ? img.url : '';
+            if (safeUrl) {
+                const cap = img.caption || img.alt || '';
+                html += `<figure><img src="${_ptEsc(safeUrl)}" alt="${_ptEsc(img.alt || cap)}" loading="lazy">`;
+                if (cap) html += `<figcaption>${_ptEsc(cap)}</figcaption>`;
+                html += '</figure>\n';
+            }
+        }
+    }
+    flushList();
+    return html;
+}
+
 // Ver.2.9 #6: InlineToolbar参照を各Editorインスタンスに紐づけるためのWeakMap
 const _editorInlineToolbarMap = new WeakMap<HTMLElement, InlineToolbar>();
 

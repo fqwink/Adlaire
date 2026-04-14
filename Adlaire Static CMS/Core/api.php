@@ -83,12 +83,9 @@ function handleEdit(): void
     if ($storage->isConfigKey($fieldname)) {
         $result = $storage->writeConfigValue($fieldname, $content);
     } else {
-        // Preserve existing page format when editing inline
-        $existing = $storage->readPageData($fieldname);
-        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'blocks';
-        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
-        $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
-        $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
+        // Page content inline save — not supported in PT format.
+        // Page content must be saved via the /api/pages endpoint.
+        $result = false;
     }
 
     if (!$result) {
@@ -336,8 +333,11 @@ function apiPageList(FileStorage $storage): void
     $summary = [];
     foreach ($pages as $slug => $data) {
         $summary[$slug] = [
-            'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
+            'type'       => $data['type'] ?? 'page',
+            'posted_at'  => $data['posted_at'] ?? '',
+            'category'   => $data['category'] ?? '',
+            'author'     => $data['author'] ?? '',
             'created_at' => $data['created_at'] ?? '',
             'updated_at' => $data['updated_at'] ?? '',
         ];
@@ -356,7 +356,19 @@ function apiPageGet(FileStorage $storage, string $slug): void
         apiError(404, 'Page not found');
         return;
     }
-    apiResponse(['page' => $slug, 'data' => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    // Return only the fields the frontend needs (exclude large body from summary)
+    $response = [
+        'body'       => $data['body'] ?? [],
+        'status'     => $data['status'] ?? 'published',
+        'type'       => $data['type'] ?? 'page',
+        'posted_at'  => $data['posted_at'] ?? '',
+        'category'   => $data['category'] ?? '',
+        'tags'       => $data['tags'] ?? [],
+        'author'     => $data['author'] ?? '',
+        'created_at' => $data['created_at'] ?? '',
+        'updated_at' => $data['updated_at'] ?? '',
+    ];
+    apiResponse(['page' => $slug, 'data' => $response], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiPageSave(FileStorage $storage): void
@@ -367,31 +379,25 @@ function apiPageSave(FileStorage $storage): void
     }
 
     $slug = $_POST['slug'] ?? null;
-    $content = $_POST['content'] ?? null;
-    $format = $_POST['format'] ?? 'blocks';
+    $bodyJson = $_POST['body'] ?? null;
 
-    if (!is_string($slug) || !is_string($content)) {
-        apiError(400, 'Missing slug or content');
+    if (!is_string($slug)) {
+        apiError(400, 'Missing slug');
         return;
     }
-
     if (!FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
 
-    if (!in_array($format, ['markdown', 'blocks'], true)) {
-        apiError(400, 'Invalid format');
+    if (!is_string($bodyJson)) {
+        apiError(400, 'Missing body');
         return;
     }
-
-    $blocks = null;
-    if ($format === 'blocks' && isset($_POST['blocks'])) {
-        $blocks = json_decode($_POST['blocks'], true, 512);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
-            apiError(400, 'Invalid blocks JSON');
-            return;
-        }
+    $body = json_decode($bodyJson, true, 64);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($body)) {
+        apiError(400, 'Invalid body JSON');
+        return;
     }
 
     if (isset($_POST['status'])) {
@@ -402,37 +408,44 @@ function apiPageSave(FileStorage $storage): void
         }
     } else {
         $existing = $storage->readPageData($slug);
-        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'draft';
+        $status = ($existing !== false) ? ($existing['status'] ?? 'draft') : 'draft';
     }
-    $result = $storage->writePage($slug, $content, $format, $blocks, $status);
+
+    $type = isset($_POST['type']) && in_array($_POST['type'], ['page', 'post'], true)
+        ? $_POST['type']
+        : 'page';
+    $postedAt = is_string($_POST['posted_at'] ?? null) ? $_POST['posted_at'] : '';
+    $category = is_string($_POST['category'] ?? null) ? $_POST['category'] : '';
+    $tagsRaw = is_string($_POST['tags'] ?? null) ? $_POST['tags'] : '';
+    $tags = ($tagsRaw !== '') ? json_decode($tagsRaw, true) : [];
+    if (!is_array($tags)) {
+        $tags = [];
+    }
+    $author = is_string($_POST['author'] ?? null) ? $_POST['author'] : '';
+
+    $result = $storage->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
     if (!$result) {
         apiError(500, 'Write failed');
         return;
     }
 
     $warnings = [];
+    if ($status === 'published' && $body === []) {
+        $warnings[] = 'empty_content';
+    }
     if ($status === 'published') {
-        $isEmpty = false;
-        if ($format === 'blocks' && trim($content) === '' && ($blocks === null || $blocks === [])) {
-            $isEmpty = true;
-        }
-        if ($format === 'markdown' && trim($content) === '') {
-            $isEmpty = true;
-        }
-        if ($isEmpty) {
-            $warnings[] = 'empty_content';
-        }
-        if ($format === 'blocks' && is_array($blocks)) {
-            $hasHeading = false;
-            foreach ($blocks as $b) {
-                if (($b['type'] ?? '') === 'heading') {
+        $hasHeading = false;
+        foreach ($body as $node) {
+            if (is_array($node) && ($node['_type'] ?? '') === 'block') {
+                $style = $node['style'] ?? '';
+                if (in_array($style, ['h1', 'h2', 'h3'], true)) {
                     $hasHeading = true;
                     break;
                 }
             }
-            if (!$hasHeading) {
-                $warnings[] = 'no_heading';
-            }
+        }
+        if (!$hasHeading) {
+            $warnings[] = 'no_heading';
         }
     }
 
@@ -779,11 +792,11 @@ function handleApiImport(FileStorage $storage): void
         }
     }
 
-    // Import pages (whitelist keys only)
-    $allowedPageKeys = ['content', 'format', 'blocks', 'status', 'created_at', 'updated_at'];
+    // Import pages (PT format)
+    $allowedPageKeys = ['body', 'status', 'type', 'posted_at', 'category', 'tags', 'author', 'created_at', 'updated_at'];
     if (isset($data['pages']) && is_array($data['pages'])) {
         foreach ($data['pages'] as $slug => $pageData) {
-            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($pageData) || !isset($pageData['content'])) {
+            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($pageData) || !isset($pageData['body'])) {
                 continue;
             }
             $pageData = array_intersect_key($pageData, array_flip($allowedPageKeys));
@@ -796,10 +809,14 @@ function handleApiImport(FileStorage $storage): void
                     unset($pageData['updated_at']);
                 }
             }
-            $format = $pageData['format'] ?? 'blocks';
-            $blocks = $pageData['blocks'] ?? null;
+            $body = is_array($pageData['body'] ?? null) ? $pageData['body'] : [];
             $status = $pageData['status'] ?? 'published';
-            $storage->writePage($slug, $pageData['content'], $format, $blocks, $status);
+            $type = $pageData['type'] ?? 'page';
+            $postedAt = $pageData['posted_at'] ?? '';
+            $category = $pageData['category'] ?? '';
+            $tags = is_array($pageData['tags'] ?? null) ? $pageData['tags'] : [];
+            $author = $pageData['author'] ?? '';
+            $storage->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
             $imported['pages']++;
         }
     }
@@ -1084,8 +1101,8 @@ function apiSidebar(FileStorage $storage, string $method): void
 {
     $app = App::getInstance();
     if ($method === 'GET') {
-        $blocks = $app->getSidebarBlocks();
-        apiResponse(['blocks' => $blocks], JSON_UNESCAPED_UNICODE);
+        $body = $app->getSidebarBody();
+        apiResponse(['body' => $body], JSON_UNESCAPED_UNICODE);
         return;
     }
     if ($method === 'POST') {
@@ -1093,17 +1110,17 @@ function apiSidebar(FileStorage $storage, string $method): void
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $raw = $_POST['blocks'] ?? '';
+        $raw = $_POST['body'] ?? '';
         if (!is_string($raw)) {
-            apiError(400, 'Invalid blocks parameter');
+            apiError(400, 'Invalid body parameter');
             return;
         }
-        $blocks = json_decode($raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
-            apiError(400, 'Invalid blocks JSON');
+        $ptBody = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($ptBody)) {
+            apiError(400, 'Invalid body JSON');
             return;
         }
-        $result = $app->saveSidebarBlocks($blocks);
+        $result = $app->saveSidebarBody($ptBody);
         if (!$result) {
             apiError(500, 'Write failed');
             return;

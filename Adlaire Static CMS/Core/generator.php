@@ -111,7 +111,7 @@ function handleApiGenerate(FileStorage $storage): void
     // Copy only public JS (exclude admin-only scripts from static output)
     $jsSrc = dirname(__DIR__) . '/js';
     $jsDst = $distDir . '/js';
-    $publicJs = ['markdown.js', 'editInplace.js'];
+    $publicJs = ['public.js'];
     if (is_dir($jsSrc)) {
         if (!is_dir($jsDst)) {
             if (!@mkdir($jsDst, GENERATOR_DIR_PERMISSION, true) && !is_dir($jsDst)) {
@@ -165,15 +165,10 @@ function handleApiGenerate(FileStorage $storage): void
             $details[] = ['slug' => $slug, 'result' => 'skipped'];
             continue;
         }
-        $format = $data['format'] ?? 'blocks';
-        $contentHtml = '';
 
-        if ($format === 'blocks' && isset($data['blocks']) && is_array($data['blocks'])) {
-            $contentHtml = renderBlocksToHtml($data['blocks']);
-        } elseif ($format === 'markdown') {
-            $contentHtml = renderMarkdownToHtml((string) ($data['content'] ?? ''));
-        } else {
-            $contentHtml = esc((string) ($data['content'] ?? ''));
+        $contentHtml = '';
+        if (isset($data['body']) && is_array($data['body'])) {
+            $contentHtml = renderPortableTextToHtml($data['body']);
         }
 
         $pageHtml = generatePageHtml($app, $slug, $contentHtml, $theme);
@@ -208,6 +203,23 @@ function handleApiGenerate(FileStorage $storage): void
         } else {
             $count++;
             $details[] = ['slug' => $slug, 'result' => 'generated'];
+        }
+    }
+
+    // Generate blog index (list of published posts)
+    $posts = $storage->listPublishedPosts();
+    if ($posts !== []) {
+        $blogDir = $distDir . '/blog';
+        if (!is_dir($blogDir) && !@mkdir($blogDir, GENERATOR_DIR_PERMISSION, true) && !is_dir($blogDir)) {
+            error_log('Adlaire: Failed to create blog directory');
+        } else {
+            $blogHtml = generateBlogIndexHtml($app, $posts, $theme);
+            $blogWriteResult = file_put_contents($blogDir . '/index.html', $blogHtml);
+            if ($blogWriteResult === false) {
+                error_log('Adlaire: Failed to write blog/index.html');
+            } else {
+                @chmod($blogDir . '/index.html', GENERATOR_FILE_PERMISSION);
+            }
         }
     }
 
@@ -294,10 +306,10 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     }
     $menuHtml .= '</ul>';
 
-    $sidebarBlocks = $app->getSidebarBlocks();
+    $sidebarBody = $app->getSidebarBody();
     $sideContent = '';
-    if ($sidebarBlocks !== []) {
-        $sideContent = renderBlocksToHtml($sidebarBlocks);
+    if ($sidebarBody !== []) {
+        $sideContent = renderPortableTextToHtml($sidebarBody);
     } else {
         $sideContent = esc((string) ($c['subside'] ?? ''));
     }
@@ -328,6 +340,96 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         <div id="side" class="border">
             <div class="pad">
                 {$sideContent}
+            </div>
+        </div>
+        <div class="clear"></div>
+        <footer>
+            <p>{$copyright} | {$credit}</p>
+        </footer>
+    </body>
+    </html>
+    HTML;
+}
+
+/**
+ * Generate blog index HTML page listing all published posts.
+ * @param array<string, array<string, mixed>> $posts Sorted newest-first
+ */
+function generateBlogIndexHtml(App $app, array $posts, string $theme): string
+{
+    $c = $app->config;
+    $title = esc((string) ($c['title'] ?? ''));
+    $desc = esc((string) ($c['description'] ?? ''));
+    $keywords = esc((string) ($c['keywords'] ?? ''));
+    $lang = esc($app->language);
+    $copyright = esc((string) ($c['copyright'] ?? ''));
+    $credit = esc($app->credit);
+    $safeTheme = esc($theme);
+
+    $menuHtml = '<ul>';
+    $menuRaw = $c['menu'] ?? '';
+    $menu = str_replace("\r\n", "\n", is_string($menuRaw) ? $menuRaw : '');
+    $items = explode("<br />\n", $menu);
+    foreach ($items as $item) {
+        $item = trim(strip_tags($item));
+        if ($item === '') {
+            continue;
+        }
+        $itemSlug = App::getSlug($item);
+        $safeItemSlug = esc($itemSlug);
+        $menuHtml .= "<li><a href=\"../{$safeItemSlug}/\">" . esc($item) . "</a></li>";
+    }
+    $menuHtml .= '</ul>';
+
+    $listHtml = '<ul class="blog-list">';
+    foreach ($posts as $slug => $data) {
+        $safeSlug = esc($slug);
+        $postTitle = esc(str_replace('-', ' ', $slug));
+        $postedAt = is_string($data['posted_at'] ?? null) && $data['posted_at'] !== '' ? $data['posted_at'] : ($data['updated_at'] ?? '');
+        $dateStr = (is_string($postedAt) && strlen($postedAt) >= 10) ? esc(substr($postedAt, 0, 10)) : '';
+        $category = is_string($data['category'] ?? null) ? esc($data['category']) : '';
+        $author = is_string($data['author'] ?? null) ? esc($data['author']) : '';
+        $listHtml .= "<li class=\"blog-list__item\">";
+        $listHtml .= "<a href=\"../{$safeSlug}/\" class=\"blog-list__title\">{$postTitle}</a>";
+        $listHtml .= "<span class=\"blog-list__meta\">";
+        if ($dateStr !== '') {
+            $listHtml .= "<time datetime=\"{$dateStr}\">{$dateStr}</time>";
+        }
+        if ($category !== '') {
+            $listHtml .= " <span class=\"blog-list__category\">{$category}</span>";
+        }
+        if ($author !== '') {
+            $listHtml .= " <span class=\"blog-list__author\">{$author}</span>";
+        }
+        $listHtml .= "</span>";
+        $listHtml .= "</li>";
+    }
+    $listHtml .= '</ul>';
+
+    $blogTitle = esc($app->t('blog_title'));
+
+    return <<<HTML
+    <!doctype html>
+    <html lang="{$lang}">
+    <head>
+        <meta charset="utf-8">
+        <title>{$title} - {$blogTitle}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="../themes/{$safeTheme}/style.css">
+        <meta name="description" content="{$desc}">
+        <meta name="keywords" content="{$keywords}">
+        <meta name="generator" content="Adlaire Static CMS">
+    </head>
+    <body>
+        <nav id="nav">
+            <h1><a href="../">{$title}</a></h1>
+            {$menuHtml}
+            <div class="clear"></div>
+        </nav>
+        <div id="wrapper" class="border">
+            <div class="pad">
+                <h1>{$blogTitle}</h1>
+                {$listHtml}
             </div>
         </div>
         <div class="clear"></div>

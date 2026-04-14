@@ -116,25 +116,26 @@ function renderAdminDashboard(App $app, string $n): void
     echo '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
     echo '<input type="text" id="page-search" placeholder="' . esc($app->t('admin_search')) . '" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">';
     echo '<select id="page-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">' . esc($app->t('admin_filter')) . '</option><option value="published">Published</option><option value="draft">Draft</option></select>';
+    echo '<select id="type-filter" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;"><option value="">All Types</option><option value="page">Pages</option><option value="post">Posts</option></select>';
     echo '<button class="admin-btn" id="bulk-status-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc($csrfToken) . '">' . esc($app->t('admin_bulk_status')) . '</button>';
     echo '<button class="admin-btn admin-btn--danger" id="bulk-delete-btn" style="font-size:12px;padding:4px 12px;display:none;" data-csrf="' . esc($csrfToken) . '">' . esc($app->t('admin_bulk_delete')) . '</button>';
     $currentOrder = json_encode(array_keys($pages), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo '<button class="admin-btn admin-btn--outline" id="reorder-btn" style="font-size:12px;padding:4px 12px;" data-csrf="' . esc($csrfToken) . '" data-order="' . esc($currentOrder !== false ? $currentOrder : '[]') . '">' . esc($app->t('admin_reorder')) . '</button>';
     echo '</div>';
     echo '<table class="admin-table">';
-    echo '<thead><tr><th style="width:30px;"><input type="checkbox" id="select-all"></th><th>' . esc($app->t('admin_slug')) . '</th><th>Format</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
+    echo '<thead><tr><th style="width:30px;"><input type="checkbox" id="select-all"></th><th>' . esc($app->t('admin_slug')) . '</th><th>Type</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>';
     echo '<tbody id="page-list">';
     foreach ($pages as $slug => $data) {
         $safeSlug = esc($slug);
-        $format = esc($data['format'] ?? 'blocks');
+        $type = esc($data['type'] ?? 'page');
         $status = $data['status'] ?? 'published';
         $statusClass = $status === 'draft' ? 'status-draft' : 'status-published';
         $updated = substr($data['updated_at'] ?? '', 0, 10);
         $safeStatus = esc($status);
-        echo "<tr data-slug=\"" . esc($slug) . "\" data-status=\"" . $safeStatus . "\">";
+        echo "<tr data-slug=\"" . esc($slug) . "\" data-status=\"" . $safeStatus . "\" data-type=\"" . $type . "\">";
         echo "<td><input type='checkbox' class='page-check' value='" . esc($slug) . "'></td>";
         echo "<td><a href='?admin=edit&page={$safeSlug}'>{$safeSlug}</a></td>";
-        echo "<td>{$format}</td>";
+        echo "<td>{$type}</td>";
         echo "<td class='{$statusClass}'>" . esc($status) . "</td>";
         echo "<td>" . esc($updated) . "</td>";
         $jsonSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -220,9 +221,12 @@ function renderAdminDashboard(App $app, string $n): void
     echo '</div>';
 
     // Sidebar editor
+    $sidebarPTBody = $app->getSidebarBody();
+    $sidebarBodyJson = json_encode($sidebarPTBody, JSON_UNESCAPED_UNICODE) ?: '[]';
+    $sidebarBodyB64 = esc(base64_encode($sidebarBodyJson));
     echo '<section class="admin-section">';
     echo '<h2>' . esc($app->t('admin_sidebar')) . '</h2>';
-    echo '<div class="ce-editor-wrapper" id="sidebar-editor"></div>';
+    echo "<div class=\"ce-editor-wrapper\" id=\"sidebar-editor\" data-body-b64=\"{$sidebarBodyB64}\"></div>";
     echo '</section>';
 
     // Export/Import/Generate
@@ -309,11 +313,13 @@ function renderAdminDashboard(App $app, string $n): void
     echo "<script{$n}>";
     echo 'var searchEl=document.getElementById("page-search");';
     echo 'var filterEl=document.getElementById("page-filter");';
-    echo 'function filterPages(){var q=(searchEl.value||"").toLowerCase();var f=filterEl.value;var rows=document.querySelectorAll("#page-list tr");';
-    echo 'for(var i=0;i<rows.length;i++){var r=rows[i];var slug=r.getAttribute("data-slug")||"";var st=r.getAttribute("data-status")||"";';
-    echo 'var show=true;if(q&&slug.indexOf(q)===-1)show=false;if(f&&st!==f)show=false;r.style.display=show?"":"none";}}';
+    echo 'var typeFilterEl=document.getElementById("type-filter");';
+    echo 'function filterPages(){var q=(searchEl.value||"").toLowerCase();var f=filterEl.value;var t=typeFilterEl?typeFilterEl.value:"";var rows=document.querySelectorAll("#page-list tr");';
+    echo 'for(var i=0;i<rows.length;i++){var r=rows[i];var slug=r.getAttribute("data-slug")||"";var st=r.getAttribute("data-status")||"";var tp=r.getAttribute("data-type")||"";';
+    echo 'var show=true;if(q&&slug.indexOf(q)===-1)show=false;if(f&&st!==f)show=false;if(t&&tp!==t)show=false;r.style.display=show?"":"none";}}';
     echo 'if(searchEl)searchEl.addEventListener("input",filterPages);';
     echo 'if(filterEl)filterEl.addEventListener("change",filterPages);';
+    echo 'if(typeFilterEl)typeFilterEl.addEventListener("change",filterPages);';
     echo '</script>';
 
     echo '</section>';
@@ -355,32 +361,28 @@ function renderAdminEditor(App $app, string $n): void
         echo '<p>Page not found. <a href="?admin">Back to dashboard</a></p>';
         return;
     }
-    $format = $pageData['format'] ?? 'blocks';
     $status = $pageData['status'] ?? 'published';
-    $content = $pageData['content'] ?? '';
-    $blocksB64 = '';
-    if (isset($pageData['blocks']) && is_array($pageData['blocks'])) {
-        $blocksJson = json_encode($pageData['blocks'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
-        if ($blocksJson !== false) {
-            $blocksB64 = base64_encode($blocksJson);
+    $type = $pageData['type'] ?? 'page';
+    $postedAt = $pageData['posted_at'] ?? '';
+    $category = $pageData['category'] ?? '';
+    $tags = is_array($pageData['tags'] ?? null) ? $pageData['tags'] : [];
+    $author = $pageData['author'] ?? '';
+    $bodyB64 = '';
+    if (isset($pageData['body']) && is_array($pageData['body'])) {
+        $bodyJson = json_encode($pageData['body'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+        if ($bodyJson !== false) {
+            $bodyB64 = base64_encode($bodyJson);
         }
     }
 
     $safeSlug = esc($slug);
+    $jsonSafeSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
     echo "<section class='admin-section'>";
     echo "<h2>" . esc($app->t('admin_edit')) . ": {$safeSlug}</h2>";
 
     // Meta bar
     echo "<div class='admin-meta'>";
-    // Format switcher
-    echo "<div class='ce-format-bar' data-slug='{$safeSlug}'>";
-    $formats = ['blocks' => 'Blocks', 'markdown' => 'Markdown'];
-    foreach ($formats as $fmt => $label) {
-        $active = ($fmt === $format) ? ' class="active"' : '';
-        echo "<button{$active} data-format='" . esc($fmt) . "'>{$label}</button>";
-    }
-    echo "</div>";
 
     // Status toggle
     $pubSelected = $status === 'published' ? ' selected' : '';
@@ -392,7 +394,6 @@ function renderAdminEditor(App $app, string $n): void
     echo "</select>";
     echo "<button class='admin-btn' id='save-status-btn' style='font-size:12px;padding:4px 12px;'>Save Status</button>";
     echo "<a href='?preview={$safeSlug}' target='_blank' rel='noopener' class='admin-btn admin-btn--outline' style='font-size:12px;padding:4px 12px;'>" . esc($app->t('admin_preview')) . "</a>";
-    $jsonSafeSlug = json_encode($slug, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     echo "<script{$n}>document.getElementById('save-status-btn').addEventListener('click',function(){";
     echo "var s=document.getElementById('status-select').value;";
     echo "var body=new URLSearchParams();";
@@ -403,16 +404,26 @@ function renderAdminEditor(App $app, string $n): void
 
     echo "</div>";
 
-    // Editor area
-    if ($format === 'blocks') {
-        echo "<div class='admin-editor-area'>";
-        echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-format='blocks' data-blocks-b64='" . esc($blocksB64) . "'></div>";
-        echo "</div>";
-    } elseif ($format === 'markdown') {
-        echo "<div class='admin-editor-area'>";
-        echo "<span id='{$safeSlug}' class='editText richText' data-format='markdown'>" . esc($content) . "</span>";
-        echo "</div>";
-    }
+    // Post metadata (shown for type=post or when user can switch type)
+    $typePageSel = $type === 'page' ? ' selected' : '';
+    $typePostSel = $type === 'post' ? ' selected' : '';
+    $safeTags = esc(implode(', ', $tags));
+    $safePostedAt = esc($postedAt);
+    $safeCategory = esc($category);
+    $safeAuthor = esc($author);
+    echo "<div class='admin-post-meta' style='background:#f8f8f8;border:1px solid #e0e0e0;border-radius:4px;padding:12px 16px;margin-bottom:12px;font-size:13px;'>";
+    echo "<div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;'>";
+    echo "<label>Type: <select id='meta-type' style='padding:3px;font-size:13px;'><option value='page'{$typePageSel}>Page</option><option value='post'{$typePostSel}>Post</option></select></label>";
+    echo "<label>Posted: <input type='date' id='meta-posted-at' value='{$safePostedAt}' style='padding:3px;font-size:13px;'></label>";
+    echo "<label>Category: <input type='text' id='meta-category' value='{$safeCategory}' style='padding:3px;font-size:13px;width:120px;'></label>";
+    echo "<label>Tags: <input type='text' id='meta-tags' value='{$safeTags}' placeholder='tag1, tag2' style='padding:3px;font-size:13px;width:140px;'></label>";
+    echo "<label>Author: <input type='text' id='meta-author' value='{$safeAuthor}' style='padding:3px;font-size:13px;width:100px;'></label>";
+    echo "</div></div>";
+
+    // Editor area (PT format only)
+    echo "<div class='admin-editor-area'>";
+    echo "<div id='{$safeSlug}' class='ce-editor-wrapper' data-body-b64='" . esc($bodyB64) . "'></div>";
+    echo "</div>";
 
     // Revisions sidebar
     $revisions = $app->storage->listRevisions($slug);

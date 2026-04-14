@@ -28,7 +28,137 @@ const RENDERER_MAX_HEADING_LEVEL = 3;
 const RENDERER_MIN_HEADING_LEVEL = 1;
 
 /**
+ * Render Portable Text body to static HTML string (server-side).
+ * @param list<array<string, mixed>> $body
+ */
+function renderPortableTextToHtml(array $body): string
+{
+    $html = '';
+    $pendingListItems = [];
+    $pendingListType = '';
+
+    $flushList = function () use (&$pendingListItems, &$pendingListType, &$html): void {
+        if ($pendingListItems === []) {
+            return;
+        }
+        $tag = $pendingListType === 'number' ? 'ol' : 'ul';
+        $html .= "<{$tag}>";
+        foreach ($pendingListItems as $item) {
+            $html .= '<li>' . $item . '</li>';
+        }
+        $html .= "</{$tag}>\n";
+        $pendingListItems = [];
+        $pendingListType = '';
+    };
+
+    foreach ($body as $node) {
+        if (!is_array($node)) {
+            continue;
+        }
+        $nodeType = (string) ($node['_type'] ?? '');
+
+        if ($nodeType === 'block') {
+            $style = (string) ($node['style'] ?? 'normal');
+            $listItem = (string) ($node['listItem'] ?? '');
+            $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+            $markDefs = is_array($node['markDefs'] ?? null) ? $node['markDefs'] : [];
+
+            // Build a map of mark definitions by _key
+            $markDefMap = [];
+            foreach ($markDefs as $md) {
+                if (is_array($md) && isset($md['_key'])) {
+                    $markDefMap[(string) $md['_key']] = $md;
+                }
+            }
+
+            // Render children (spans)
+            $innerHtml = '';
+            foreach ($children as $child) {
+                if (!is_array($child) || ($child['_type'] ?? '') !== 'span') {
+                    continue;
+                }
+                $text = esc((string) ($child['text'] ?? ''));
+                $marks = is_array($child['marks'] ?? null) ? $child['marks'] : [];
+                // Apply marks (strong, em, underline, code, link)
+                foreach (array_reverse($marks) as $mark) {
+                    $markStr = (string) $mark;
+                    if ($markStr === 'strong') {
+                        $text = '<strong>' . $text . '</strong>';
+                    } elseif ($markStr === 'em') {
+                        $text = '<em>' . $text . '</em>';
+                    } elseif ($markStr === 'underline') {
+                        $text = '<u>' . $text . '</u>';
+                    } elseif ($markStr === 'code') {
+                        $text = '<code>' . $text . '</code>';
+                    } elseif (isset($markDefMap[$markStr])) {
+                        $md = $markDefMap[$markStr];
+                        if (($md['_type'] ?? '') === 'link') {
+                            $href = (string) ($md['href'] ?? '');
+                            $hrefDecoded = html_entity_decode($href, ENT_QUOTES, 'UTF-8');
+                            $lower = strtolower(trim($hrefDecoded));
+                            if ($href !== '' && !preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) && !preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $hrefDecoded)) {
+                                $text = '<a href="' . esc($href) . '">' . $text . '</a>';
+                            }
+                        }
+                    }
+                }
+                $innerHtml .= $text;
+            }
+
+            if ($listItem !== '') {
+                // Accumulate list items
+                if ($listItem !== $pendingListType && $pendingListItems !== []) {
+                    $flushList();
+                }
+                $pendingListType = $listItem;
+                $pendingListItems[] = $innerHtml;
+                continue;
+            }
+
+            $flushList();
+
+            $html .= match ($style) {
+                'normal'     => '<p>' . $innerHtml . '</p>',
+                'h1'         => '<h1>' . $innerHtml . '</h1>',
+                'h2'         => '<h2>' . $innerHtml . '</h2>',
+                'h3'         => '<h3>' . $innerHtml . '</h3>',
+                'blockquote' => '<blockquote>' . $innerHtml . '</blockquote>',
+                default      => '<p>' . $innerHtml . '</p>',
+            };
+            $html .= "\n";
+
+        } elseif ($nodeType === 'code') {
+            $flushList();
+            $code = (string) ($node['code'] ?? '');
+            $html .= '<pre><code>' . esc($code) . '</code></pre>' . "\n";
+
+        } elseif ($nodeType === 'delimiter') {
+            $flushList();
+            $html .= '<hr>' . "\n";
+
+        } elseif ($nodeType === 'image') {
+            $flushList();
+            $url = (string) ($node['url'] ?? '');
+            $decoded = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
+            $lower = strtolower(trim($decoded));
+            if ($url !== '' && preg_match(RENDERER_IMAGE_URL_PATTERN, $url) && !preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) && !preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $decoded)) {
+                $caption = (string) ($node['caption'] ?? '');
+                $html .= '<figure><img src="' . esc($url) . '" alt="' . esc($caption) . '" loading="lazy">';
+                if ($caption !== '') {
+                    $html .= '<figcaption>' . esc($caption) . '</figcaption>';
+                }
+                $html .= '</figure>' . "\n";
+            }
+        }
+    }
+
+    $flushList();
+    return $html;
+}
+
+/**
  * Render blocks array to static HTML string (server-side).
+ * @deprecated Ver.3.1 — Use renderPortableTextToHtml() instead. Will be removed in Ver.3.5.
  * @param array<int, array{type: string, data: array<string, mixed>}> $blocks
  */
 function renderBlocksToHtml(array $blocks): string

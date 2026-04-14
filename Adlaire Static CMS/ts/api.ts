@@ -10,18 +10,27 @@
 
 /// <reference path="./globals.d.ts" />
 
+import type { PortableTextNode } from './editor.ts';
+
 // #64: PageSummary partial response対応 — フィールドをoptionalに
 interface PageSummary {
-    format?: string;
+    type?: string;
+    posted_at?: string;
+    category?: string;
+    author?: string;
     status?: string;
     created_at?: string;
     updated_at?: string;
 }
 
 interface PageData {
-    content: string;
-    format: string;
+    body: PortableTextNode[];
     status: string;
+    type: string;
+    posted_at: string;
+    category: string;
+    tags: string[];
+    author: string;
     created_at: string;
     updated_at: string;
 }
@@ -37,7 +46,7 @@ interface SavePageResult {
 interface SearchResult {
     slug: string;
     snippet: string;
-    format: string;
+    type: string;
     status: string;
     updated_at: string;
 }
@@ -109,29 +118,33 @@ export const api = {
     },
 
     /**
-     * Create or update a page.
+     * Create or update a page (PT format).
      */
-    // R3-4: savePage slug空文字チェック + R3-5: format入力検証
-    async savePage(slug: string, content: string, format: string = 'blocks'): Promise<SavePageResult> {
+    // Ver.3.1: savePage PT body + post metadata対応
+    async savePage(
+        slug: string,
+        ptBody: PortableTextNode[],
+        type: string = 'page',
+        postedAt: string = '',
+        category: string = '',
+        tags: string[] = [],
+        author: string = '',
+    ): Promise<SavePageResult> {
         if (!slug) throw new Error('savePage: slug is required');
-        if (format !== 'blocks' && format !== 'markdown' && format !== 'html') {
-            throw new Error('savePage: invalid format');
-        }
-        const body = new URLSearchParams();
-        body.append('slug', slug);
-        body.append('format', format);
-        body.append('csrf', csrfToken);
-        if (format === 'blocks') {
-            body.append('blocks', content);
-            body.append('content', '');
-        } else {
-            body.append('content', content);
-        }
+        const params = new URLSearchParams();
+        params.append('slug', slug);
+        params.append('csrf', csrfToken);
+        params.append('body', JSON.stringify(ptBody));
+        if (type) params.append('type', type);
+        if (postedAt) params.append('posted_at', postedAt);
+        if (category) params.append('category', category);
+        if (tags.length > 0) params.append('tags', tags.join(','));
+        if (author) params.append('author', author);
 
         const res = await fetch(buildApiUrl('pages'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
+            body: params.toString(),
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
@@ -381,18 +394,16 @@ export const api = {
         }
     },
 
-    // Ver.2.9 TS#90: saveSidebar catch時にconsole.warn追加
-    // R3-18: saveSidebar blocks空チェック
-    async saveSidebar(blocks: string): Promise<void> {
-        if (!blocks) throw new Error('saveSidebar: blocks is required');
-        const body = new URLSearchParams();
-        body.append('blocks', blocks);
-        body.append('csrf', csrfToken);
+    // Ver.3.1: saveSidebar PT body対応
+    async saveSidebar(ptBody: PortableTextNode[]): Promise<void> {
+        const params = new URLSearchParams();
+        params.append('body', JSON.stringify(ptBody));
+        params.append('csrf', csrfToken);
 
         const res = await fetch(buildApiUrl('sidebar'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
+            body: params.toString(),
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
