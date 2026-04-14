@@ -1,7 +1,7 @@
 # Adlaire Generator RULEBOOK
 
 - 文書名: Adlaire Generator RULEBOOK
-- 文書バージョン: Ver.1.4
+- 文書バージョン: Ver.1.5
 - 作成日: 2026-04-02
 - 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
@@ -99,27 +99,28 @@ dist/
 
 # 5. コンテンツ変換
 
-ページの format に応じて、サーバーサイドで HTML に変換する。
+Ver.3.1 以降、ページの `body`（Portable Text 配列、`API_RULEBOOK.md` §2.9 準拠）をサーバーサイドで HTML に変換する。
 
-| format | 変換関数 | 定義ファイル |
-|--------|---------|------------|
-| `blocks` | `renderBlocksToHtml(blocks)` | `Core/renderer.php` |
-| `markdown` | `renderMarkdownToHtml(md)` | `Core/renderer.php` |
+| 変換関数 | 定義ファイル | 備考 |
+|---------|------------|------|
+| `renderPortableTextToHtml(body)` | `Core/renderer.php` | Portable Text → HTML（Ver.3.1 以降） |
+| `renderMarkdownToHtml(md)` | `Core/renderer.php` | **Ver.3.5 廃止予定**（マイグレーション補助用） |
+| `renderBlocksToHtml(blocks)` | `Core/renderer.php` | **Ver.3.5 廃止予定**（マイグレーション補助用） |
 
 - 変換後の HTML にテーマテンプレートを適用し、完全な HTML ページとして出力する。
 - XSS エスケープは変換関数内で適用済み。
 
-## 5.1 ブロック型レンダリング（Ver.3.5 以降追加）
+## 5.1 Portable Text カスタム型レンダリング（Ver.3.5 以降）
 
-`renderBlocksToHtml()` は以下のブロック型を追加で処理する。
+`renderPortableTextToHtml()` は以下のカスタム型オブジェクトを追加で処理する（Ver.3.5 以降）。
 
-| type | レンダリング結果 | 備考 |
-|------|--------------|------|
-| `table` | `<table>` + `<thead>`（withHeadings=true 時）+ `<tbody>` + `<td>` | セル内テキストは `esc()` 適用 |
-| `accordion` | `<details class="ce-accordion"><summary>{title}</summary><div>{content}</div></details>` | title は `esc()`、content はサニタイズ済みインライン HTML |
+| `_type` | レンダリング結果 | 備考 |
+|---------|--------------|------|
+| `"table"` | `<table>` + `<thead>`（withHeadings=true 時）+ `<tbody>` + `<td>` | セル内テキストは `esc()` 適用 |
+| `"accordion"` | `<details class="ce-accordion"><summary>{title}</summary><div>{content}</div></details>` | title は `esc()`、content はサニタイズ済みインライン HTML |
 
-- `table` の制約: 最大 20列 / 100行（EDITOR_RULEBOOK.md §14.1 準拠）。
-- `accordion` の content はエディタ保存時にサニタイズ済みとして扱う。サーバーサイドで追加エスケープは行わない。
+- `"table"` の制約: 最大 20列 / 100行（EDITOR_RULEBOOK.md §14.1 準拠）。
+- `"accordion"` の content はエディタ保存時にサニタイズ済みとして扱う。サーバーサイドで追加エスケープは行わない。
 
 ---
 
@@ -154,8 +155,8 @@ dist/
 
 | 関数 | ファイル | 説明 |
 |------|---------|------|
-| `handleApiGenerate(storage)` | `Core/generator.php` | 静的サイト生成 API ハンドラー。ページ一覧取得→変換→テーマ適用→ファイル出力→sitemap 生成→ブログ生成（Ver.3.1 以降） |
-| `generatePageHtml(app, slug, contentHtml, theme, meta)` | `Core/generator.php` | テーマテンプレートを適用した完全な HTML ページを生成。`meta` は投稿メタデータ配列（Ver.3.1 以降、省略可） |
+| `handleApiGenerate(storage)` | `Core/generator.php` | 静的サイト生成 API ハンドラー。ページ一覧取得→`renderPortableTextToHtml()`変換→テーマ適用→ファイル出力→sitemap 生成→ブログ生成（Ver.3.1 以降） |
+| `generatePageHtml(app, slug, contentHtml, theme, meta)` | `Core/generator.php` | テーマテンプレートを適用した完全な HTML ページを生成。`contentHtml` は `renderPortableTextToHtml()` 適用済み。`meta` は投稿メタデータ配列（Ver.3.1 以降、省略可） |
 | `generateBlogListHtml(app, posts, page, totalPages, theme)` | `Core/generator.php` | ブログ一覧ページ HTML 生成（テーマの `blog.php` / `theme.php` を適用）（Ver.3.1 以降） |
 | `generateBlogPages(app, storage, theme)` | `Core/generator.php` | ブログ一覧・ページネーションページを `dist/blog/` に一括生成（Ver.3.1 以降） |
 | `generateArchivePages(app, storage, theme)` | `Core/generator.php` | カテゴリ・タグ・日付アーカイブページを `dist/blog/` に生成（Ver.3.3 以降） |
@@ -213,7 +214,7 @@ dist/
 
 | 変数 | 型 | 説明 |
 |------|----|------|
-| `$posts` | array | 投稿データ配列（各要素: `slug`, `posted_at`, `category`, `tags`, `author`, `excerpt`, `format`, `status`） |
+| `$posts` | array | 投稿データ配列（各要素: `slug`, `posted_at`, `category`, `tags`, `author`, `excerpt`, `status`） |
 | `$currentPage` | int | 現在のページ番号（1 起算） |
 | `$totalPages` | int | 総ページ数 |
 | `$totalPosts` | int | 総投稿数 |
@@ -221,10 +222,12 @@ dist/
 
 ### 9.2.5 抜粋（excerpt）生成ルール
 
-| format | 生成方法 |
-|--------|---------|
-| `blocks` | 最初の `paragraph` ブロックのテキストを先頭 120文字で切り出し。paragraph が存在しない場合は空文字。 |
-| `markdown` | Markdown を平文に変換した先頭 120文字。HTML タグは除去。 |
+Portable Text 形式（Ver.3.1 以降）での抜粋生成:
+
+| 条件 | 生成方法 |
+|------|---------|
+| `style: "normal"` の PTBlock が存在する | 最初の `style: "normal"` ブロックの `children` テキストを連結し、先頭 120文字で切り出し |
+| 存在しない | 空文字 |
 
 ### 9.2.6 投稿ページの追加メタデータ変数（Ver.3.1）
 
@@ -348,17 +351,19 @@ CSS / sitemap と同様に、常に全件再生成する（差分ビルドの対
 | フィールド | 型 | 説明 |
 |-----------|-----|------|
 | `slug` | string | ページスラッグ |
-| `title` | string | ページタイトル（最初の heading ブロックのテキスト、または Markdown の先頭 `#` 見出し） |
+| `title` | string | ページタイトル（§11.5 title 抽出規則準拠） |
 | `excerpt` | string | 抜粋（先頭 120文字、HTML タグ除去済み。§9.2.5 の excerpt 生成ルールに準拠） |
 | `type` | string | `"page"` または `"post"` |
 | `updated_at` | string | 最終更新日時（ISO 8601） |
 
 ## 11.5 title 抽出規則
 
-| format | 抽出方法 |
-|--------|---------|
-| `blocks` | 最初の `heading` ブロックの `text` を使用。存在しない場合は slug をタイトルとする。 |
-| `markdown` | 先頭の `# 見出し` を使用。存在しない場合は slug をタイトルとする。 |
+Portable Text 形式（Ver.3.1 以降）でのタイトル抽出:
+
+| 条件 | 抽出方法 |
+|------|---------|
+| `style: "h1"` / `"h2"` / `"h3"` の PTBlock が存在する | 最初の heading ブロックの `children` テキストを連結して使用 |
+| 存在しない | slug をタイトルとする |
 
 ## 11.6 PHP 関数
 
