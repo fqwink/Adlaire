@@ -1,8 +1,9 @@
 # Adlaire API RULEBOOK
 
 - 文書名: Adlaire API RULEBOOK
-- 文書バージョン: Ver.1.2
+- 文書バージョン: Ver.1.5
 - 作成日: 2026-04-02
+- 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
 - 文書種別: データ仕様・PHP API・REST API・TypeScript モジュール・管理 UI を定義する技術規範文書
 - 文書目的: Adlaire の全 API インターフェース、データスキーマ、TypeScript モジュール仕様、管理 UI 仕様を恒常的規範として定義する
@@ -39,6 +40,9 @@
 | `description` | string | サイト説明 |
 | `keywords` | string | キーワード |
 | `copyright` | string | 著作権表示 |
+| `blog_posts_per_page` | int | ブログ一覧の1ページあたり表示件数（デフォルト: 10） |
+| `media_max_size` | int | メディアアップロードの最大ファイルサイズ（バイト、デフォルト: 10485760 = 10MB）（Ver.3.5 以降） |
+| `theme_settings` | object | テーマ固有の設定値（キー: テーマ名、値: 設定オブジェクト）（Ver.3.7 以降） |
 
 ## 2.2 ページデータ (`data/pages/{slug}.json`)
 
@@ -47,10 +51,15 @@
     "content": "テキスト（Markdown時）またはブロックJSON文字列",
     "format": "blocks | markdown",
     "status": "published | draft",
+    "type": "page | post",
     "blocks": [
         { "type": "paragraph", "data": { "text": "..." } },
         { "type": "heading", "data": { "text": "...", "level": 2 } }
     ],
+    "posted_at": "ISO 8601",
+    "category": "カテゴリ名",
+    "tags": ["tag1", "tag2"],
+    "author": "著者表示名",
     "created_at": "ISO 8601",
     "updated_at": "ISO 8601"
 }
@@ -58,7 +67,12 @@
 
 - **format**: `blocks`（ブロックエディタ JSON、デフォルト）/ `markdown`（Markdown テキスト）
 - **status**: `published`（公開）/ `draft`（下書き、管理者のみ閲覧可）
+- **type**: `page`（通常ページ、デフォルト）/ `post`（ブログ投稿）。省略時は `"page"` として扱う（後方互換）。
 - **blocks**: format が `blocks` の場合のみ。ブロック配列。
+- **posted_at**: `type: post` のみ有効。投稿の公開日時（管理者が任意に設定可能、`created_at` とは独立）。省略時は `created_at` を代替使用。
+- **category**: `type: post` のみ有効。カテゴリ名（単一カテゴリ、空文字許可）。
+- **tags**: `type: post` のみ有効。タグ名の配列（空配列許可）。
+- **author**: `type: post` のみ有効。著者の表示名（空文字許可）。
 
 ## 2.3 リビジョン (`data/revisions/{slug}/{timestamp}_{random}.json`)
 
@@ -66,9 +80,10 @@
 
 ## 2.4 ページインデックスキャッシュ (`data/pages.index.json`)
 
-- ページメタデータ（slug, format, status, updated_at）をキャッシュする。
+- ページメタデータ（slug, format, status, type, posted_at, updated_at）をキャッシュする。
 - `listPages()` はキャッシュが有効な場合、個別ページ JSON を読み込まずキャッシュを返す。
 - `writePage()`, `deletePage()`, `updatePageStatus()` 実行時にキャッシュを再構築する。
+- `type` フィールドを含めることで、ブログ投稿一覧取得時に全ページ JSON を読み込まずにフィルタリングできる。
 
 ## 2.5 install.lock (`data/system/install.lock`)
 
@@ -144,6 +159,31 @@
 - **ファイルロック**: config.json と同様に排他ロック + アトミック書き込みを使用する。
 - **ファイル権限**: 0600（owner のみ読み書き可）。
 
+## 2.8 メディアデータ (`data/media/`)
+
+メディアファイル（画像等）はサーバーファイルシステムに保存する（Ver.3.5 以降）。
+
+### 保存先
+
+| パス | 説明 |
+|------|------|
+| `data/media/{filename}` | アップロードされたメディアファイル本体 |
+
+### 許可拡張子
+
+`jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`
+
+### ファイル名サニタイズ規則
+
+- 拡張子を小文字に正規化する。
+- アルファベット・数字・ハイフン・アンダースコア・ドット以外の文字を除去する。
+- ファイル名の重複時は `{name}-{timestamp}.{ext}` 形式にリネームする。
+- パストラバーサルを防ぐため、ディレクトリセパレータ（`/`, `\`）を除去する。
+
+### 最大ファイルサイズ
+
+`config.json` の `media_max_size`（デフォルト: 10,485,760 バイト = 10MB）。
+
 ---
 
 # 3. PHP API 仕様
@@ -163,7 +203,8 @@
 | `writePage(slug, content, format, blocks?, status?): bool` | ページ書き込み（リビジョン自動保存） |
 | `deletePage(slug): bool` | ページ削除（バックアップ + リビジョン削除） |
 | `listPages(): array` | 全ページ一覧（キャッシュ対応） |
-| `listPublishedPages(): array` | 公開ページのみ一覧 |
+| `listPublishedPages(): array` | 公開ページのみ一覧（type: page に限定） |
+| `listPublishedPosts(): array` | 公開投稿一覧（type: post, status: published、posted_at 降順） |
 | `updatePageStatus(slug, status): bool` | ステータス変更 |
 | `isConfigKey(key): bool` | 設定キー判定 |
 | `listRevisions(slug): array` | リビジョン一覧（新しい順） |
@@ -238,12 +279,13 @@
 
 | メソッド | URL | レスポンス |
 |---------|-----|-----------|
-| `GET` | `?api=pages` | `{ pages: { slug: { format, status, created_at, updated_at } } }` |
-| `GET` | `?api=pages&slug=xxx` | `{ page, data: { content, format, status, blocks?, ... } }` |
+| `GET` | `?api=pages` | `{ pages: { slug: { format, status, type, updated_at } } }` |
+| `GET` | `?api=pages&type=post` | type フィルタ: `"page"` または `"post"` でフィルタリング |
+| `GET` | `?api=pages&slug=xxx` | `{ page, data: { content, format, status, type, blocks?, posted_at?, category?, tags?, author?, ... } }` |
 | `POST` | `?api=pages` | `{ status: "ok", slug }` |
 | `DELETE` | `?api=pages&slug=xxx` | `{ status: "ok", deleted }` |
 
-POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (JSON), `status` (draft/published), `csrf`
+POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (JSON), `status` (draft/published), `type` (page/post), `posted_at` (ISO 8601、type=post のみ), `category` (type=post のみ), `tags` (JSON 配列文字列、type=post のみ), `author` (type=post のみ), `csrf`
 
 ## 4.2 リビジョン API
 
@@ -305,6 +347,56 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 - サブマスター生成時のレスポンスに平文の ID・パスワード・トークンを含む。この情報はサーバー側にハッシュのみ保存され、以後取得不可。
 - クライアント側は生成レスポンス受信時に認証情報ファイルを自動ダウンロード（1回のみ）。
 
+## 4.9 メディア管理 API（Ver.3.5 以降）
+
+> 認証必須。
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `GET` | `?api=media` | メディアファイル一覧（ファイル名・サイズ・更新日時） |
+| `POST` | `?api=media&action=upload` | ファイルアップロード（multipart/form-data） |
+| `DELETE` | `?api=media&file={filename}` | ファイル削除 |
+
+POST パラメータ: `file`（ファイルフィールド）、`csrf`
+
+レスポンス（一覧）:
+```json
+{ "files": [{ "name": "example.jpg", "size": 102400, "updated_at": "ISO 8601" }] }
+```
+
+レスポンス（アップロード成功）:
+```json
+{ "status": "ok", "filename": "example.jpg", "url": "/data/media/example.jpg" }
+```
+
+- アップロード時はファイル名をサニタイズしてから保存する（§2.8 参照）。
+- 許可拡張子以外はアップロードを拒否する（§2.8 参照）。
+- ファイルサイズが `media_max_size` を超える場合はエラーを返す。
+
+## 4.10 テーマ設定 API（Ver.3.7 以降）
+
+> 認証必須。
+
+| メソッド | URL | 説明 |
+|---------|-----|------|
+| `POST` | `?api=theme-settings` | テーマ設定を保存 |
+| `GET` | `?api=theme-settings&theme={name}` | 指定テーマの設定を取得 |
+
+POST パラメータ: `theme`（テーマ名）、`settings`（JSON オブジェクト文字列）、`csrf`
+
+レスポンス（取得）:
+```json
+{ "theme": "AP-Default", "settings": { "key": "value" } }
+```
+
+レスポンス（保存成功）:
+```json
+{ "status": "ok", "theme": "AP-Default" }
+```
+
+- 保存先は `config.json` の `theme_settings[{theme}]`（§2.1 参照）。
+- テーマ名は `basename()` でサニタイズし、実在テーマのみ許可する。
+
 ---
 
 # 5. TypeScript モジュール仕様
@@ -357,6 +449,8 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | `quote` | 引用 | `{ text: string }` |
 | `delimiter` | 水平線 | `{}` |
 | `image` | 画像（URL入力 + キャプション） | `{ url: string, caption?: string }` |
+| `table` | テーブル（Ver.3.5 以降） | `{ withHeadings: bool, content: string[][] }` |
+| `accordion` | アコーディオン（Ver.3.5 以降） | `{ title: string, content: string }` |
 
 ### 5.3.3 エディタ API
 
@@ -403,7 +497,8 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 ## 6.2 ダッシュボード (`?admin`)
 
 - **バージョン情報表示**: ヘッダーに `App::VERSION` を表示
-- ページ一覧テーブル: slug, format, status, updated_at, 操作（編集 / 削除）
+- **コンテンツタイプフィルタ**: ページ一覧の上部に「全件 / ページ / 投稿」の切替フィルタを設置（Ver.3.1 以降）
+- ページ一覧テーブル: slug, type, format, status, updated_at, 操作（編集 / 削除）
 - 新規ページ作成ボタン
 - サイト設定パネル: タイトル, 説明, キーワード, コピーライト, メニュー, テーマ, 言語
 - エクスポート / インポートボタン
@@ -417,10 +512,16 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 - 保存ボタン + 自動保存インジケーター
 - リビジョン一覧サイドバー（復元ボタン付き）
 - ダッシュボードへの戻りリンク
+- **投稿メタデータパネル**（`type: post` の場合のみ表示、Ver.3.1 以降）:
+  - 投稿日時 (`posted_at`): datetime-local 入力。未設定時は作成日時を使用。
+  - カテゴリ (`category`): テキスト入力。
+  - タグ (`tags`): テキスト入力（カンマ区切り複数入力 → 配列に変換）。
+  - 著者 (`author`): テキスト入力。
 
 ## 6.4 新規ページ作成 (`?admin=new`)
 
 - スラッグ入力フィールド
+- **コンテンツタイプ選択**: ページ（`page`） / 投稿（`post`）（Ver.3.1 以降）
 - format 選択（Blocks / Markdown）
 - 作成ボタン → 編集画面へ遷移
 
@@ -458,6 +559,13 @@ POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (J
 | 管理ツール専用 UI | 実装済 |
 | 静的サイト生成（差分ビルド対応） | 実装済 |
 | ページインデックスキャッシュ | 実装済 |
+| ブログ投稿タイプ（type: post）・投稿メタデータ | 計画（Ver.3.1） |
+| 管理UI コンテンツタイプフィルタ | 計画（Ver.3.1） |
+| テーブルブロック（table） | 計画（Ver.3.5） |
+| アコーディオンブロック（accordion） | 計画（Ver.3.5） |
+| メディア管理（アップロード・一覧・削除） | 計画（Ver.3.5） |
+| テーマ設定 UI / API | 計画（Ver.3.7） |
+| 全文検索インデックスファイル生成（search-index.json） | 計画（Ver.3.7） |
 
 ## 7.2 認証・セキュリティ
 
