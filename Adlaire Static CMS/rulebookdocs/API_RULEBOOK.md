@@ -1,7 +1,7 @@
 # Adlaire API RULEBOOK
 
 - 文書名: Adlaire API RULEBOOK
-- 文書バージョン: Ver.1.5
+- 文書バージョン: Ver.1.6
 - 作成日: 2026-04-02
 - 最終改訂: 2026-04-13
 - 対象製品: Adlaire Static CMS
@@ -46,16 +46,24 @@
 
 ## 2.2 ページデータ (`data/pages/{slug}.json`)
 
+> **Ver.3.1 以降**: コンテンツ形式を Portable Text（`body` フィールド）に統一。詳細スキーマは §2.9 を参照。
+> **Ver.3.5**: 旧 `content` / `format` / `blocks` フィールドを廃止（廃止ポリシー適用）。
+
 ```json
 {
-    "content": "テキスト（Markdown時）またはブロックJSON文字列",
-    "format": "blocks | markdown",
+    "body": [
+        {
+            "_type": "block",
+            "_key": "a3f8b2c1",
+            "style": "normal",
+            "markDefs": [],
+            "children": [
+                { "_type": "span", "_key": "b4e9c2d7", "text": "段落テキスト", "marks": [] }
+            ]
+        }
+    ],
     "status": "published | draft",
     "type": "page | post",
-    "blocks": [
-        { "type": "paragraph", "data": { "text": "..." } },
-        { "type": "heading", "data": { "text": "...", "level": 2 } }
-    ],
     "posted_at": "ISO 8601",
     "category": "カテゴリ名",
     "tags": ["tag1", "tag2"],
@@ -65,10 +73,9 @@
 }
 ```
 
-- **format**: `blocks`（ブロックエディタ JSON、デフォルト）/ `markdown`（Markdown テキスト）
+- **body**: Portable Text 配列（§2.9 スキーマ準拠）。
 - **status**: `published`（公開）/ `draft`（下書き、管理者のみ閲覧可）
 - **type**: `page`（通常ページ、デフォルト）/ `post`（ブログ投稿）。省略時は `"page"` として扱う（後方互換）。
-- **blocks**: format が `blocks` の場合のみ。ブロック配列。
 - **posted_at**: `type: post` のみ有効。投稿の公開日時（管理者が任意に設定可能、`created_at` とは独立）。省略時は `created_at` を代替使用。
 - **category**: `type: post` のみ有効。カテゴリ名（単一カテゴリ、空文字許可）。
 - **tags**: `type: post` のみ有効。タグ名の配列（空配列許可）。
@@ -186,6 +193,111 @@
 
 ---
 
+## 2.9 Portable Text スキーマ仕様（Ver.3.1 以降）
+
+Adlaire は [Sanity Portable Text](https://github.com/portabletext/portabletext) 仕様に準拠した構造化 JSON 形式を採用する。
+
+> **廃止スケジュール**: 旧ブロック JSON（`format: "blocks"`）および Markdown（`format: "markdown"`）形式は **Ver.3.5 で廃止**。Ver.3.1 起動時に旧形式データを Portable Text へ自動マイグレーション（一度のみ実施）。以降、旧形式は認識しない。
+
+### コンテンツ配列型
+
+`body` フィールドは以下の型の配列:
+
+`Array<PTBlock | PTImage | PTCode | PTDelimiter | PTTable | PTAccordion>`
+
+### PTBlock（テキストブロック）
+
+```json
+{
+  "_type": "block",
+  "_key": "a3f8b2c1",
+  "style": "normal",
+  "markDefs": [],
+  "children": [
+    { "_type": "span", "_key": "b4e9c2d7", "text": "通常テキスト", "marks": [] },
+    { "_type": "span", "_key": "c5fa3e12", "text": "太字テキスト", "marks": ["strong"] }
+  ]
+}
+```
+
+| フィールド | 型 | 説明 |
+|----------|-----|------|
+| `_type` | `"block"` | 固定値 |
+| `_key` | string | 8 文字ランダム 16 進数（配列内一意） |
+| `style` | string | `"normal"` / `"h1"` / `"h2"` / `"h3"` / `"blockquote"` |
+| `markDefs` | PTMarkDef[] | リンク等の参照定義（空配列可） |
+| `children` | PTSpan[] | インラインテキスト配列（1 つ以上） |
+| `listItem` | string | ※省略可。`"bullet"` / `"number"` |
+| `level` | number | ※省略可。リストネストレベル（Adlaire は `1` 固定） |
+
+### PTSpan（インラインテキスト）
+
+| フィールド | 型 | 説明 |
+|----------|-----|------|
+| `_type` | `"span"` | 固定値 |
+| `_key` | string | 8 文字ランダム 16 進数 |
+| `text` | string | テキスト文字列 |
+| `marks` | string[] | 適用マーク種別キーまたは `markDefs._key` |
+
+### 組み込みマーク種別
+
+| mark | HTML 出力 | 管理 UI |
+|------|---------|--------|
+| `"strong"` | `<strong>` | インラインツールバー B |
+| `"em"` | `<em>` | インラインツールバー I |
+| `"code"` | `<code>` | インラインツールバー（Ver.4.5 以降） |
+
+### PTMarkDef（リンク定義）
+
+| フィールド | 型 | 説明 |
+|----------|-----|------|
+| `_key` | string | 8 文字ランダム 16 進数 |
+| `_type` | `"link"` | 固定値 |
+| `href` | string | リンク URL |
+
+### カスタムオブジェクト型
+
+| `_type` | 追加フィールド | 説明 |
+|---------|-------------|------|
+| `"image"` | `url: string`, `caption?: string` | 画像 |
+| `"code"` | `code: string` | コードブロック |
+| `"delimiter"` | —（`_key` のみ） | 水平線 |
+| `"table"` | `withHeadings: boolean`, `content: string[][]` | テーブル（Ver.3.5 以降） |
+| `"accordion"` | `title: string`, `content: string` | アコーディオン（Ver.3.5 以降） |
+
+すべてのカスタム型は `_key` フィールド（8 文字ランダム 16 進数）を持つ。
+
+### _key 生成規則
+
+`crypto.getRandomValues()` を用いた 8 文字ランダム 16 進数文字列（例: `"a3f8b2c1"`）。同一コンテンツ配列内での一意性を保証する。
+
+### マイグレーション仕様（Ver.3.1 起動時・廃止ポリシー準拠）
+
+Ver.3.1 の初回アクセス時（`migrate()` 実行時）、全ページデータを走査し旧形式を検出した場合に変換する。
+
+| 旧フィールド | 変換内容 |
+|------------|---------|
+| `format: "blocks"` + `blocks[]` | 旧ブロック配列を PT 形式に変換し `body` に格納 |
+| `format: "markdown"` + `content` | Markdown 文字列を PT 形式に変換し `body` に格納 |
+| `content`, `format`, `blocks` | 変換後に削除 |
+
+#### 旧ブロック型 → PT 変換規則
+
+| 旧 `type` | PT 変換 |
+|----------|---------|
+| `paragraph` | `PTBlock(style: "normal")` + `text` をインライン Markdown パースして `children` 生成 |
+| `heading` | `PTBlock(style: "h{level}")` + `text` を `children` 生成 |
+| `list` (unordered) | `items` を展開し各 `PTBlock(listItem: "bullet", level: 1)` に変換 |
+| `list` (ordered) | `items` を展開し各 `PTBlock(listItem: "number", level: 1)` に変換 |
+| `quote` | `PTBlock(style: "blockquote")` + `text` を `children` 生成 |
+| `code` | `{ _type: "code", _key, code }` |
+| `delimiter` | `{ _type: "delimiter", _key }` |
+| `image` | `{ _type: "image", _key, url, caption? }` |
+
+インライン Markdown パース（`**bold**` → `"strong"` マーク、`*italic*` → `"em"` マーク、`` `code` `` → `"code"` マーク、`[text](url)` → `markDefs` + `_key` 参照）を実施する。認識外の記法は plain text として処理する。
+
+---
+
 # 3. PHP API 仕様
 
 ## 3.1 FileStorage (`Core/core.php`)
@@ -195,12 +307,12 @@
 | `__construct(basePath)` | ストレージパス初期化 |
 | `ensureDirectories()` | ディレクトリ作成保証 |
 | `validateSlug(slug): bool` | スラッグ安全性検証（static） |
-| `migrate()` | 旧形式マイグレーション（blocks 形式に変換） |
+| `migrate()` | 旧形式マイグレーション（旧 blocks/markdown → Portable Text 自動変換。Ver.3.1 起動時に全ページ走査・一度のみ実施） |
 | `readConfig(): array` | 設定読み込み |
 | `writeConfig(config): bool` | 排他ロック付き設定書き込み |
 | `writeConfigValue(key, value): bool` | 単一設定値書き込み |
 | `readPageData(slug): array\|false` | ページデータ全体読み込み |
-| `writePage(slug, content, format, blocks?, status?): bool` | ページ書き込み（リビジョン自動保存） |
+| `writePage(slug, body, status?, type?, meta?): bool` | ページ書き込み（Portable Text `body` 配列を受け取り保存。リビジョン自動保存） |
 | `deletePage(slug): bool` | ページ削除（バックアップ + リビジョン削除） |
 | `listPages(): array` | 全ページ一覧（キャッシュ対応） |
 | `listPublishedPages(): array` | 公開ページのみ一覧（type: page に限定） |
@@ -242,8 +354,9 @@
 
 | 関数 | 説明 |
 |------|------|
-| `renderBlocksToHtml(blocks): string` | ブロック配列→HTML（サーバーサイド、XSS エスケープ付き） |
-| `renderMarkdownToHtml(md): string` | Markdown→HTML（サーバーサイド） |
+| `renderPortableTextToHtml(body): string` | Portable Text 配列→HTML（サーバーサイド、XSS エスケープ付き、Ver.3.1 以降） |
+| `renderMarkdownToHtml(md): string` | Markdown→HTML（サーバーサイド、**Ver.3.5 廃止予定**） |
+| `renderBlocksToHtml(blocks): string` | 旧ブロック配列→HTML（**Ver.3.5 廃止予定**、マイグレーション補助用） |
 
 ## 3.5 API 関数 (`Core/api.php`)
 
@@ -281,11 +394,11 @@
 |---------|-----|-----------|
 | `GET` | `?api=pages` | `{ pages: { slug: { format, status, type, updated_at } } }` |
 | `GET` | `?api=pages&type=post` | type フィルタ: `"page"` または `"post"` でフィルタリング |
-| `GET` | `?api=pages&slug=xxx` | `{ page, data: { content, format, status, type, blocks?, posted_at?, category?, tags?, author?, ... } }` |
+| `GET` | `?api=pages&slug=xxx` | `{ page, data: { body, status, type, posted_at?, category?, tags?, author?, ... } }` |
 | `POST` | `?api=pages` | `{ status: "ok", slug }` |
 | `DELETE` | `?api=pages&slug=xxx` | `{ status: "ok", deleted }` |
 
-POST パラメータ: `slug`, `content`, `format` (blocks/markdown), `blocks` (JSON), `status` (draft/published), `type` (page/post), `posted_at` (ISO 8601、type=post のみ), `category` (type=post のみ), `tags` (JSON 配列文字列、type=post のみ), `author` (type=post のみ), `csrf`
+POST パラメータ: `slug`, `body` (Portable Text JSON), `status` (draft/published), `type` (page/post), `posted_at` (ISO 8601、type=post のみ), `category` (type=post のみ), `tags` (JSON 配列文字列、type=post のみ), `author` (type=post のみ), `csrf`
 
 ## 4.2 リビジョン API
 
@@ -410,7 +523,7 @@ POST パラメータ: `theme`（テーマ名）、`settings`（JSON オブジェ
 | `editor.ts` | ブロックエディタ本体（Editor クラス + ブロックツール + インラインツールバー） |
 | `editInplace.ts` | インプレース編集統合（ブロックエディタ起動、format 切替、保存インジケーター） |
 | `i18n.ts` | 多言語化（data/lang/*.json 非同期読み込み、i18n.ready Promise） |
-| `markdown.ts` | Markdown→HTML 変換（17構文、コードブロックプレースホルダー方式） |
+| `markdown.ts` | Markdown→HTML 変換（17構文、コードブロックプレースホルダー方式）。**Ver.3.5 廃止予定**（コンテンツ形式 Portable Text 一本化に伴い削除） |
 | `api.ts` | REST API クライアント（型付きメソッド、res.ok チェック優先） |
 
 ## 5.2 markdown.ts — 対応構文
@@ -438,19 +551,28 @@ POST パラメータ: `theme`（テーマ名）、`settings`（JSON オブジェ
 - **プラグイン型**: BlockToolFactory インターフェースでブロック追加可能
 - **外部依存なし**: 純粋 TypeScript のみ
 
-### 5.3.2 ブロック型
+### 5.3.2 Portable Text ブロック型（Ver.3.1 以降）
 
-| type | 説明 | data |
-|------|------|------|
-| `paragraph` | テキスト段落 | `{ text: string }` |
-| `heading` | 見出し（h1-h3） | `{ text: string, level: 1\|2\|3 }` |
-| `list` | リスト | `{ style: "unordered"\|"ordered", items: string[] }` |
-| `code` | コードブロック | `{ code: string }` |
-| `quote` | 引用 | `{ text: string }` |
-| `delimiter` | 水平線 | `{}` |
-| `image` | 画像（URL入力 + キャプション） | `{ url: string, caption?: string }` |
-| `table` | テーブル（Ver.3.5 以降） | `{ withHeadings: bool, content: string[][] }` |
-| `accordion` | アコーディオン（Ver.3.5 以降） | `{ title: string, content: string }` |
+エディタは Portable Text 形式（§2.9 スキーマ準拠）で保存する。`EditorData` は `Array<PTBlock | PTImage | PTCode | PTDelimiter | PTTable | PTAccordion>` 型。
+
+#### テキストブロック（PTBlock）
+
+| `style` | 説明 | `listItem` |
+|--------|------|-----------|
+| `"normal"` | テキスト段落 | — |
+| `"h1"` / `"h2"` / `"h3"` | 見出し | — |
+| `"blockquote"` | 引用 | — |
+| `"normal"` | リスト項目 | `"bullet"` / `"number"` |
+
+#### カスタムオブジェクト型
+
+| `_type` | 説明 | フィールド |
+|---------|------|-----------|
+| `"image"` | 画像 | `url: string`, `caption?: string` |
+| `"code"` | コードブロック | `code: string` |
+| `"delimiter"` | 水平線 | —（`_key` のみ） |
+| `"table"` | テーブル（Ver.3.5 以降） | `withHeadings: boolean`, `content: string[][]` |
+| `"accordion"` | アコーディオン（Ver.3.5 以降） | `title: string`, `content: string` |
 
 ### 5.3.3 エディタ API
 
@@ -546,9 +668,12 @@ POST パラメータ: `theme`（テーマ名）、`settings`（JSON オブジェ
 
 | 機能 | 状態 |
 |------|:----:|
-| ブロックエディタによるページ編集（デフォルト） | 実装済 |
-| Markdown ページ対応 | 実装済 |
-| format 切替（Blocks ↔ Markdown） | 実装済 |
+| ブロックエディタによるページ編集 | 実装済 |
+| Markdown ページ対応 | **Ver.3.5 廃止予定** |
+| format 切替（Blocks ↔ Markdown） | **Ver.3.5 廃止予定** |
+| Portable Text コンテンツ形式 | 計画（Ver.3.1） |
+| 旧形式（blocks/markdown）→ Portable Text 自動マイグレーション | 計画（Ver.3.1） |
+| 旧形式コード全廃（廃止ポリシー適用） | 計画（Ver.3.5） |
 | ページ表示・作成・削除 | 実装済 |
 | 下書き / 公開ワークフロー | 実装済 |
 | リビジョン管理（最大30世代、復元） | 実装済 |
