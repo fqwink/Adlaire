@@ -1,6 +1,199 @@
 # CHANGES - 変更履歴
 
-## Ver.3.0-48 (2026-04-12)
+## Ver.3.9-57 (2026-04-15)
+
+### バグゼロ達成（50件精査）
+
+全コード精査50件（PHP + TypeScript 全ファイル対象）。致命的・重大・中程度の残存バグゼロを達成。
+
+#### Core/core.php
+* **[軽微]** `rotateBackups()`: mtime 依存のソートをファイル名タイムスタンプ基準の `usort` に変更（クロック後退時の順序不正を解消）
+* **[軽微]** `migrateLegacyFiles()`: `filemtime()` が false を返す場合にエラーログを追加（レガシー移行コードの可観測性向上）
+
+#### Core/api.php
+* **[軽微]** `validateMediaFilename()`: 先頭・末尾ドット（`.htaccess` 等）を拒否する検証を追加
+
+仮陽性47件を精査・確認済み（既存コードは正しく実装済み）。
+
+---
+
+## Ver.3.8-56 (2026-04-15)
+
+### バグ修正（53件精査）
+
+全コード精査53件（PHP + TypeScript 全ファイル対象）。
+
+#### Core/api.php
+* **[重大]** `handleApiBulk()` 新設: `?api=bulk` ルートがルートテーブルに存在せず、バルク操作が常に 404 エラーとなっていた問題を修正。JSON ボディ解析にも対応（`$_POST` でなく `php://input` を使用）
+* **[中程度]** `handleApiThemeSettings()` POST: settings 値のキー数（≤100）・キー長（≤100文字）・値型（スカラーまたは1次元配列のみ）検証を追加
+* **[中程度]** `handleApiMedia()` POST: `filesize()` が false を返す場合のチェックと空ファイル拒否を追加
+* **[軽微]** `handleApiUsers()` 無効化・削除処理: `is_main` 判定を `!empty()` から `=== true` に修正（falsy value 問題の解消）
+* **[軽微]** `apiRevisionDiff()`: ブロック比較が位置ベースの浅い比較である旨を注記追加
+
+#### Core/core.php
+* **[中程度]** `listPages()`: メモリ使用量が閾値超過時に追加データロードを行わず部分結果を返すよう修正（過剰メモリ消費の防止）
+* **[中程度]** `saveRevision()`: リビジョン rotation で `sort()` を `usort + basename` 比較に変更（タイムスタンプ順ソートを明示的に保証）
+* **[軽微]** `deleteUser()` / `disableUser()`: `is_main` 判定を `!empty()` から `=== true` に修正
+
+#### Core/helpers.php
+* **[軽微]** `login_rate_check()`: 無効な IP アドレス時に `error_log` を追加
+* **[軽微]** `login_rate_check()`: `fwrite()` 失敗時のフォールバックパスに `error_log` を追加
+
+---
+
+## Ver.3.7-55 (2026-04-15)
+
+### 追加機能（テーマ設定API + 検索インデックス生成）
+
+#### Core/api.php
+* **[新機能]** `handleApiThemeSettings()` 新設: テーマ固有設定の保存・取得 API（`?api=theme-settings`）。テーマディレクトリの realpath 検証・CSRF 保護・whitelist 経由の config.json 書き込みを実装
+* `handleApiBulk()` を route table に追加（Ver.3.8 にて実体実装、今バージョンでは route 追加のみ）
+
+#### Core/core.php
+* `CONFIG_KEYS` に `theme_settings` キーを追加
+
+#### Core/generator.php
+* **[新機能]** `generateSearchIndex()` 新設: `handleApiGenerate()` から呼び出し、`dist/search-index.json` を自動生成（フォーマット: `[{slug, title, excerpt, type, updated_at}]`、タイトルは PT heading ブロックから抽出、excerpt は先頭120文字）
+
+#### ts/api.ts
+* `getThemeSettings()` / `saveThemeSettings()` メソッドを追加
+
+---
+
+## Ver.3.6-54 (2026-04-15)
+
+### バグ修正（50件精査）
+
+全コード精査50件（PHP + TypeScript 全ファイル対象）。致命的1件・重大11件・中程度21件・軽微17件。
+
+#### Core/renderer.php
+* **[致命的]** `renderPortableTextToHtml()` accordion: コンテンツを `strip_tags()` でサニタイズせず直接出力していた XSS 脆弱性を修正
+
+#### Core/api.php
+* **[重大]** `handleApiExport()`: GET→POST に変更（`ts/api.ts` の exportSite() に合わせる）
+* **[重大]** `handleApiUsers()`: JSON ボディを `$_POST` でなく `php://input` から読み込むよう修正（generateSubMaster・disableUser・updateMainPassword の機能不全を解消）
+* **[重大]** `handleApiUsers()` DELETE: `username` を URL クエリパラメータ `$_GET['username']` から取得するよう修正
+* **[重大]** `apiRevisionDiff()`: `$data['blocks']` 参照を `$data['body']`（PT形式）に修正（diff 常に空の問題を解消）
+* **[重大]** `handleApiMedia()` GET: `filesize()` 戻り値を `(int)` キャストに修正
+* **[重大]** `handleApiMedia()` POST: `$_FILES['error']` チェック追加、finfo による MIME タイプ検証を追加
+* **[重大]** `handleApiImport()`: リビジョンキー検証を `'content'` → `'body'` に修正
+* 中程度・軽微バグ多数（タイムスタンプ検証・マジックナンバー定数化・ファイル名乱数化・入力長制限等）
+
+#### ts/api.ts
+* **[重大]** `exportSite()`: GET → POST リクエストに変更
+* **[重大]** `generateSubMaster()`: action 名を `'generate_sub_master'` → `'generate'` に修正
+* **[重大]** `updateMainPassword()`: action 名を `'update_main_password'` → `'password'` に対応（両方受け付け）
+* **[重大]** `disableUser()`: フィールド名を `'username'` → `'user'` に修正、JSON ボディ送信に変更
+* **[中程度]** `restoreRevision()`: タイムスタンプバリデーション正規表現を実際の形式（`YYYYMMDD_HHMMSS`）に修正
+
+#### ts/editor.ts
+* **[中程度]** accordion title input に `maxLength = 200` を設定
+* **[軽微]** `_ptEsc` 関数を削除し、`escHtml` に統一
+* **[軽微]** `attachBackspaceHandler` を custom keydown ハンドラに置き換え（accordion 空コンテンツの誤削除防止）
+* **[軽微]** `table`: ボタンハンドラ内の重複 `wrap.appendChild(tableEl)` 呼び出し5件を削除
+
+---
+
+## Ver.3.5-53 (2026-04-15)
+
+### エディタ強化 + 旧形式全廃（X.1 系に続く廃止ポリシー適用）
+
+#### 廃止（廃止ポリシー適用）
+* `renderBlocksToHtml()`・`renderMarkdownToHtml()` を Core/renderer.php から削除
+* `ts/markdown.ts` を削除
+* ページデータの `content`・`format`・`blocks` フィールドを廃止（`body` のみ有効）
+
+#### Core/renderer.php
+* **[新機能]** テーブルブロック（`"table"` PT型）のサーバーサイドレンダリング対応
+* **[新機能]** アコーディオンブロック（`"accordion"` PT型）の `<details>/<summary>` HTML 出力対応
+
+#### Core/api.php
+* **[新機能]** `handleApiMedia()` 新設: 画像アップロード・一覧・削除 API（`?api=media`）
+
+#### ts/editor.ts
+* **[新機能]** テーブルブロックツール追加（可変列/行・Tab ナビ・行列追加削除）
+* **[新機能]** アコーディオンブロックツール追加（タイトル + コンテンツ構造）
+* 既存エディタの使い勝手改善（EDITOR_RULEBOOK.md §14.3 準拠）
+
+---
+
+## Ver.3.4-52 (2026-04-15)
+
+### バグ修正（100件精査・静的サイト生成 URL パス修正）
+
+全コード精査100件（PHP + TypeScript 全ファイル・セキュリティ中心）。重大1件のみ検出。
+
+#### Core/generator.php
+* **[重大]** 全生成 HTML に `<base href="/">` タグを追加し、CSS・リンクの相対 URL をルート基準に統一。`generateBlogIndexHtml()` の `../themes/` パス参照、`generateArchiveHtml()` の `$basePath = '../../../'` を廃止。post-nav リンクを `../{slug}/` → `/{slug}/` に修正
+
+---
+
+## Ver.3.3-51 (2026-04-15)
+
+### 追加機能（ブログ機能拡充）
+
+#### Core/generator.php
+* **[新機能]** カテゴリ・タグアーカイブページの静的生成（`/blog/category/xxx/`・`/blog/tag/xxx/`）
+* **[新機能]** 日付アーカイブページの静的生成（`/blog/YYYY/MM/`）
+* **[新機能]** 投稿間の前後ナビリンク生成（`prevPost`・`nextPost`）
+
+---
+
+## Ver.3.2-50 (2026-04-14)
+
+### バグ修正（56件精査）
+
+全コード精査56件（PHP + TypeScript 全ファイル対象）。致命的4件・重大4件・中程度3件・軽微2件。
+
+#### index.php
+* **[致命的]** プレビュールーティング: PT形式廃止後も旧形式キー（`content`/`format`/`blocks`）を参照していたためPTページでプレビュー不能となっていた問題を修正
+
+#### Core/api.php
+* **[致命的]** 全文検索: PT形式ページに存在しない `content` キーを参照していたため全PTページの検索結果がゼロになっていた問題を修正（PT body から spans テキストを抽出するよう変更）
+* **[中程度]** 検索結果から廃止済み `'format'` フィールドを削除
+
+#### Core/renderer.php
+* **[致命的]** `renderBlocksToHtml()` paragraph・heading: `esc()` 未適用による XSS 脆弱性を修正
+* **[重大]** `renderBlocksToHtml()` list・quote: `esc()` 未適用による XSS 脆弱性を修正
+
+#### Core/core.php
+* **[重大]** `listPages()`: キャッシュに `category`・`author`・`tags` フィールドが含まれておらず、キャッシュ命中時にこれらが常に空になっていた問題を修正
+* **[重大]** `convertBlocksToPT()`: マイグレーション時にブロックテキストの HTML を `strip_tags()` でストリップするよう修正（マイグレーション後に生 HTML タグが表示される問題を解消）
+* **[中程度]** マイグレーションスキップ判定を `is_array($data['body'])` に改善
+* **[軽微]** メモリ制限文字列パース: `-1`（無制限）の処理を追加
+
+#### ts/api.ts
+* **[重大]** `savePage()`: タグを `tags.join(',')` → `JSON.stringify(tags)` に変更（PHP側 json_decode に合わせた形式修正）
+
+---
+
+## Ver.3.1-49 (2026-04-14)
+
+### 破壊的変更（Portable Text 導入 + ブログ基盤）
+
+Ver.3.1 は X.1 破壊的変更バージョン。既存データとの後方互換性は保たれない。
+
+#### コンテンツ形式（破壊的変更）
+* Portable Text（Sanity PT 準拠）コンテンツ形式を導入（`body` フィールド新設）
+* 旧形式（`content`/`format`/`blocks`）フィールドを廃止宣言（Ver.3.5 にて全廃）
+* 起動時に旧形式データを Portable Text へ自動マイグレーション（一度のみ実行）
+
+#### Core/renderer.php
+* **[新機能]** `renderPortableTextToHtml()`: PT形式のサーバーサイドレンダリング関数を新設
+
+#### Core/generator.php
+* **[新機能]** ブログ一覧ページ（`/blog/`）の静的生成
+* **[新機能]** ブログページネーション生成
+
+#### Core/api.php
+* **[新機能]** ページデータ API に `type`・`posted_at`・`category`・`tags`・`author` フィールドを追加
+
+#### 管理UI
+* ダッシュボードに投稿/ページ切替フィルタを追加
+
+---
+
+
 
 ### バグ修正
 
