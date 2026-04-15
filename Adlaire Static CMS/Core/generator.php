@@ -376,12 +376,12 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
         if ($prevPost !== null) {
             $prevSlug = esc((string) ($prevPost['slug'] ?? ''));
             $prevTitle = esc((string) ($prevPost['title'] ?? ''));
-            $postNavHtml .= "<a class=\"post-nav__prev\" href=\"../{$prevSlug}/\">&#8592; {$prevTitle}</a>";
+            $postNavHtml .= "<a class=\"post-nav__prev\" href=\"{$prevSlug}/\">&#8592; {$prevTitle}</a>";
         }
         if ($nextPost !== null) {
             $nextSlug = esc((string) ($nextPost['slug'] ?? ''));
             $nextTitle = esc((string) ($nextPost['title'] ?? ''));
-            $postNavHtml .= "<a class=\"post-nav__next\" href=\"../{$nextSlug}/\">{$nextTitle} &#8594;</a>";
+            $postNavHtml .= "<a class=\"post-nav__next\" href=\"{$nextSlug}/\">{$nextTitle} &#8594;</a>";
         }
         $postNavHtml .= '</nav>';
     }
@@ -391,6 +391,7 @@ function generatePageHtml(App $app, string $slug, string $contentHtml, string $t
     <html lang="{$lang}">
     <head>
         <meta charset="utf-8">
+        <base href="/">
         <title>{$title} - {$pageTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
@@ -450,7 +451,7 @@ function generateBlogIndexHtml(App $app, array $posts, string $theme): string
         }
         $itemSlug = App::getSlug($item);
         $safeItemSlug = esc($itemSlug);
-        $menuHtml .= "<li><a href=\"../{$safeItemSlug}/\">" . esc($item) . "</a></li>";
+        $menuHtml .= "<li><a href=\"{$safeItemSlug}/\">" . esc($item) . "</a></li>";
     }
     $menuHtml .= '</ul>';
 
@@ -476,7 +477,7 @@ function generateBlogIndexHtml(App $app, array $posts, string $theme): string
         $category = is_string($data['category'] ?? null) ? esc($data['category']) : '';
         $author = is_string($data['author'] ?? null) ? esc($data['author']) : '';
         $listHtml .= "<li class=\"blog-list__item\">";
-        $listHtml .= "<a href=\"../{$safeSlug}/\" class=\"blog-list__title\">{$postTitle}</a>";
+        $listHtml .= "<a href=\"{$safeSlug}/\" class=\"blog-list__title\">{$postTitle}</a>";
         $listHtml .= "<span class=\"blog-list__meta\">";
         if ($dateStr !== '') {
             $listHtml .= "<time datetime=\"{$dateStr}\">{$dateStr}</time>";
@@ -499,16 +500,17 @@ function generateBlogIndexHtml(App $app, array $posts, string $theme): string
     <html lang="{$lang}">
     <head>
         <meta charset="utf-8">
+        <base href="/">
         <title>{$title} - {$blogTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="../themes/{$safeTheme}/style.css">
+        <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
         <meta name="generator" content="Adlaire Static CMS">
     </head>
     <body>
         <nav id="nav">
-            <h1><a href="../">{$title}</a></h1>
+            <h1><a href="./">{$title}</a></h1>
             {$menuHtml}
             <div class="clear"></div>
         </nav>
@@ -533,9 +535,6 @@ function generateBlogIndexHtml(App $app, array $posts, string $theme): string
  */
 function generateArchiveHtml(App $app, array $posts, string $theme, string $archiveType, string $archiveLabel): string
 {
-    // Archive pages live 4 levels deep (dist/blog/{type}/{name}/) → 3 levels up to root
-    $basePath = '../../../';
-
     $c = $app->config;
     $title = esc((string) ($c['title'] ?? ''));
     $desc = esc((string) ($c['description'] ?? ''));
@@ -558,7 +557,7 @@ function generateArchiveHtml(App $app, array $posts, string $theme, string $arch
         }
         $itemSlug = App::getSlug($item);
         $safeItemSlug = esc($itemSlug);
-        $menuHtml .= "<li><a href=\"{$basePath}{$safeItemSlug}/\">" . esc($item) . "</a></li>";
+        $menuHtml .= "<li><a href=\"{$safeItemSlug}/\">" . esc($item) . "</a></li>";
     }
     $menuHtml .= '</ul>';
 
@@ -583,7 +582,7 @@ function generateArchiveHtml(App $app, array $posts, string $theme, string $arch
         $dateStr = (is_string($postedAt) && strlen($postedAt) >= 10) ? esc(substr($postedAt, 0, 10)) : '';
         $category = is_string($data['category'] ?? null) ? esc($data['category']) : '';
         $listHtml .= "<li class=\"blog-list__item\">";
-        $listHtml .= "<a href=\"{$basePath}{$safeSlug}/\" class=\"blog-list__title\">{$postTitle}</a>";
+        $listHtml .= "<a href=\"{$safeSlug}/\" class=\"blog-list__title\">{$postTitle}</a>";
         $listHtml .= "<span class=\"blog-list__meta\">";
         if ($dateStr !== '') {
             $listHtml .= "<time datetime=\"{$dateStr}\">{$dateStr}</time>";
@@ -601,22 +600,23 @@ function generateArchiveHtml(App $app, array $posts, string $theme, string $arch
     <html lang="{$lang}">
     <head>
         <meta charset="utf-8">
+        <base href="/">
         <title>{$title} - {$blogTitle} - {$safeArchiveLabel}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="{$basePath}themes/{$safeTheme}/style.css">
+        <link rel="stylesheet" href="themes/{$safeTheme}/style.css">
         <meta name="description" content="{$desc}">
         <meta name="keywords" content="{$keywords}">
         <meta name="generator" content="Adlaire Static CMS">
     </head>
     <body>
         <nav id="nav">
-            <h1><a href="{$basePath}">{$title}</a></h1>
+            <h1><a href="./">{$title}</a></h1>
             {$menuHtml}
             <div class="clear"></div>
         </nav>
         <div id="wrapper" class="border">
             <div class="pad">
-                <h1><a href="{$basePath}blog/">{$blogTitle}</a></h1>
+                <h1><a href="blog/">{$blogTitle}</a></h1>
                 <h2>{$safeArchiveLabel}</h2>
                 {$listHtml}
             </div>
