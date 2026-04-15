@@ -45,6 +45,8 @@ final class FileStorage
         'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
         'language', 'page_order', 'sidebar_blocks',
+        // Ver.3.7: テーマ固有設定
+        'theme_settings',
     ];
 
     /** Maximum number of config backup generations to retain */

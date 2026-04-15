@@ -177,8 +177,10 @@ function handleApi(): void
         'users'     => handleApiUsers($storage, $method),
         'license'   => handleApiLicense($method),
         // Ver.3.5: メディア管理API（API_RULEBOOK.md §4.9）
-        'media'     => handleApiMedia($method),
-        default     => apiError(404, 'Unknown endpoint'),
+        'media'          => handleApiMedia($method),
+        // Ver.3.7: テーマ設定API（API_RULEBOOK.md §4.10）
+        'theme-settings' => handleApiThemeSettings($storage, $method),
+        default          => apiError(404, 'Unknown endpoint'),
     };
     exit;
 }
@@ -796,7 +798,8 @@ function handleApiImport(FileStorage $storage): void
     $imported = ['config' => false, 'pages' => 0];
 
     // Import config (whitelist keys only)
-    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language', 'sidebar_blocks', 'page_order'];
+    // Ver.3.7: theme_settings を追加
+    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language', 'sidebar_blocks', 'page_order', 'theme_settings'];
     if (isset($data['config']) && is_array($data['config'])) {
         $filteredConfig = array_intersect_key($data['config'], array_flip($allowedConfigKeys));
         if ($filteredConfig !== []) {
@@ -1494,6 +1497,79 @@ function handleApiMedia(string $method): void
         }
 
         apiResponse(['status' => 'ok', 'deleted' => $file]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
+}
+
+// --- Theme Settings API (Ver.3.7: API_RULEBOOK.md §4.10) ---
+
+function handleApiThemeSettings(FileStorage $storage, string $method): void
+{
+    // Validate theme name helper
+    $validateTheme = static function (string $name): string|false {
+        if ($name === '') {
+            return false;
+        }
+        $themesBase = dirname(__DIR__) . '/themes';
+        $themePath = $themesBase . '/' . $name;
+        if (!is_dir($themePath) || is_link($themePath)) {
+            return false;
+        }
+        // Path traversal safety: realpath must be inside themes/
+        $realBase = realpath($themesBase);
+        $realTheme = realpath($themePath);
+        if ($realBase === false || $realTheme === false || !str_starts_with($realTheme, $realBase . DIRECTORY_SEPARATOR)) {
+            return false;
+        }
+        return $name;
+    };
+
+    if ($method === 'GET') {
+        $themeRaw = is_string($_GET['theme'] ?? null) ? basename(trim($_GET['theme'] ?? '')) : '';
+        $theme = $validateTheme($themeRaw);
+        if ($theme === false) {
+            apiError(404, 'Theme not found');
+            return;
+        }
+        $config = $storage->readConfig();
+        $themeSettings = is_array($config['theme_settings'] ?? null) ? $config['theme_settings'] : [];
+        $settings = is_array($themeSettings[$theme] ?? null) ? $themeSettings[$theme] : [];
+        apiResponse(['theme' => $theme, 'settings' => $settings], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $themeRaw = is_string($_POST['theme'] ?? null) ? basename(trim($_POST['theme'] ?? '')) : '';
+        $theme = $validateTheme($themeRaw);
+        if ($theme === false) {
+            apiError(404, 'Theme not found');
+            return;
+        }
+        $settingsJson = is_string($_POST['settings'] ?? null) ? ($_POST['settings'] ?? '') : '';
+        if ($settingsJson === '') {
+            apiError(400, 'settings parameter required');
+            return;
+        }
+        $settings = json_decode($settingsJson, true, 32);
+        if (!is_array($settings) || json_last_error() !== JSON_ERROR_NONE) {
+            apiError(400, 'Invalid settings JSON');
+            return;
+        }
+        // Read current theme_settings, merge for this theme, write back
+        $config = $storage->readConfig();
+        $themeSettings = is_array($config['theme_settings'] ?? null) ? $config['theme_settings'] : [];
+        $themeSettings[$theme] = $settings;
+        if (!$storage->writeConfig(['theme_settings' => $themeSettings])) {
+            apiError(500, 'Failed to save theme settings');
+            return;
+        }
+        apiResponse(['status' => 'ok', 'theme' => $theme]);
         return;
     }
 

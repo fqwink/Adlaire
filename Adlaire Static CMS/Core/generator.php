@@ -305,6 +305,9 @@ function handleApiGenerate(FileStorage $storage): void
     }
     @chmod($distDir . '/sitemap.xml', GENERATOR_FILE_PERMISSION);
 
+    // Ver.3.7: 全文検索インデックス生成（GENERATOR_RULEBOOK.md §11）
+    generateSearchIndex($storage, $distDir);
+
     // Save build state for diff builds
     $buildStateJson = json_encode([
         'built_at' => date('c'),
@@ -330,6 +333,74 @@ function handleApiGenerate(FileStorage $storage): void
         'build_time_ms' => $buildTimeMs,
         'details' => $details,
     ]);
+}
+
+/**
+ * Generate full-text search index file dist/search-index.json (Ver.3.7).
+ * @see GENERATOR_RULEBOOK.md §11
+ */
+function generateSearchIndex(FileStorage $storage, string $distDir): void
+{
+    $pages = $storage->listPublishedPages();
+    $index = [];
+    foreach ($pages as $slug => $data) {
+        if (!is_string($slug)) {
+            continue;
+        }
+        $body = is_array($data['body'] ?? null) ? $data['body'] : [];
+        $type = is_string($data['type'] ?? null) ? ($data['type'] ?? 'page') : 'page';
+        $updatedAt = is_string($data['updated_at'] ?? null) ? ($data['updated_at'] ?? '') : '';
+
+        // §11.5: タイトル抽出 — 最初の heading (h1/h2/h3) ブロックのテキストを使用
+        $title = '';
+        foreach ($body as $node) {
+            if (!is_array($node) || ($node['_type'] ?? '') !== 'block') {
+                continue;
+            }
+            $style = (string) ($node['style'] ?? '');
+            if (!in_array($style, ['h1', 'h2', 'h3'], true)) {
+                continue;
+            }
+            $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+            $parts = [];
+            foreach ($children as $child) {
+                if (is_array($child) && ($child['_type'] ?? '') === 'span') {
+                    $parts[] = (string) ($child['text'] ?? '');
+                }
+            }
+            $title = implode('', $parts);
+            if ($title !== '') {
+                break;
+            }
+        }
+        // §11.5: heading なしの場合は slug をタイトルとする
+        if ($title === '') {
+            $title = $slug;
+        }
+
+        // §11.4: excerpt — 先頭 120文字、HTML タグ除去済み
+        $plainText = extractTextFromPT($body);
+        $excerpt = mb_substr($plainText, 0, 120);
+
+        $index[] = [
+            'slug'       => $slug,
+            'title'      => $title,
+            'excerpt'    => $excerpt,
+            'type'       => $type,
+            'updated_at' => $updatedAt,
+        ];
+    }
+
+    $json = json_encode($index, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if ($json === false) {
+        error_log('Adlaire: Failed to encode search index JSON: ' . json_last_error_msg());
+        return;
+    }
+    if (file_put_contents($distDir . '/search-index.json', $json) === false) {
+        error_log('Adlaire: Failed to write search-index.json');
+        return;
+    }
+    @chmod($distDir . '/search-index.json', GENERATOR_FILE_PERMISSION);
 }
 
 /**

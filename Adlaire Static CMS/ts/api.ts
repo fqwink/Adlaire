@@ -421,4 +421,30 @@ export const api = {
             throw new Error(await extractApiError(res, res.status));
         }
     },
+
+    // Ver.3.7: テーマ設定取得（API_RULEBOOK.md §4.10）
+    async getThemeSettings(theme: string): Promise<{ theme: string; settings: Record<string, unknown> }> {
+        if (!theme) throw new Error('getThemeSettings: theme is required');
+        const res = await fetch(buildApiUrl('theme-settings', { theme }));
+        updateCsrfFromResponse(res);
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
+        return res.json();
+    },
+
+    // Ver.3.7: テーマ設定保存（API_RULEBOOK.md §4.10）
+    async saveThemeSettings(theme: string, settings: Record<string, unknown>): Promise<void> {
+        if (!theme) throw new Error('saveThemeSettings: theme is required');
+        const params = new URLSearchParams();
+        params.append('theme', theme);
+        params.append('settings', JSON.stringify(settings));
+        params.append('csrf', csrfToken);
+
+        const res = await fetch(buildApiUrl('theme-settings'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
+    },
 };
