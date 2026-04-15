@@ -155,9 +155,12 @@ function renderPortableTextToHtml(array $body): string
             $html .= "\n";
 
         } elseif ($nodeType === 'code') {
+            // R6-16: language 属性を class="language-xxx" として出力（シンタックスハイライト対応）
             $flushList();
             $code = (string) ($node['code'] ?? '');
-            $html .= '<pre><code>' . esc($code) . '</code></pre>' . "\n";
+            $lang = is_string($node['language'] ?? null) ? preg_replace('/[^a-zA-Z0-9+#._-]/', '', (string) ($node['language'] ?? '')) : '';
+            $langClass = ($lang !== null && $lang !== '') ? ' class="language-' . esc($lang) . '"' : '';
+            $html .= '<pre><code' . $langClass . '>' . esc($code) . '</code></pre>' . "\n";
 
         } elseif ($nodeType === 'delimiter') {
             $flushList();
@@ -182,7 +185,7 @@ function renderPortableTextToHtml(array $body): string
             $flushList();
             $withHeadings = ($node['withHeadings'] ?? false) === true;
             $content = is_array($node['content'] ?? null) ? $node['content'] : [];
-            $html .= '<table>' . "\n";
+            $html .= '<table class="ce-table">' . "\n";
             $rowStart = 0;
             if ($withHeadings && isset($content[0]) && is_array($content[0])) {
                 $html .= '<thead><tr>';
@@ -207,9 +210,13 @@ function renderPortableTextToHtml(array $body): string
 
         } elseif ($nodeType === 'accordion') {
             // Ver.3.5: アコーディオンブロック（EDITOR_RULEBOOK.md §14.2）
+            // R6-1: accordion content をサーバー側で strip_tags によるサニタイズ実施（XSS 防止）
             $flushList();
             $title = esc((string) ($node['title'] ?? ''));
-            $content = (string) ($node['content'] ?? '');
+            $raw = (string) ($node['content'] ?? '');
+            // 許可する安全なブロックレベル・インラインタグのみ残す（スクリプト・イベント属性は除去）
+            $allowedTags = '<p><br><strong><em><u><a><ul><ol><li><code><pre><blockquote>';
+            $content = strip_tags($raw, $allowedTags);
             $html .= '<details class="ce-accordion">'
                 . '<summary class="ce-accordion__title">' . $title . '</summary>'
                 . '<div class="ce-accordion__content">' . $content . '</div>'

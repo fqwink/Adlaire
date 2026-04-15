@@ -118,6 +118,10 @@ function login_rate_check(): bool
         @chmod($rateFile, 0600);
     }
     $fp = fopen($rateFile, 'r+');
+    // R6-41: fopen 失敗時にエラーログ追加
+    if ($fp === false) {
+        error_log('Adlaire: Failed to open rate limit file for writing: ' . $rateFile);
+    }
     if ($fp !== false) {
         if (!flock($fp, LOCK_EX)) {
             fclose($fp);

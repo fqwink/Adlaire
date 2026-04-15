@@ -220,12 +220,17 @@ function handleApiLicense(string $method): void
         $domain = $_SERVER['HTTP_HOST'] ?? '';
         $version = App::VERSION;
 
+        // R6-37: JSON_THROW_ON_ERROR を除去し他の json_encode と一貫したエラーチェックに統一
         $payload = json_encode([
             'system_key' => $systemKey,
             'domain' => $domain,
             'product_version' => $version,
             'timestamp' => gmdate('c'),
-        ], JSON_THROW_ON_ERROR);
+        ]);
+        if ($payload === false) {
+            apiError(500, 'Failed to encode license payload');
+            return;
+        }
 
         $context = stream_context_create([
             'http' => [
@@ -396,7 +401,7 @@ function apiPageSave(FileStorage $storage): void
         apiError(400, 'Missing body');
         return;
     }
-    $body = json_decode($bodyJson, true, 64);
+    $body = json_decode($bodyJson, true, API_PAGE_BODY_DECODE_DEPTH);
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($body)) {
         apiError(400, 'Invalid body JSON');
         return;
@@ -417,13 +422,14 @@ function apiPageSave(FileStorage $storage): void
         ? $_POST['type']
         : 'page';
     $postedAt = is_string($_POST['posted_at'] ?? null) ? $_POST['posted_at'] : '';
-    $category = is_string($_POST['category'] ?? null) ? $_POST['category'] : '';
+    // R6-30: author / category フィールド最大長チェック（DBなしフラットファイル保護）
+    $category = is_string($_POST['category'] ?? null) ? substr($_POST['category'], 0, 200) : '';
     $tagsRaw = is_string($_POST['tags'] ?? null) ? $_POST['tags'] : '';
     $tags = ($tagsRaw !== '') ? json_decode($tagsRaw, true) : [];
     if (!is_array($tags)) {
         $tags = [];
     }
-    $author = is_string($_POST['author'] ?? null) ? $_POST['author'] : '';
+    $author = is_string($_POST['author'] ?? null) ? substr($_POST['author'], 0, 200) : '';
 
     $result = $storage->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
     if (!$result) {
@@ -569,6 +575,9 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 }
 
 // --- Search API ---
+
+/** R6-13: JSON decode depth for page body (PT format, depth 64 is sufficient) */
+const API_PAGE_BODY_DECODE_DEPTH = 64;
 
 /** Maximum search query length */
 const API_SEARCH_MAX_QUERY_LENGTH = 200;
@@ -845,7 +854,8 @@ function handleApiImport(FileStorage $storage): void
                 if (!is_string($ts) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $ts)) {
                     continue;
                 }
-                if (!is_array($revData) || !isset($revData['content'])) {
+                // R6-12: PT形式では 'body' キーを使用（'content' は旧形式）
+                if (!is_array($revData) || !isset($revData['body'])) {
                     continue;
                 }
                 $revFile = $revDir . '/' . $ts . '.json';
@@ -932,9 +942,26 @@ function handleApiUsers(FileStorage $storage, string $method): void
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $action = $_POST['action'] ?? '';
 
-        if ($action === 'generate') {
+        // R6-3: application/json ボディを $_POST にフォールバックして読む
+        $jsonBody = null;
+        $ct = is_string($_SERVER['CONTENT_TYPE'] ?? null) ? ($_SERVER['CONTENT_TYPE'] ?? '') : '';
+        if (str_contains($ct, 'application/json')) {
+            $raw = file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $jsonBody = $decoded;
+                }
+            }
+        }
+
+        $action = is_string($jsonBody['action'] ?? null)
+            ? (string) ($jsonBody['action'] ?? '')
+            : (is_string($_POST['action'] ?? null) ? (string) ($_POST['action'] ?? '') : '');
+
+        // R6-5: 'generate_sub_master' および 'generate' の両方を受け付ける
+        if ($action === 'generate' || $action === 'generate_sub_master') {
             $credentials = $storage->generateSubMasterCredentials();
             $loginId = $credentials['login_id'];
             $password = $credentials['password'];
@@ -973,7 +1000,12 @@ function handleApiUsers(FileStorage $storage, string $method): void
         }
 
         if ($action === 'disable') {
-            $username = is_string($_POST['user'] ?? null) ? trim($_POST['user'] ?? '') : '';
+            // R6-7: 'username' および旧来の 'user' フィールド両方に対応
+            $username = is_string($jsonBody['username'] ?? null)
+                ? trim((string) ($jsonBody['username'] ?? ''))
+                : (is_string($_POST['username'] ?? null)
+                    ? trim((string) ($_POST['username'] ?? ''))
+                    : (is_string($_POST['user'] ?? null) ? trim((string) ($_POST['user'] ?? '')) : ''));
             if ($username === '') {
                 apiError(400, 'Invalid username');
                 return;
@@ -995,23 +1027,29 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
 
-        if ($action === 'password') {
+        // R6-6: 'update_main_password' および 'password' の両方を受け付ける
+        if ($action === 'password' || $action === 'update_main_password') {
             $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
-            $password = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
-            if ($password === '' || strlen($password) < 8) {
+            // 'new_password' フィールド（api.ts 送信）と旧来の 'password' フィールド両方に対応
+            $newPassword = is_string($jsonBody['new_password'] ?? null)
+                ? (string) ($jsonBody['new_password'] ?? '')
+                : (is_string($_POST['new_password'] ?? null)
+                    ? (string) ($_POST['new_password'] ?? '')
+                    : (is_string($_POST['password'] ?? null) ? (string) ($_POST['password'] ?? '') : ''));
+            if ($newPassword === '' || strlen($newPassword) < 8) {
                 apiError(400, 'Password must be at least 8 characters');
                 return;
             }
-            if (strlen($password) > 256) {
+            if (strlen($newPassword) > 256) {
                 apiError(400, 'Password is too long');
                 return;
             }
             $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
-            if (in_array(strtolower($password), $weakPasswords, true)) {
+            if (in_array(strtolower($newPassword), $weakPasswords, true)) {
                 apiError(400, 'Password is too weak');
                 return;
             }
-            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
             if (!$storage->writeUser($sessionUser, ['password' => $newHash])) {
                 apiError(500, 'Failed to update password');
                 return;
@@ -1037,7 +1075,19 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
+
+        // R6-4: $_GET['username'] に優先、JSON ボディからも読む
         $username = is_string($_GET['username'] ?? null) ? trim($_GET['username'] ?? '') : '';
+        if ($username === '') {
+            // JSON ボディ（api.ts が送信する形式）からフォールバック
+            $raw = file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && is_string($decoded['username'] ?? null)) {
+                    $username = trim((string) ($decoded['username'] ?? ''));
+                }
+            }
+        }
         if ($username === '') {
             apiError(400, 'Invalid username');
             return;
@@ -1152,6 +1202,10 @@ function apiBulkStatus(FileStorage $storage): void
     $updated = 0;
     foreach ($slugs as $slug) {
         if (is_string($slug) && FileStorage::validateSlug($slug)) {
+            // R6-25: 存在しない slug に対するステータス更新を防止
+            if ($storage->readPageData($slug) === false) {
+                continue;
+            }
             if ($storage->updatePageStatus($slug, $status)) {
                 $updated++;
             }
@@ -1206,6 +1260,11 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         apiError(400, 'Missing t1 or t2');
         return;
     }
+    // R6-40: タイムスタンプ形式バリデーション（任意文字列でのファイルアクセス試行防止）
+    if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $t1) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $t2)) {
+        apiError(400, 'Invalid timestamp format');
+        return;
+    }
     if ($t1 === $t2) {
         apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => [], 'removed' => [], 'changed' => []], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return;
@@ -1218,8 +1277,9 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         return;
     }
 
-    $blocks1 = is_array($data1['blocks'] ?? null) ? $data1['blocks'] : [];
-    $blocks2 = is_array($data2['blocks'] ?? null) ? $data2['blocks'] : [];
+    // R6-8: PT形式では 'body' キーを使用（'blocks' は旧形式）
+    $blocks1 = is_array($data1['body'] ?? null) ? $data1['body'] : [];
+    $blocks2 = is_array($data2['body'] ?? null) ? $data2['body'] : [];
 
     $added = [];
     $removed = [];
@@ -1288,7 +1348,7 @@ function handleApiMedia(string $method): void
                     }
                     $files[] = [
                         'name'       => $entry,
-                        'size'       => filesize($path),
+                        'size'       => (int) filesize($path),
                         'updated_at' => date('c', (int) filemtime($path)),
                     ];
                 }
@@ -1307,6 +1367,8 @@ function handleApiMedia(string $method): void
         // Create media directory if needed
         if (!is_dir($mediaDir)) {
             if (!@mkdir($mediaDir, 0755, true) && !is_dir($mediaDir)) {
+                // R6-33: ディレクトリ作成失敗時のエラーログ追加
+                error_log('Adlaire: Failed to create media directory: ' . $mediaDir);
                 apiError(500, 'Failed to create media directory');
                 return;
             }
@@ -1319,12 +1381,22 @@ function handleApiMedia(string $method): void
         }
 
         $tmpName = $uploadedFile['tmp_name'];
+        // R6-10: $_FILES エラーコードチェック（PHPアップロードエラー検出）
+        $uploadError = (int) ($uploadedFile['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            apiError(400, 'Upload error: ' . $uploadError);
+            return;
+        }
         if (!is_uploaded_file($tmpName)) {
             apiError(400, 'Invalid upload');
             return;
         }
 
-        $fileSize = (int) ($uploadedFile['size'] ?? 0);
+        // R6-29: $_FILES['size'] は信頼できないため実際のファイルサイズを再確認
+        $fileSize = (int) filesize($tmpName);
+        if ($fileSize <= 0) {
+            $fileSize = (int) ($uploadedFile['size'] ?? 0);
+        }
         if ($fileSize > API_MEDIA_MAX_SIZE) {
             apiError(413, 'File exceeds 10MB limit');
             return;
@@ -1337,19 +1409,33 @@ function handleApiMedia(string $method): void
             return;
         }
 
+        // R6-11: MIMEタイプ検証（拡張子偽装対策）
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo !== false) {
+            $mimeType = finfo_file($finfo, $tmpName);
+            finfo_close($finfo);
+            if ($mimeType === false || !in_array($mimeType, $allowedMimes, true)) {
+                apiError(400, 'Invalid file type');
+                return;
+            }
+        }
+
         // Sanitize filename: strip path components, allow only safe characters
         $baseName = pathinfo($originalName, PATHINFO_FILENAME);
         $safeName = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $baseName) ?? 'file';
         $safeName = trim($safeName, '_');
+        // R6-45: 予測可能な 'upload' フォールバック名をランダム化
         if ($safeName === '') {
-            $safeName = 'upload';
+            $safeName = 'file_' . bin2hex(random_bytes(4));
         }
 
         // Deduplicate: append timestamp suffix if file exists
         $filename = $safeName . '.' . $ext;
         $destPath = $mediaDir . '/' . $filename;
+        // R6-18: time()の衝突リスク排除 — random_bytes使用
         if (file_exists($destPath)) {
-            $filename = $safeName . '_' . time() . '.' . $ext;
+            $filename = $safeName . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
             $destPath = $mediaDir . '/' . $filename;
         }
 

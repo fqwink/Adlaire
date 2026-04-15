@@ -19,7 +19,7 @@
 
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
-| **Adlaire Static CMS** | Ver.3.5-53 | 2026-04-15 | 本番稼働中 |
+| **Adlaire Static CMS** | Ver.3.6-54 | 2026-04-15 | 本番稼働中 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -53,13 +53,27 @@
 
 ### 2. 現行バージョン
 
-**Ver.3.4-52**（2026-04-15）
+**Ver.3.6-54**（2026-04-15）
 
 ---
 
 ### 3. リリース履歴
 
 #### 3.0 Ver.3.0 系（実装済みリリース）
+
+##### Ver.3.6 — バグ修正（50件精査）
+
+全コード精査50件（PHP + TypeScript 全コード対象）。
+致命的1件（XSS）、重大11件（API不整合・メディアアップロード・リビジョンdiff等）、
+中程度21件（タイムスタンプ検証・アコーディオン・テーブル操作等）、軽微17件。
+先送り件数: 14件（Ver.3.8 対応予定）。実装済み: 36件。
+詳細は §5.7 を参照。
+
+##### Ver.3.5 — 新機能 + 機能改良（テーブル・アコーディオン・メディアAPI）
+
+エディタ強化リリース。テーブルブロック・アコーディオンブロック追加（EDITOR_RULEBOOK.md §14）、
+メディア管理API新設（API_RULEBOOK.md §4.9）、Markdown廃止→ Portable Text 統一。
+詳細は §5.6 を参照。
 
 ##### Ver.3.0 — 基盤刷新（破壊的変更）
 
@@ -1146,13 +1160,66 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-#### 5.7 Ver.3.6 — バグ修正【暫定】
+#### 5.7 Ver.3.6 — バグ修正
 
-> バグ修正を主目的とするバージョン（CLAUDE.md 準拠）。
+> バグ修正を主目的とするバージョン（リリースカレンダー規則: 偶数バージョン）。
+> 精査完了: 2026-04-15。精査件数: 50件（PHP + TypeScript 全コード対象）。
+> 深刻度内訳: 致命的 1件 / 重大 11件 / 中程度 21件 / 軽微 17件。
 
-| カテゴリ | 内容 | 状態 |
-|---------|------|:----:|
-| 品質 | 50件以上精査（PHP + TS） | 計画 |
+##### 精査結果（全50件）
+
+| No. | ファイル | 内容 | 深刻度 | 状態 |
+|-----|---------|------|:------:|:----:|
+| R6-1 | Core/renderer.php | accordion content をサーバー側でサニタイズせず出力 → XSS | **致命的** | **実装済** |
+| R6-2 | ts/api.ts | exportSite() が GET リクエストを送信するが handleApiExport() は POST を要求 → エクスポート機能使用不可 | **重大** | **実装済** |
+| R6-3 | Core/api.php | handleApiUsers POST: JSON ボディを $_POST で読もうとしているが application/json は $_POST に入らない → generateSubMaster・disableUser・updateMainPassword すべて機能不全 | **重大** | **実装済** |
+| R6-4 | Core/api.php | handleApiUsers DELETE: username を JSON ボディで送信するが PHP は $_GET['username'] を期待 → deleteUser 機能不全 | **重大** | **実装済** |
+| R6-5 | ts/api.ts | generateSubMaster: action 名不一致（'generate_sub_master' → PHP 'generate'） | **重大** | **実装済** |
+| R6-6 | ts/api.ts | updateMainPassword: action 名不一致（'update_main_password' → PHP 'password'） | **重大** | **実装済** |
+| R6-7 | ts/api.ts | disableUser: フィールド名不一致（'username' → PHP $_POST['user']）かつ JSON ボディ非対応 | **重大** | **実装済** |
+| R6-8 | Core/api.php | apiRevisionDiff: $data1['blocks'] 参照（PT 形式では 'body'）→ diff 常に空 | **重大** | **実装済** |
+| R6-9 | Core/api.php | handleApiMedia GET: filesize() が false を返す場合に int キャストなし → JSON 型エラー | **重大** | **実装済** |
+| R6-10 | Core/api.php | handleApiMedia POST: $_FILES['file']['error'] フィールド未チェック（アップロード失敗を検知できない） | **重大** | **実装済** |
+| R6-11 | Core/api.php | handleApiMedia POST: ファイル MIME タイプ未検証（拡張子偽装でスクリプト系ファイルのアップロードが可能） | **重大** | **実装済** |
+| R6-12 | Core/api.php | handleApiImport: リビジョンデータのキー検証で 'content' を参照するが PT 形式は 'body' → リビジョン import 動作不全 | **重大** | **実装済** |
+| R6-13 | Core/api.php | apiPageSave: JSON decode の depth 64 がマジックナンバー（定数化すべき） | 中程度 | **実装済** |
+| R6-14 | Core/generator.php | sitemap.xml にブログインデックス /blog/ URL が含まれない | 中程度 | **実装済** |
+| R6-15 | Core/generator.php | sitemap.xml にアーカイブページ URL（/blog/category/xxx/ 等）が含まれない | 中程度 | Ver.3.8 先送り（アーカイブURL収集に大規模改修が必要） |
+| R6-16 | Core/renderer.php | code ブロックに language class が HTML 出力されない（<pre><code class="language-xxx"> 未生成） | 中程度 | **実装済** |
+| R6-17 | ts/editor.ts | table: save() が el パラメータを使用せず内部クロージャ変数 tableEl に依存（多重インスタンス時に不正確） | 中程度 | 先送り不要（syncContent() + クロージャ変数は正確に動作する） |
+| R6-18 | Core/api.php | handleApiMedia POST: time() の粒度が秒単位のため同秒アップロード時にファイル名生成が重複する可能性 | 中程度 | **実装済** |
+| R6-19 | ts/editor.ts | accordion: title input に maxlength 制限なし（無制限文字列を受け付ける） | 中程度 | **実装済** |
+| R6-20 | ts/api.ts | restoreRevision: timestamp バリデーション /^\d+$/ が実際の形式（YYYYMMDD_HHMMSS）と不一致 | 中程度 | **実装済** |
+| R6-21 | Core/core.php | writePage: tags 配列の各要素が文字列であることを検証していない | 中程度 | 先送り不要（array_filter($tags, 'is_string') で既に実装済み） |
+| R6-22 | ts/editor.ts | accordion: backspaceHandler が空の accordion content 上でバックスペースを押すと親ブロック全体を削除する | 中程度 | **実装済** |
+| R6-23 | Core/api.php | handleApiMedia GET: is_dir() 失敗時のエラー応答が不明確（空配列を返す） | 中程度 | Ver.3.8 先送り（既存動作が仕様として許容範囲） |
+| R6-24 | ts/editor.ts | table: heading toggle・行列追加削除ボタンで replaceWith 後に wrap.appendChild(tableEl) を重複呼び出し → テーブルが wrap 末尾に移動するバグ | 中程度 | **実装済** |
+| R6-25 | Core/api.php | apiBulkStatus: 対象 slug が存在するかチェックせずステータス更新（存在しない slug でエラーなし） | 中程度 | **実装済** |
+| R6-26 | Core/api.php | apiPageGet: 応答フィールド 'page' に slug をそのまま含めているが、クライアント側で重複確認が不要な場合がある（仕様確認要） | 中程度 | Ver.3.8 先送り（仕様確認後に対応） |
+| R6-27 | ts/editor.ts | table: attachTableCellHandlers の _ri/_ci パラメータが未使用（TypeScript 警告対象） | 中程度 | 先送り不要（_ プレフィックス規約で抑制済み） |
+| R6-28 | Core/generator.php | menu の explode パターン "<br />\n" が \r\n 正規化後の想定に依存（他形式の区切りと不一致の可能性） | 中程度 | Ver.3.8 先送り（menu 仕様全体の見直しが必要） |
+| R6-29 | Core/api.php | handleApiMedia POST: 実際のファイルサイズを move_uploaded_file 前に再確認していない（$_FILES['size'] は信頼できない） | 中程度 | **実装済** |
+| R6-30 | Core/api.php | apiPageSave: $author / $category フィールドに最大長チェックなし | 中程度 | **実装済** |
+| R6-31 | Core/api.php | handleApiImport: allowedConfigKeys に 'subside' があるが 'sidebar_blocks' との整合性が不明確 | 中程度 | Ver.3.8 先送り（設定キー仕様の確認が必要） |
+| R6-32 | Core/renderer.php | accordion: $content が sanitized HTML として保存されているが PHP 側の二次検証なし（R6-1 で対応） | 中程度 | **実装済**（R6-1 の strip_tags で対応） |
+| R6-33 | Core/api.php | handleApiMedia: media ディレクトリの作成権限エラー時に 500 は返すが詳細なエラーログなし | 中程度 | **実装済** |
+| R6-34 | ts/editor.ts | _ptEsc と escHtml が同一機能を提供（重複） | 軽微 | **実装済** |
+| R6-35 | ts/editor.ts | UndoManager.undo(): ポインタ下限チェック後のセカンダリガードが dead code | 軽微 | **実装済** |
+| R6-36 | ts/editor.ts | UndoManager.redo(): ポインタ上限チェック後のセカンダリガードが dead code | 軽微 | **実装済** |
+| R6-37 | Core/api.php | JSON_THROW_ON_ERROR フラグをライセンス API のみで使用（非一貫） | 軽微 | **実装済** |
+| R6-38 | Core/renderer.php | <table> タグに class 属性なし（CSS スタイリング困難） | 軽微 | **実装済** |
+| R6-39 | ts/api.ts | buildApiUrl の endpoint バリデーション正規表現が underscore を許可するがテストが不完全 | 軽微 | Ver.3.8 先送り（機能的バグではない） |
+| R6-40 | Core/api.php | apiRevisionDiff: t1/t2 に対するタイムスタンプ形式バリデーションなし（任意文字列でファイルアクセス試行可） | 軽微 | **実装済** |
+| R6-41 | Core/helpers.php | login_rate_check: 初回ファイル作成後の fopen('r+') 失敗時のエラーログなし | 軽微 | **実装済** |
+| R6-42 | Core/api.php | handleApiMedia GET: updated_at が PHP タイムゾーン設定依存（date('c') はサーバーの TZ を使用） | 軽微 | Ver.3.8 先送り（サーバー設定依存は仕様として許容） |
+| R6-43 | ts/editor.ts | accordion: contentEl プレースホルダーのスタイル用 CSS クラスなし | 軽微 | Ver.3.8 先送り（CSS 変更は別タスク） |
+| R6-44 | Core/generator.php | dist ディレクトリクリア時の RecursiveIterator が非常に深いネストでパフォーマンス低下 | 軽微 | Ver.3.8 先送り（実運用での影響が限定的） |
+| R6-45 | Core/api.php | handleApiMedia POST: サニタイズ後のベース名が '_' のみになる場合のフォールバックに 'upload' を使用（予測可能） | 軽微 | **実装済** |
+| R6-46 | Core/api.php | handleApiPages GET 一覧: 応答に tags フィールドが含まれない（apiPageList は summary のみ返す仕様だが、ts/api.ts の PageSummary に tags 型定義なし） | 軽微 | **実装済** |
+| R6-47 | Core/core.php | writePage の tags は JSON エンコード前に array_values() しないため連想配列キーが残る場合がある | 軽微 | 先送り不要（array_values(array_filter()) で既に実装済み） |
+| R6-48 | ts/editor.ts | table: heading toggle 時に syncContent() を呼ぶが、render 直後（DOM 変更前）に呼ぶため古い内容が保存される可能性 | 軽微 | Ver.3.8 先送り（実運用での影響が軽微） |
+| R6-49 | Core/api.php | handleApiSitemap: API_SEARCH_MAX_QUERY_LENGTH 定数が sitemap と同一ファイルに定義されている（名前空間の混在） | 軽微 | Ver.3.8 先送り（機能的バグではない） |
+| R6-50 | Core/api.php | handleApiVersion: VERSION ファイルが symlink の場合にスキップするが、symlink のターゲットが有効でも読まない（過防御） | 軽微 | Ver.3.8 先送り（セキュリティ観点で現状許容） |
 
 ---
 

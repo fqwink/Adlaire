@@ -284,8 +284,7 @@ export function editorDataToPT(data: EditorData): PortableTextNode[] {
     return pt;
 }
 
-const _ptEsc = (s: string): string =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// R6-34: _ptEsc 削除 — escHtml (エクスポート済み関数) に統一
 
 /** Render Portable Text body to HTML string (client-side, visitor display). */
 export function renderPortableText(body: PortableTextNode[]): string {
@@ -304,7 +303,7 @@ export function renderPortableText(body: PortableTextNode[]): string {
     for (const node of body) {
         if (node._type === 'block') {
             const block = node as PTBlock;
-            const inner = block.children.map(c => _ptEsc(c.text)).join('');
+            const inner = block.children.map(c => escHtml(c.text)).join('');
             if (block.listItem) {
                 if (block.listItem !== pendingListType && pendingListItems.length > 0) {
                     flushList();
@@ -323,7 +322,7 @@ export function renderPortableText(body: PortableTextNode[]): string {
             }
         } else if (node._type === 'code') {
             flushList();
-            html += `<pre><code>${_ptEsc((node as PTCode).code)}</code></pre>\n`;
+            html += `<pre><code>${escHtml((node as PTCode).code)}</code></pre>\n`;
         } else if (node._type === 'delimiter') {
             flushList();
             html += '<hr>\n';
@@ -333,8 +332,8 @@ export function renderPortableText(body: PortableTextNode[]): string {
             const safeUrl = img.url && !/^\s*(javascript|data|vbscript)\s*:/i.test(img.url) && !/^\s*\/\//.test(img.url) ? img.url : '';
             if (safeUrl) {
                 const cap = img.caption || img.alt || '';
-                html += `<figure><img src="${_ptEsc(safeUrl)}" alt="${_ptEsc(img.alt || cap)}" loading="lazy">`;
-                if (cap) html += `<figcaption>${_ptEsc(cap)}</figcaption>`;
+                html += `<figure><img src="${escHtml(safeUrl)}" alt="${escHtml(img.alt || cap)}" loading="lazy">`;
+                if (cap) html += `<figcaption>${escHtml(cap)}</figcaption>`;
                 html += '</figure>\n';
             }
         } else if (node._type === 'table') {
@@ -344,12 +343,12 @@ export function renderPortableText(body: PortableTextNode[]): string {
             let thtml = '<table>';
             let rowStart = 0;
             if (tbl.withHeadings && tbl.content.length > 0) {
-                thtml += '<thead><tr>' + tbl.content[0].map(c => `<th>${_ptEsc(c)}</th>`).join('') + '</tr></thead>';
+                thtml += '<thead><tr>' + tbl.content[0].map(c => `<th>${escHtml(c)}</th>`).join('') + '</tr></thead>';
                 rowStart = 1;
             }
             thtml += '<tbody>';
             for (let i = rowStart; i < tbl.content.length; i++) {
-                thtml += '<tr>' + tbl.content[i].map(c => `<td>${_ptEsc(c)}</td>`).join('') + '</tr>';
+                thtml += '<tr>' + tbl.content[i].map(c => `<td>${escHtml(c)}</td>`).join('') + '</tr>';
             }
             thtml += '</tbody></table>';
             html += thtml + '\n';
@@ -357,7 +356,7 @@ export function renderPortableText(body: PortableTextNode[]): string {
             // Ver.3.5: アコーディオンブロック
             flushList();
             const acc = node as PTAccordion;
-            html += `<details class="ce-accordion"><summary class="ce-accordion__title">${_ptEsc(acc.title)}</summary><div class="ce-accordion__content">${sanitizeHtml(acc.content)}</div></details>\n`;
+            html += `<details class="ce-accordion"><summary class="ce-accordion__title">${escHtml(acc.title)}</summary><div class="ce-accordion__content">${sanitizeHtml(acc.content)}</div></details>\n`;
         }
     }
     flushList();
@@ -593,11 +592,10 @@ export class UndoManager {
 
     // #10: JSON.parseにtry-catch追加
     // Ver.2.9 TS#49: undo/redo pointer範囲保護
+    // R6-35: 不要なセカンダリガード除去（先頭の条件で pointer は常に有効範囲）
     undo(): EditorData | null {
         if (this.pointer <= 0 || this.stack.length === 0) return null;
         this.pointer--;
-        // Ver.2.9 TS#49: pointer下限保護
-        if (this.pointer < 0) { this.pointer = 0; return null; }
         try {
             return JSON.parse(this.stack[this.pointer]);
         } catch {
@@ -606,12 +604,10 @@ export class UndoManager {
     }
 
     // #11: JSON.parseにtry-catch追加
-    // Ver.2.9 TS#49: redo pointer範囲保護
+    // R6-36: 不要なセカンダリガード除去（先頭の条件で pointer は常に有効範囲）
     redo(): EditorData | null {
         if (this.pointer >= this.stack.length - 1) return null;
         this.pointer++;
-        // Ver.2.9 TS#49: pointer上限保護
-        if (this.pointer >= this.stack.length) { this.pointer = this.stack.length - 1; return null; }
         try {
             return JSON.parse(this.stack[this.pointer]);
         } catch {
@@ -1179,9 +1175,9 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     withHeadings = !withHeadings;
                     headingsBtn.textContent = withHeadings ? i18n.t('table_headings_on') || 'Headings: ON' : i18n.t('table_headings_off') || 'Headings: OFF';
                     const newTbl = buildTable();
+                    // R6-24: replaceWith で既にDOM上の正しい位置に配置される
                     tableEl.replaceWith(newTbl);
                     tableEl = newTbl;
-                    wrap.appendChild(tableEl);
                 });
 
                 const addRowBtn = document.createElement('button');
@@ -1197,7 +1193,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const newTbl = buildTable();
                     tableEl.replaceWith(newTbl);
                     tableEl = newTbl;
-                    wrap.appendChild(tableEl);
                 });
 
                 const removeRowBtn = document.createElement('button');
@@ -1213,7 +1208,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const newTbl = buildTable();
                     tableEl.replaceWith(newTbl);
                     tableEl = newTbl;
-                    wrap.appendChild(tableEl);
                 });
 
                 const addColBtn = document.createElement('button');
@@ -1228,7 +1222,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const newTbl = buildTable();
                     tableEl.replaceWith(newTbl);
                     tableEl = newTbl;
-                    wrap.appendChild(tableEl);
                 });
 
                 const removeColBtn = document.createElement('button');
@@ -1243,7 +1236,6 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     const newTbl = buildTable();
                     tableEl.replaceWith(newTbl);
                     tableEl = newTbl;
-                    wrap.appendChild(tableEl);
                 });
 
                 controls.appendChild(headingsBtn);
@@ -1276,12 +1268,20 @@ const builtinTools: Record<string, BlockToolFactory> = {
                 titleInput.className = 'ce-accordion__title-input';
                 titleInput.placeholder = i18n.t('accordion_title_placeholder') || 'Accordion title...';
                 titleInput.value = String(data.title ?? '');
+                // R6-19: タイトル最大長制限
+                titleInput.maxLength = 200;
 
                 const contentEl = document.createElement('div');
                 contentEl.className = 'ce-accordion__content-edit';
                 contentEl.contentEditable = 'true';
                 contentEl.innerHTML = sanitizeHtml(String(data.content ?? ''));
-                attachBackspaceHandler(contentEl);
+                // R6-22: コンテンツ空時のBackspaceでブロック自体が削除されないよう防止
+                // （attachBackspaceHandler は使わない — アコーディオンブロック全体の削除を引き起こす）
+                contentEl.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && contentEl.textContent?.trim() === '') {
+                        e.preventDefault();
+                    }
+                });
 
                 wrap.appendChild(titleInput);
                 wrap.appendChild(contentEl);

@@ -293,6 +293,11 @@ function handleApiGenerate(FileStorage $storage): void
         }
         $xml .= "</url>\n";
     }
+    // R6-14: ブログインデックスページをsitemapに追加
+    if ($sortedPosts !== []) {
+        $blogLoc = htmlspecialchars("{$host}{$basePath}/blog/", ENT_XML1, 'UTF-8');
+        $xml .= "  <url><loc>{$blogLoc}</loc></url>\n";
+    }
     $xml .= '</urlset>';
     if (file_put_contents($distDir . '/sitemap.xml', $xml) === false) {
         apiError(500, 'Failed to write sitemap.xml');

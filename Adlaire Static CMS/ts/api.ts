@@ -13,10 +13,12 @@
 import type { PortableTextNode } from './editor.ts';
 
 // #64: PageSummary partial response対応 — フィールドをoptionalに
+// R6-46: tags フィールドを型定義に追加
 interface PageSummary {
     type?: string;
     posted_at?: string;
     category?: string;
+    tags?: string[];
     author?: string;
     status?: string;
     created_at?: string;
@@ -197,7 +199,8 @@ export const api = {
     // R3-8: restoreRevision slug/timestamp空文字チェック + R3-9: timestampフォーマット検証
     async restoreRevision(slug: string, timestamp: string): Promise<void> {
         if (!slug) throw new Error('restoreRevision: slug is required');
-        if (!timestamp || !/^\d+$/.test(timestamp)) throw new Error('restoreRevision: invalid timestamp');
+        // R6-20: タイムスタンプ形式を実際のファイル名形式に合わせる（例: 20240101_120000_ab1234）
+        if (!timestamp || !/^\d{8}_\d{6}(_[a-f0-9]+)?$/.test(timestamp)) throw new Error('restoreRevision: invalid timestamp');
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
         body.append('csrf', csrfToken);
@@ -235,8 +238,15 @@ export const api = {
      */
     // #106: exportSite — CSRF token更新追加 + エラーメッセージ統一
     // R3-11: exportSite extractApiError統一
+    // R6-2: GET → POST に修正（handleApiExport() は POST を要求）
     async exportSite(): Promise<string> {
-        const res = await fetch(buildApiUrl('export'));
+        const params = new URLSearchParams();
+        params.append('csrf', csrfToken);
+        const res = await fetch(buildApiUrl('export'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
         updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
         return res.text();
