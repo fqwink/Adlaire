@@ -176,6 +176,8 @@ function handleApi(): void
         'generate'  => handleApiGenerate($storage),
         'users'     => handleApiUsers($storage, $method),
         'license'   => handleApiLicense($method),
+        // Ver.3.5: メディア管理API（API_RULEBOOK.md §4.9）
+        'media'     => handleApiMedia($method),
         default     => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -1241,6 +1243,175 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     }
 
     apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+// --- Media API (Ver.3.5: API_RULEBOOK.md §4.9) ---
+
+/** Media storage directory (relative to CMS root) */
+const API_MEDIA_DIR = 'data/media';
+
+/** Allowed media extensions */
+const API_MEDIA_ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
+/** Maximum upload file size (10 MB) */
+const API_MEDIA_MAX_SIZE = 10 * 1024 * 1024;
+
+/**
+ * Validate a media filename: only alphanumerics, dash, underscore, dot. No path traversal.
+ */
+function validateMediaFilename(string $name): bool
+{
+    return $name !== '' && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $name) === 1 && !str_contains($name, '..');
+}
+
+function handleApiMedia(string $method): void
+{
+    $mediaDir = dirname(__DIR__) . '/' . API_MEDIA_DIR;
+
+    if ($method === 'GET') {
+        // List media files
+        $files = [];
+        if (is_dir($mediaDir)) {
+            $entries = scandir($mediaDir);
+            if ($entries !== false) {
+                foreach ($entries as $entry) {
+                    if ($entry === '.' || $entry === '..') {
+                        continue;
+                    }
+                    $path = $mediaDir . '/' . $entry;
+                    if (!is_file($path) || is_link($path)) {
+                        continue;
+                    }
+                    $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                    if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+                        continue;
+                    }
+                    $files[] = [
+                        'name'       => $entry,
+                        'size'       => filesize($path),
+                        'updated_at' => date('c', (int) filemtime($path)),
+                    ];
+                }
+            }
+        }
+        apiResponse(['files' => $files], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+
+        // Create media directory if needed
+        if (!is_dir($mediaDir)) {
+            if (!@mkdir($mediaDir, 0755, true) && !is_dir($mediaDir)) {
+                apiError(500, 'Failed to create media directory');
+                return;
+            }
+        }
+
+        $uploadedFile = $_FILES['file'] ?? null;
+        if (!is_array($uploadedFile) || !isset($uploadedFile['tmp_name']) || !is_string($uploadedFile['tmp_name'])) {
+            apiError(400, 'No file uploaded');
+            return;
+        }
+
+        $tmpName = $uploadedFile['tmp_name'];
+        if (!is_uploaded_file($tmpName)) {
+            apiError(400, 'Invalid upload');
+            return;
+        }
+
+        $fileSize = (int) ($uploadedFile['size'] ?? 0);
+        if ($fileSize > API_MEDIA_MAX_SIZE) {
+            apiError(413, 'File exceeds 10MB limit');
+            return;
+        }
+
+        $originalName = is_string($uploadedFile['name'] ?? null) ? $uploadedFile['name'] : '';
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+            apiError(400, 'Unsupported file type');
+            return;
+        }
+
+        // Sanitize filename: strip path components, allow only safe characters
+        $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $baseName) ?? 'file';
+        $safeName = trim($safeName, '_');
+        if ($safeName === '') {
+            $safeName = 'upload';
+        }
+
+        // Deduplicate: append timestamp suffix if file exists
+        $filename = $safeName . '.' . $ext;
+        $destPath = $mediaDir . '/' . $filename;
+        if (file_exists($destPath)) {
+            $filename = $safeName . '_' . time() . '.' . $ext;
+            $destPath = $mediaDir . '/' . $filename;
+        }
+
+        if (!move_uploaded_file($tmpName, $destPath)) {
+            apiError(500, 'Failed to save file');
+            return;
+        }
+        chmod($destPath, 0644);
+
+        $url = '/' . API_MEDIA_DIR . '/' . $filename;
+        apiResponse(['status' => 'ok', 'filename' => $filename, 'url' => $url]);
+        return;
+    }
+
+    if ($method === 'DELETE') {
+        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!is_string($csrfToken) || $csrfToken === '') {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $csrfSession = $_SESSION['csrf'] ?? '';
+        if (!is_string($csrfSession) || $csrfSession === '' || !hash_equals($csrfSession, $csrfToken)) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+
+        $file = is_string($_GET['file'] ?? null) ? trim($_GET['file'] ?? '') : '';
+        if (!validateMediaFilename($file)) {
+            apiError(400, 'Invalid filename');
+            return;
+        }
+
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+            apiError(400, 'Unsupported file type');
+            return;
+        }
+
+        $filePath = $mediaDir . '/' . $file;
+        // Resolve real path to prevent path traversal
+        $realMedia = realpath($mediaDir);
+        $realFile = realpath($filePath);
+        if ($realFile === false || $realMedia === false || !str_starts_with($realFile, $realMedia . DIRECTORY_SEPARATOR)) {
+            apiError(400, 'Invalid file path');
+            return;
+        }
+        if (!is_file($realFile) || is_link($realFile)) {
+            apiError(404, 'File not found');
+            return;
+        }
+
+        if (!unlink($realFile)) {
+            apiError(500, 'Failed to delete file');
+            return;
+        }
+
+        apiResponse(['status' => 'ok', 'deleted' => $file]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
 }
 
 function apiResponse(array $data, int $flags = 0): void

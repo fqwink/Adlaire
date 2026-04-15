@@ -29,6 +29,7 @@ interface BlockToolConfig {
 }
 
 // #65/#71: BlockToolFactory data型を専用interfaceに改善 + languageフィールド追加
+// Ver.3.5: withHeadings/content(table), title/content(accordion)追加
 interface BlockToolData {
     [key: string]: unknown;
     text?: string;
@@ -40,6 +41,9 @@ interface BlockToolData {
     url?: string;
     alt?: string;
     caption?: string;
+    withHeadings?: boolean;
+    content?: string[][] | string;
+    title?: string;
 }
 type BlockToolFactory = (data: BlockToolData) => BlockToolConfig;
 
@@ -88,7 +92,23 @@ export interface PTImage {
     alt?: string;
 }
 
-export type PortableTextNode = PTBlock | PTCode | PTDelimiter | PTImage;
+// Ver.3.5: テーブルブロック（EDITOR_RULEBOOK.md §14.1）
+export interface PTTable {
+    _type: 'table';
+    _key: string;
+    withHeadings: boolean;
+    content: string[][];
+}
+
+// Ver.3.5: アコーディオンブロック（EDITOR_RULEBOOK.md §14.2）
+export interface PTAccordion {
+    _type: 'accordion';
+    _key: string;
+    title: string;
+    content: string;
+}
+
+export type PortableTextNode = PTBlock | PTCode | PTDelimiter | PTImage | PTTable | PTAccordion;
 
 let _ptKeyCounter = 0;
 function _nextKey(): string {
@@ -141,6 +161,16 @@ export function ptToEditorData(body: PortableTextNode[]): EditorData {
             flushList();
             const img = node as PTImage;
             blocks.push({ type: 'image', data: { url: img.url, caption: img.caption || '', alt: img.alt || '' } });
+        } else if (node._type === 'table') {
+            // Ver.3.5: テーブルブロック
+            flushList();
+            const tbl = node as PTTable;
+            blocks.push({ type: 'table', data: { withHeadings: tbl.withHeadings, content: tbl.content } });
+        } else if (node._type === 'accordion') {
+            // Ver.3.5: アコーディオンブロック
+            flushList();
+            const acc = node as PTAccordion;
+            blocks.push({ type: 'accordion', data: { title: acc.title, content: acc.content } });
         }
     }
     flushList();
@@ -224,6 +254,31 @@ export function editorDataToPT(data: EditorData): PortableTextNode[] {
                     ...(d.alt ? { alt: String(d.alt) } : {}),
                 });
                 break;
+            // Ver.3.5: テーブルブロック
+            case 'table': {
+                const rawContent = d.content;
+                const tableContent: string[][] = Array.isArray(rawContent)
+                    ? (rawContent as unknown[]).map(row =>
+                        Array.isArray(row) ? (row as unknown[]).map(cell => String(cell ?? '')) : []
+                    )
+                    : [['', ''], ['', '']];
+                pt.push({
+                    _type: 'table',
+                    _key: _nextKey(),
+                    withHeadings: Boolean(d.withHeadings),
+                    content: tableContent,
+                });
+                break;
+            }
+            // Ver.3.5: アコーディオンブロック
+            case 'accordion':
+                pt.push({
+                    _type: 'accordion',
+                    _key: _nextKey(),
+                    title: String(d.title ?? ''),
+                    content: sanitizeHtml(String(d.content ?? '')),
+                });
+                break;
         }
     }
     return pt;
@@ -282,6 +337,27 @@ export function renderPortableText(body: PortableTextNode[]): string {
                 if (cap) html += `<figcaption>${_ptEsc(cap)}</figcaption>`;
                 html += '</figure>\n';
             }
+        } else if (node._type === 'table') {
+            // Ver.3.5: テーブルブロック
+            flushList();
+            const tbl = node as PTTable;
+            let thtml = '<table>';
+            let rowStart = 0;
+            if (tbl.withHeadings && tbl.content.length > 0) {
+                thtml += '<thead><tr>' + tbl.content[0].map(c => `<th>${_ptEsc(c)}</th>`).join('') + '</tr></thead>';
+                rowStart = 1;
+            }
+            thtml += '<tbody>';
+            for (let i = rowStart; i < tbl.content.length; i++) {
+                thtml += '<tr>' + tbl.content[i].map(c => `<td>${_ptEsc(c)}</td>`).join('') + '</tr>';
+            }
+            thtml += '</tbody></table>';
+            html += thtml + '\n';
+        } else if (node._type === 'accordion') {
+            // Ver.3.5: アコーディオンブロック
+            flushList();
+            const acc = node as PTAccordion;
+            html += `<details class="ce-accordion"><summary class="ce-accordion__title">${_ptEsc(acc.title)}</summary><div class="ce-accordion__content">${sanitizeHtml(acc.content)}</div></details>\n`;
         }
     }
     flushList();
@@ -996,6 +1072,227 @@ const builtinTools: Record<string, BlockToolFactory> = {
                     url: safeUrl,
                     caption: cap?.textContent ?? '',
                     alt: img?.alt ?? '',
+                };
+            },
+        };
+    },
+
+    // Ver.3.5: テーブルブロック（EDITOR_RULEBOOK.md §14.1）
+    // 最大20列×100行, Tab キーでセル間移動
+    table(data) {
+        const MAX_COLS = 20;
+        const MAX_ROWS = 100;
+        let withHeadings = Boolean(data.withHeadings);
+        const rawContent = data.content;
+        let content: string[][] = (Array.isArray(rawContent) && rawContent.length > 0)
+            ? (rawContent as unknown[]).map(row =>
+                Array.isArray(row) ? (row as unknown[]).map(cell => String(cell ?? '')) : ['']
+            )
+            : [['', ''], ['', '']];
+
+        // Clamp dimensions
+        if (content.length > MAX_ROWS) content = content.slice(0, MAX_ROWS);
+        content = content.map(row => row.length > MAX_COLS ? row.slice(0, MAX_COLS) : row);
+
+        let tableEl: HTMLTableElement;
+        let headingsBtn: HTMLButtonElement;
+
+        const buildTable = (): HTMLTableElement => {
+            const tbl = document.createElement('table');
+            tbl.className = 'ce-table';
+            const cols = content[0]?.length ?? 2;
+
+            if (withHeadings && content.length > 0) {
+                const thead = tbl.createTHead();
+                const hr = thead.insertRow();
+                content[0].forEach((cell, ci) => {
+                    const th = document.createElement('th');
+                    th.contentEditable = 'true';
+                    th.textContent = cell;
+                    attachTableCellHandlers(th, 0, ci, tbl);
+                    hr.appendChild(th);
+                });
+                const tbody = tbl.createTBody();
+                for (let ri = 1; ri < content.length; ri++) {
+                    const tr = tbody.insertRow();
+                    for (let ci = 0; ci < cols; ci++) {
+                        const td = tr.insertCell();
+                        td.contentEditable = 'true';
+                        td.textContent = content[ri]?.[ci] ?? '';
+                        attachTableCellHandlers(td, ri, ci, tbl);
+                    }
+                }
+            } else {
+                const tbody = tbl.createTBody();
+                for (let ri = 0; ri < content.length; ri++) {
+                    const tr = tbody.insertRow();
+                    for (let ci = 0; ci < cols; ci++) {
+                        const td = tr.insertCell();
+                        td.contentEditable = 'true';
+                        td.textContent = content[ri]?.[ci] ?? '';
+                        attachTableCellHandlers(td, ri, ci, tbl);
+                    }
+                }
+            }
+            return tbl;
+        };
+
+        const attachTableCellHandlers = (cell: HTMLElement, _ri: number, _ci: number, tbl: HTMLTableElement): void => {
+            cell.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const cells = Array.from(tbl.querySelectorAll<HTMLElement>('th[contenteditable], td[contenteditable]'));
+                    const idx = cells.indexOf(cell);
+                    if (!e.shiftKey && idx < cells.length - 1) {
+                        cells[idx + 1].focus();
+                    } else if (e.shiftKey && idx > 0) {
+                        cells[idx - 1].focus();
+                    }
+                }
+            });
+        };
+
+        const syncContent = (): void => {
+            if (!tableEl) return;
+            const rows = Array.from(tableEl.querySelectorAll<HTMLElement>('tr'));
+            content = rows.map(tr =>
+                Array.from(tr.querySelectorAll<HTMLElement>('th[contenteditable], td[contenteditable]'))
+                    .map(cell => cell.textContent ?? '')
+            );
+        };
+
+        return {
+            render() {
+                const wrap = document.createElement('div');
+                wrap.className = 'ce-table-wrap';
+
+                const controls = document.createElement('div');
+                controls.className = 'ce-table__controls';
+
+                headingsBtn = document.createElement('button');
+                headingsBtn.className = 'ce-table__toggle-headings';
+                headingsBtn.textContent = withHeadings ? i18n.t('table_headings_on') || 'Headings: ON' : i18n.t('table_headings_off') || 'Headings: OFF';
+                headingsBtn.title = 'Toggle header row';
+                headingsBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    syncContent();
+                    withHeadings = !withHeadings;
+                    headingsBtn.textContent = withHeadings ? i18n.t('table_headings_on') || 'Headings: ON' : i18n.t('table_headings_off') || 'Headings: OFF';
+                    const newTbl = buildTable();
+                    tableEl.replaceWith(newTbl);
+                    tableEl = newTbl;
+                    wrap.appendChild(tableEl);
+                });
+
+                const addRowBtn = document.createElement('button');
+                addRowBtn.className = 'ce-table__add-row';
+                addRowBtn.textContent = i18n.t('table_add_row') || '+ Row';
+                addRowBtn.title = 'Add row';
+                addRowBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    syncContent();
+                    if (content.length >= MAX_ROWS) return;
+                    const cols = content[0]?.length ?? 2;
+                    content.push(new Array<string>(cols).fill(''));
+                    const newTbl = buildTable();
+                    tableEl.replaceWith(newTbl);
+                    tableEl = newTbl;
+                    wrap.appendChild(tableEl);
+                });
+
+                const removeRowBtn = document.createElement('button');
+                removeRowBtn.className = 'ce-table__remove-row';
+                removeRowBtn.textContent = i18n.t('table_remove_row') || '- Row';
+                removeRowBtn.title = 'Remove last row';
+                removeRowBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    syncContent();
+                    const minRows = withHeadings ? 2 : 1;
+                    if (content.length <= minRows) return;
+                    content.pop();
+                    const newTbl = buildTable();
+                    tableEl.replaceWith(newTbl);
+                    tableEl = newTbl;
+                    wrap.appendChild(tableEl);
+                });
+
+                const addColBtn = document.createElement('button');
+                addColBtn.className = 'ce-table__add-col';
+                addColBtn.textContent = i18n.t('table_add_col') || '+ Col';
+                addColBtn.title = 'Add column';
+                addColBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    syncContent();
+                    if ((content[0]?.length ?? 0) >= MAX_COLS) return;
+                    content = content.map(row => [...row, '']);
+                    const newTbl = buildTable();
+                    tableEl.replaceWith(newTbl);
+                    tableEl = newTbl;
+                    wrap.appendChild(tableEl);
+                });
+
+                const removeColBtn = document.createElement('button');
+                removeColBtn.className = 'ce-table__remove-col';
+                removeColBtn.textContent = i18n.t('table_remove_col') || '- Col';
+                removeColBtn.title = 'Remove last column';
+                removeColBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    syncContent();
+                    if ((content[0]?.length ?? 0) <= 1) return;
+                    content = content.map(row => row.slice(0, row.length - 1));
+                    const newTbl = buildTable();
+                    tableEl.replaceWith(newTbl);
+                    tableEl = newTbl;
+                    wrap.appendChild(tableEl);
+                });
+
+                controls.appendChild(headingsBtn);
+                controls.appendChild(addRowBtn);
+                controls.appendChild(removeRowBtn);
+                controls.appendChild(addColBtn);
+                controls.appendChild(removeColBtn);
+
+                tableEl = buildTable();
+                wrap.appendChild(controls);
+                wrap.appendChild(tableEl);
+                return wrap;
+            },
+            save(_el) {
+                syncContent();
+                return { withHeadings, content };
+            },
+        };
+    },
+
+    // Ver.3.5: アコーディオンブロック（EDITOR_RULEBOOK.md §14.2）
+    accordion(data) {
+        return {
+            render() {
+                const wrap = document.createElement('div');
+                wrap.className = 'ce-accordion-edit';
+
+                const titleInput = document.createElement('input');
+                titleInput.type = 'text';
+                titleInput.className = 'ce-accordion__title-input';
+                titleInput.placeholder = i18n.t('accordion_title_placeholder') || 'Accordion title...';
+                titleInput.value = String(data.title ?? '');
+
+                const contentEl = document.createElement('div');
+                contentEl.className = 'ce-accordion__content-edit';
+                contentEl.contentEditable = 'true';
+                contentEl.innerHTML = sanitizeHtml(String(data.content ?? ''));
+                attachBackspaceHandler(contentEl);
+
+                wrap.appendChild(titleInput);
+                wrap.appendChild(contentEl);
+                return wrap;
+            },
+            save(el) {
+                const ti = el.querySelector<HTMLInputElement>('.ce-accordion__title-input');
+                const ce = el.querySelector<HTMLElement>('.ce-accordion__content-edit');
+                return {
+                    title: ti?.value ?? '',
+                    content: sanitizeHtml(ce?.innerHTML ?? ''),
                 };
             },
         };
@@ -1772,6 +2069,9 @@ export class Editor {
             { type: 'quote', label: i18n.t('block_quote') },
             { type: 'delimiter', label: '---' },
             { type: 'image', label: i18n.t('block_image') },
+            // Ver.3.5: テーブル / アコーディオンブロック追加
+            { type: 'table', label: i18n.t('block_table') || 'Table' },
+            { type: 'accordion', label: i18n.t('block_accordion') || 'Accordion' },
         ];
 
         const ac = new AbortController();
@@ -1789,6 +2089,10 @@ export class Editor {
                     defaultData = { level: 2 };
                 } else if (type === 'list') {
                     defaultData = { style: 'unordered', items: [''] };
+                } else if (type === 'table') {
+                    defaultData = { withHeadings: false, content: [['', ''], ['', '']] };
+                } else if (type === 'accordion') {
+                    defaultData = { title: '', content: '' };
                 }
                 this.insertBlock(type, defaultData, idx + 1);
                 toolbox.remove();
@@ -1879,6 +2183,29 @@ export function renderBlocks(blocks: BlockData[]): string {
                 const cap = d.caption ? `<figcaption>${escHtml(String(d.caption))}</figcaption>` : '';
                 return `<figure><img src="${url}" alt="${alt}"/>${cap}</figure>`;
             }
+            // Ver.3.5: テーブルブロック（renderBlocksはレガシー — PT経由を推奨）
+            case 'table': {
+                const rawContent = d.content;
+                const rows: string[][] = Array.isArray(rawContent)
+                    ? (rawContent as unknown[]).map(row => Array.isArray(row) ? (row as unknown[]).map(c => String(c ?? '')) : [])
+                    : [];
+                if (rows.length === 0) return '';
+                let thtml = '<table>';
+                let rowStart = 0;
+                if (d.withHeadings && rows.length > 0) {
+                    thtml += '<thead><tr>' + rows[0].map(c => `<th>${escHtml(c)}</th>`).join('') + '</tr></thead>';
+                    rowStart = 1;
+                }
+                thtml += '<tbody>';
+                for (let i = rowStart; i < rows.length; i++) {
+                    thtml += '<tr>' + rows[i].map(c => `<td>${escHtml(c)}</td>`).join('') + '</tr>';
+                }
+                thtml += '</tbody></table>';
+                return thtml;
+            }
+            // Ver.3.5: アコーディオンブロック（renderBlocksはレガシー — PT経由を推奨）
+            case 'accordion':
+                return `<details class="ce-accordion"><summary class="ce-accordion__title">${escHtml(String(d.title || ''))}</summary><div class="ce-accordion__content">${sanitizeHtml(String(d.content || ''))}</div></details>`;
             default:
                 return '';
         }

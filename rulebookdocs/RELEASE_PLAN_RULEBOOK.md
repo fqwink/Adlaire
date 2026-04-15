@@ -19,7 +19,7 @@
 
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
-| **Adlaire Static CMS** | Ver.3.4-52 | 2026-04-15 | 本番稼働中 |
+| **Adlaire Static CMS** | Ver.3.5-53 | 2026-04-15 | 本番稼働中 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -1133,15 +1133,16 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 > 仕様策定完了（2026-04-13）。EDITOR_RULEBOOK.md §14 / API_RULEBOOK.md §2.8, §4.9, §5.3.2 を参照。
 > **廃止ポリシー適用**: ブロック JSON + Markdown 形式を本バージョンで全面廃止。旧形式認識コードを即座に削除する。
+> 実装完了: 2026-04-15（Ver.3.5-53）
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
-| **廃止** | 旧 `blocks`/`markdown` format 認識コード全削除（`renderBlocksToHtml()`・`renderMarkdownToHtml()`・`markdown.ts` 削除） | 計画 |
-| **廃止** | ページデータの `content`・`format`・`blocks` フィールド廃止（`body` のみ有効） | 計画 |
-| エディタ | テーブルブロック（`"table"` PT型）追加（EDITOR_RULEBOOK.md §14.1） | 計画 |
-| エディタ | アコーディオンブロック（`"accordion"` PT型）追加（EDITOR_RULEBOOK.md §14.2） | 計画 |
-| メディア | 画像アップロード・管理基盤（API_RULEBOOK.md §4.9） | 計画 |
-| エディタ | 既存エディタの使い勝手改善（EDITOR_RULEBOOK.md §14.3） | 計画 |
+| **廃止** | 旧 `blocks`/`markdown` format 認識コード全削除（`renderBlocksToHtml()`・`renderMarkdownToHtml()`・`markdown.ts` 削除） | **実装済** |
+| **廃止** | ページデータの `content`・`format`・`blocks` フィールド廃止（`body` のみ有効） | **実装済** |
+| エディタ | テーブルブロック（`"table"` PT型）追加（EDITOR_RULEBOOK.md §14.1） | **実装済** |
+| エディタ | アコーディオンブロック（`"accordion"` PT型）追加（EDITOR_RULEBOOK.md §14.2） | **実装済** |
+| メディア | 画像アップロード・管理基盤（API_RULEBOOK.md §4.9） | **実装済** |
+| エディタ | 既存エディタの使い勝手改善（EDITOR_RULEBOOK.md §14.3） | **実装済** |
 
 ---
 
