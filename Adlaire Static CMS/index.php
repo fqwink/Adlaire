@@ -119,12 +119,9 @@ if (isset($_GET['preview'])) {
         $previewData = $app->storage->readPageData($previewSlug);
         if ($previewData !== false) {
             $app->config['page'] = $previewSlug;
-            $app->config['content'] = $previewData['content'];
-            $app->config['pageFormat'] = $previewData['format'] ?? 'blocks';
+            $app->config['pageBody'] = is_array($previewData['body'] ?? null) ? $previewData['body'] : [];
+            $app->config['pageType'] = $previewData['type'] ?? 'page';
             $app->config['pageStatus'] = $previewData['status'] ?? 'published';
-            if (isset($previewData['blocks'])) {
-                $app->config['pageBlocks'] = $previewData['blocks'];
-            }
         }
     }
 }

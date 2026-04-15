@@ -10,18 +10,29 @@
 
 /// <reference path="./globals.d.ts" />
 
+import type { PortableTextNode } from './editor.ts';
+
 // #64: PageSummary partial response対応 — フィールドをoptionalに
+// R6-46: tags フィールドを型定義に追加
 interface PageSummary {
-    format?: string;
+    type?: string;
+    posted_at?: string;
+    category?: string;
+    tags?: string[];
+    author?: string;
     status?: string;
     created_at?: string;
     updated_at?: string;
 }
 
 interface PageData {
-    content: string;
-    format: string;
+    body: PortableTextNode[];
     status: string;
+    type: string;
+    posted_at: string;
+    category: string;
+    tags: string[];
+    author: string;
     created_at: string;
     updated_at: string;
 }
@@ -37,7 +48,7 @@ interface SavePageResult {
 interface SearchResult {
     slug: string;
     snippet: string;
-    format: string;
+    type: string;
     status: string;
     updated_at: string;
 }
@@ -109,29 +120,33 @@ export const api = {
     },
 
     /**
-     * Create or update a page.
+     * Create or update a page (PT format).
      */
-    // R3-4: savePage slug空文字チェック + R3-5: format入力検証
-    async savePage(slug: string, content: string, format: string = 'blocks'): Promise<SavePageResult> {
+    // Ver.3.1: savePage PT body + post metadata対応
+    async savePage(
+        slug: string,
+        ptBody: PortableTextNode[],
+        type: string = 'page',
+        postedAt: string = '',
+        category: string = '',
+        tags: string[] = [],
+        author: string = '',
+    ): Promise<SavePageResult> {
         if (!slug) throw new Error('savePage: slug is required');
-        if (format !== 'blocks' && format !== 'markdown' && format !== 'html') {
-            throw new Error('savePage: invalid format');
-        }
-        const body = new URLSearchParams();
-        body.append('slug', slug);
-        body.append('format', format);
-        body.append('csrf', csrfToken);
-        if (format === 'blocks') {
-            body.append('blocks', content);
-            body.append('content', '');
-        } else {
-            body.append('content', content);
-        }
+        const params = new URLSearchParams();
+        params.append('slug', slug);
+        params.append('csrf', csrfToken);
+        params.append('body', JSON.stringify(ptBody));
+        if (type) params.append('type', type);
+        if (postedAt) params.append('posted_at', postedAt);
+        if (category) params.append('category', category);
+        if (tags.length > 0) params.append('tags', JSON.stringify(tags));
+        if (author) params.append('author', author);
 
         const res = await fetch(buildApiUrl('pages'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
+            body: params.toString(),
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
@@ -184,7 +199,8 @@ export const api = {
     // R3-8: restoreRevision slug/timestamp空文字チェック + R3-9: timestampフォーマット検証
     async restoreRevision(slug: string, timestamp: string): Promise<void> {
         if (!slug) throw new Error('restoreRevision: slug is required');
-        if (!timestamp || !/^\d+$/.test(timestamp)) throw new Error('restoreRevision: invalid timestamp');
+        // R6-20: タイムスタンプ形式を実際のファイル名形式に合わせる（例: 20240101_120000_ab1234）
+        if (!timestamp || !/^\d{8}_\d{6}(_[a-f0-9]+)?$/.test(timestamp)) throw new Error('restoreRevision: invalid timestamp');
         const body = new URLSearchParams();
         body.append('timestamp', timestamp);
         body.append('csrf', csrfToken);
@@ -222,8 +238,15 @@ export const api = {
      */
     // #106: exportSite — CSRF token更新追加 + エラーメッセージ統一
     // R3-11: exportSite extractApiError統一
+    // R6-2: GET → POST に修正（handleApiExport() は POST を要求）
     async exportSite(): Promise<string> {
-        const res = await fetch(buildApiUrl('export'));
+        const params = new URLSearchParams();
+        params.append('csrf', csrfToken);
+        const res = await fetch(buildApiUrl('export'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
         updateCsrfFromResponse(res);
         if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
         return res.text();
@@ -381,23 +404,47 @@ export const api = {
         }
     },
 
-    // Ver.2.9 TS#90: saveSidebar catch時にconsole.warn追加
-    // R3-18: saveSidebar blocks空チェック
-    async saveSidebar(blocks: string): Promise<void> {
-        if (!blocks) throw new Error('saveSidebar: blocks is required');
-        const body = new URLSearchParams();
-        body.append('blocks', blocks);
-        body.append('csrf', csrfToken);
+    // Ver.3.1: saveSidebar PT body対応
+    async saveSidebar(ptBody: PortableTextNode[]): Promise<void> {
+        const params = new URLSearchParams();
+        params.append('body', JSON.stringify(ptBody));
+        params.append('csrf', csrfToken);
 
         const res = await fetch(buildApiUrl('sidebar'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
+            body: params.toString(),
         });
         updateCsrfFromResponse(res);
         if (!res.ok) {
             console.warn('saveSidebar failed:', res.status);
             throw new Error(await extractApiError(res, res.status));
         }
+    },
+
+    // Ver.3.7: テーマ設定取得（API_RULEBOOK.md §4.10）
+    async getThemeSettings(theme: string): Promise<{ theme: string; settings: Record<string, unknown> }> {
+        if (!theme) throw new Error('getThemeSettings: theme is required');
+        const res = await fetch(buildApiUrl('theme-settings', { theme }));
+        updateCsrfFromResponse(res);
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
+        return res.json();
+    },
+
+    // Ver.3.7: テーマ設定保存（API_RULEBOOK.md §4.10）
+    async saveThemeSettings(theme: string, settings: Record<string, unknown>): Promise<void> {
+        if (!theme) throw new Error('saveThemeSettings: theme is required');
+        const params = new URLSearchParams();
+        params.append('theme', theme);
+        params.append('settings', JSON.stringify(settings));
+        params.append('csrf', csrfToken);
+
+        const res = await fetch(buildApiUrl('theme-settings'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
+        updateCsrfFromResponse(res);
+        if (!res.ok) { throw new Error(await extractApiError(res, res.status)); }
     },
 };

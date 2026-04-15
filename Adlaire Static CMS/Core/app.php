@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 3;
-    public const VERSION_MINOR = 0;
-    public const VERSION_BUILD = 48;
-    public const VERSION = 'Ver.3.0-48';
+    public const VERSION_MINOR = 9;
+    public const VERSION_BUILD = 57;
+    public const VERSION = 'Ver.3.9-57';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;
@@ -287,7 +287,6 @@ final class App
             $this->config['page'] = $this->requestPage;
         }
         $this->config['page'] = self::getSlug($this->config['page']);
-        $this->config['pageFormat'] = 'blocks';
         $this->config['pageStatus'] = 'published';
 
         if (isset($_GET['login']) || isset($_POST['login'])) {
@@ -304,12 +303,9 @@ final class App
                 $this->config['content'] = $this->defaults['new_page']['visitor'];
                 return;
             }
-            $this->config['content'] = $pageData['content'];
-            $this->config['pageFormat'] = $pageData['format'] ?? 'blocks';
+            $this->config['content'] = '';
             $this->config['pageStatus'] = $pageData['status'] ?? 'published';
-            if (isset($pageData['blocks'])) {
-                $this->config['pageBlocks'] = $pageData['blocks'];
-            }
+            $this->config['pageBody'] = $pageData['body'] ?? [];
             return;
         }
 
@@ -562,9 +558,8 @@ final class App
         $token = csrf_token();
         $safeToken = json_encode($token, self::JSON_JS_FLAGS);
         $safeLang = json_encode($this->language, self::JSON_JS_FLAGS);
-        $safeFormat = json_encode($this->config['pageFormat'] ?? 'blocks', self::JSON_JS_FLAGS);
         $n = $this->nonce !== '' ? " nonce=\"" . esc($this->nonce) . "\"" : '';
-        echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};var pageFormat={$safeFormat};</script>\n";
+        echo "\t<script{$n}>var csrfToken={$safeToken};var pageLang={$safeLang};</script>\n";
         echo "\t<script{$n}>i18n.init({$safeLang});</script>\n";
         $adminHeadHooks = $this->hooks['admin-head'] ?? [];
         if (is_array($adminHeadHooks)) {
@@ -601,8 +596,13 @@ final class App
         return ['name' => $themeName, 'description' => '', 'version' => '', 'author' => ''];
     }
 
-    /** @return array<int, array{type: string, data: array<string, mixed>}> */
-    public function getSidebarBlocks(): array
+    /**
+     * Returns sidebar content as Portable Text body array.
+     * Migrates legacy blocks format [{type, data}] to PT on first read.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getSidebarBody(): array
     {
         $config = $this->storage->readConfig();
         $raw = $config['sidebar_blocks'] ?? '';
@@ -614,15 +614,23 @@ final class App
             error_log('Adlaire: Failed to decode sidebar_blocks: ' . json_last_error_msg());
             return [];
         }
-        return is_array($data) ? $data : [];
+        if (!is_array($data) || $data === []) {
+            return [];
+        }
+        // Migration: if elements use old blocks format {type, data}, convert to PT
+        $first = reset($data);
+        if (is_array($first) && isset($first['type']) && !isset($first['_type'])) {
+            return $this->storage->convertBlocksToPT($data);
+        }
+        return $data;
     }
 
-    /** @param array<int, array{type: string, data: array<string, mixed>}> $blocks */
-    public function saveSidebarBlocks(array $blocks): bool
+    /** @param list<array<string, mixed>> $body */
+    public function saveSidebarBody(array $body): bool
     {
-        $json = json_encode($blocks, JSON_UNESCAPED_UNICODE);
+        $json = json_encode($body, JSON_UNESCAPED_UNICODE);
         if ($json === false) {
-            error_log('Adlaire: Failed to encode sidebar blocks JSON: ' . json_last_error_msg());
+            error_log('Adlaire: Failed to encode sidebar body JSON: ' . json_last_error_msg());
             return false;
         }
         return $this->storage->writeConfigValue('sidebar_blocks', $json);
@@ -642,22 +650,13 @@ final class App
 
     public function content(string $id, string $content): void
     {
-        $format = (string) ($this->config['pageFormat'] ?? 'blocks');
         $isPage = ($id === ($this->config['page'] ?? ''));
 
-        if ($format === 'blocks' && $isPage) {
-            $blocksB64 = '';
-            if (isset($this->config['pageBlocks'])) {
-                $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP;
-                $json = json_encode($this->config['pageBlocks'], $jsonFlags);
-                if ($json !== false) {
-                    $blocksB64 = base64_encode($json);
-                }
-            }
-            echo "<div class=\"blocks-content\" data-blocks-b64=\"" . esc($blocksB64) . "\"></div>";
-        } elseif ($format === 'markdown' && $isPage) {
-            $b64 = base64_encode($content);
-            echo "<div class=\"markdown-content\" data-raw-b64=\"" . esc($b64) . "\"></div>";
+        if ($isPage && isset($this->config['pageBody'])) {
+            $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP;
+            $json = json_encode($this->config['pageBody'], $jsonFlags);
+            $bodyB64 = ($json !== false) ? base64_encode($json) : '';
+            echo "<div class=\"pt-content\" data-body-b64=\"" . esc($bodyB64) . "\"></div>";
         } else {
             echo esc($content);
         }

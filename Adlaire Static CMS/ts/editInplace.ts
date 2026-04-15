@@ -10,23 +10,20 @@
  *
  * Also handles format switching via the format toolbar.
  *
- * Expects: global csrfToken, pageLang, pageFormat variables set by PHP.
+ * Expects: global csrfToken, pageLang variables set by PHP.
  */
 
 /// <reference path="./globals.d.ts" />
 
 import { autosize } from './autosize.ts';
-import { markdownToHtml } from './markdown.ts';
-import { Editor, renderBlocks, sanitizeHtml, escHtml, type EditorData } from './editor.ts';
+import { Editor, renderPortableText, ptToEditorData, editorDataToPT, sanitizeHtml, escHtml, type EditorData, type PortableTextNode } from './editor.ts';
 import { api, updateCsrfFromResponse } from './api.ts';
 import { i18n } from './i18n.ts';
 
 declare const pageLang: string | undefined;
-declare const pageFormat: string | undefined;
 
 // Expose globals for PHP templates
-(window as unknown as Record<string, unknown>).markdownToHtml = markdownToHtml;
-(window as unknown as Record<string, unknown>).renderBlocks = renderBlocks;
+(window as unknown as Record<string, unknown>).renderPortableText = renderPortableText;
 (window as unknown as Record<string, unknown>).sanitizeHtml = sanitizeHtml;
 (window as unknown as Record<string, unknown>).escHtml = escHtml;
 
@@ -184,53 +181,23 @@ function richTextHook(span: HTMLElement): void {
 
 // --- Content rendering for visitors ---
 
-// #94: render*Content二重呼び出し防止フラグ
-let _markdownRendered = false;
-function renderMarkdownContent(): void {
-    if (_markdownRendered) return;
-    _markdownRendered = true;
-    document.querySelectorAll<HTMLElement>('.markdown-content').forEach(el => {
-        const b64 = el.dataset.rawB64;
-        // #89: b64デコードエラーハンドリング
-        let raw: string;
+let _ptRendered = false;
+function renderPTContent(): void {
+    if (_ptRendered) return;
+    _ptRendered = true;
+    document.querySelectorAll<HTMLElement>('.pt-content').forEach(el => {
+        let raw = el.dataset.body || '';
+        const b64 = el.dataset.bodyB64;
         if (b64) {
-            // Ver.2.9 TS#88: atob失敗時console.warn
-            // R5-7: b64空文字チェック（空文字でatobするとエラーにはならないが空結果）
-            try { raw = b64.trim() ? new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))) : ''; } catch (e) { console.warn('renderMarkdownContent: atob failed', e); raw = el.textContent || ''; }
-        } else {
-            raw = el.textContent || '';
-        }
-        // R5-8: markdownToHtml型チェック強化
-        if (typeof markdownToHtml === 'function') {
-            try {
-                el.innerHTML = sanitizeHtml(markdownToHtml(raw));
-            } catch (e) {
-                console.warn('renderMarkdownContent: markdownToHtml failed', e);
-            }
-        }
-    });
-}
-
-let _blocksRendered = false;
-function renderBlocksContent(): void {
-    if (_blocksRendered) return;
-    _blocksRendered = true;
-    document.querySelectorAll<HTMLElement>('.blocks-content').forEach(el => {
-        let raw = el.dataset.blocks || '';
-        const b64 = el.dataset.blocksB64;
-        if (b64) {
-            // Ver.2.9 TS#89: atob失敗時console.warn
-            try { raw = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); } catch (e) { console.warn('renderBlocksContent: atob failed', e); }
+            try { raw = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); } catch (e) { console.warn('renderPTContent: atob failed', e); }
         }
         if (!raw) return;
         try {
-            const blocks = JSON.parse(raw);
-            // #111: パース結果のArray.isArrayチェック追加
-            if (!Array.isArray(blocks)) return;
-            el.innerHTML = sanitizeHtml(renderBlocks(blocks));
+            const body = JSON.parse(raw) as PortableTextNode[];
+            if (!Array.isArray(body)) return;
+            el.innerHTML = sanitizeHtml(renderPortableText(body));
         } catch (err) {
-            // #38: JSON.parse失敗時のconsole.warnログ出力
-            console.warn('Failed to parse blocks JSON:', err);
+            console.warn('renderPTContent: failed to parse body JSON:', err);
         }
     });
 }
@@ -241,26 +208,22 @@ function initBlockEditor(): void {
     document.querySelectorAll<HTMLElement>('.ce-editor-wrapper').forEach(wrapper => {
         // R4-23: wrapper.id空チェック — idのないラッパーは保存先が不明のためスキップ
         if (!wrapper.id) { console.warn('initBlockEditor: wrapper has no id, skipping'); return; }
-        // Support both data-blocks (JSON) and data-blocks-b64 (base64-encoded JSON)
-        let blocksRaw = wrapper.dataset.blocks || '';
-        const blocksB64 = wrapper.dataset.blocksB64;
-        if (blocksB64) {
-            try { blocksRaw = new TextDecoder().decode(Uint8Array.from(atob(blocksB64), c => c.charCodeAt(0))); } catch { /* empty */ }
+        // Support both data-body (JSON) and data-body-b64 (base64-encoded JSON) — PT format
+        let bodyRaw = wrapper.dataset.body || '';
+        const bodyB64 = wrapper.dataset.bodyB64;
+        if (bodyB64) {
+            try { bodyRaw = new TextDecoder().decode(Uint8Array.from(atob(bodyB64), c => c.charCodeAt(0))); } catch { /* empty */ }
         }
-        let blocks: { type: string; data: Record<string, unknown> }[] = [];
-        if (blocksRaw) {
+        let ptBody: PortableTextNode[] = [];
+        if (bodyRaw) {
             try {
-                const parsed = JSON.parse(blocksRaw);
-                // R4-24: JSON.parse結果のArray.isArrayチェック
-                blocks = Array.isArray(parsed) ? parsed : [];
-            } catch (err) { console.warn('Failed to parse blocks:', err); }
+                const parsed = JSON.parse(bodyRaw) as PortableTextNode[];
+                ptBody = Array.isArray(parsed) ? parsed : [];
+            } catch (err) { console.warn('initBlockEditor: failed to parse body JSON:', err); }
         }
 
-        const editorData = {
-            time: Date.now(),
-            version: '1.0',
-            blocks: blocks.length > 0 ? blocks : [{ type: 'paragraph', data: { text: '' } }],
-        };
+        // Convert PT body to internal EditorData for editing
+        const editorData = ptToEditorData(ptBody);
 
         const editorInstance = Editor.create(wrapper, { data: editorData });
         activeEditor = editorInstance;
@@ -288,8 +251,9 @@ function initBlockEditor(): void {
             if (!editorInstance) return;
             wrapperFlushSaving = true;
             const saved = editorInstance.save();
-            // #39/#69/#75: JSON.stringifyでキーソート統一 — 共通sortedReplacer使用
-            const json = JSON.stringify(saved.blocks, _sortedReplacer);
+            // Convert to Portable Text and serialize
+            const ptBody = editorDataToPT(saved);
+            const json = JSON.stringify(ptBody, _sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson) { wrapperFlushSaving = false; return; }
 
@@ -302,7 +266,14 @@ function initBlockEditor(): void {
                 return;
             }
             showSaveIndicator(wrapper, 'saving');
-            api.savePage(slug, json, 'blocks').then((result) => {
+            // Collect post metadata from admin UI if present
+            const metaType = (document.getElementById('meta-type') as HTMLSelectElement | null)?.value || 'page';
+            const metaPostedAt = (document.getElementById('meta-posted-at') as HTMLInputElement | null)?.value || '';
+            const metaCategory = (document.getElementById('meta-category') as HTMLInputElement | null)?.value || '';
+            const metaTagsRaw = (document.getElementById('meta-tags') as HTMLInputElement | null)?.value || '';
+            const metaTags = metaTagsRaw ? metaTagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+            const metaAuthor = (document.getElementById('meta-author') as HTMLInputElement | null)?.value || '';
+            api.savePage(slug, ptBody, metaType, metaPostedAt, metaCategory, metaTags, metaAuthor).then((result) => {
                 showSaveIndicator(wrapper, 'saved');
                 // Ver.2.9 TS#3/TS#7: 有効なCSRFトークンをキャッシュ
                 _lastValidCsrfToken = csrfToken;
@@ -348,18 +319,17 @@ function initBlockEditor(): void {
             // #59: activeEditor null後のsave防止
             if (!editorInstance || !activeEditor) return;
             const saved = editorInstance.save();
-            // #62/#69/#75: sortedReplacer共通化使用
-            const json = JSON.stringify(saved.blocks, _sortedReplacer);
+            const ptBody = editorDataToPT(saved);
+            // Ver.2.9 TS#69/#75: sortedReplacer共通化使用
+            const json = JSON.stringify(ptBody, _sortedReplacer);
             const slug = wrapper.id;
             if (!slug || json === lastSavedJson) return;
             lastSavedJson = json;
             const body = new URLSearchParams();
             body.append('slug', slug);
-            body.append('format', 'blocks');
+            body.append('body', json);
             // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
             body.append('csrf', _lastValidCsrfToken || csrfToken);
-            body.append('blocks', json);
-            body.append('content', '');
             // #13: sendBeacon失敗時のユーザー通知（返り値チェック）
             // Ver.2.9 TS#18: sendBeaconリトライ — 失敗時にXHR同期フォールバック
             const sent = navigator.sendBeacon('index.php?api=pages', body);
@@ -378,25 +348,21 @@ function initBlockEditor(): void {
     // #18: Sidebar editor
     const sidebarEl = document.querySelector<HTMLElement>('#sidebar-editor');
     if (sidebarEl) {
-        let sidebarBlocksRaw = sidebarEl.dataset.blocks || '';
-        const sidebarB64 = sidebarEl.dataset.blocksB64;
+        let sidebarBodyRaw = sidebarEl.dataset.body || '';
+        const sidebarB64 = sidebarEl.dataset.bodyB64;
         if (sidebarB64) {
-            try { sidebarBlocksRaw = new TextDecoder().decode(Uint8Array.from(atob(sidebarB64), c => c.charCodeAt(0))); } catch { /* empty */ }
+            try { sidebarBodyRaw = new TextDecoder().decode(Uint8Array.from(atob(sidebarB64), c => c.charCodeAt(0))); } catch { /* empty */ }
         }
-        let sidebarBlocks: { type: string; data: Record<string, unknown> }[] = [];
-        if (sidebarBlocksRaw) {
-            // R4-25: sidebar JSON.parse結果のArray.isArrayチェック
+        let sidebarPTBody: PortableTextNode[] = [];
+        if (sidebarBodyRaw) {
             try {
-                const parsed = JSON.parse(sidebarBlocksRaw);
-                sidebarBlocks = Array.isArray(parsed) ? parsed : [];
-            } catch (err) { console.warn('Failed to parse sidebar blocks:', err); }
+                const parsed = JSON.parse(sidebarBodyRaw);
+                sidebarPTBody = Array.isArray(parsed) ? parsed : [];
+            } catch (err) { console.warn('Failed to parse sidebar body:', err); }
         }
-
-        const sidebarData: EditorData = {
-            time: Date.now(),
-            version: '1.0',
-            blocks: sidebarBlocks.length > 0 ? sidebarBlocks : [{ type: 'paragraph', data: { text: '' } }],
-        };
+        const sidebarData: EditorData = sidebarPTBody.length > 0
+            ? ptToEditorData(sidebarPTBody)
+            : { time: Date.now(), version: '1.0', blocks: [{ type: 'paragraph', data: { text: '' } }] };
 
         const sidebarEditor = Editor.create(sidebarEl, { data: sidebarData });
 
@@ -409,11 +375,12 @@ function initBlockEditor(): void {
             if (sidebarFlushSaving) return;
             sidebarFlushSaving = true;
             const saved = sidebarEditor.save();
-            const json = JSON.stringify(saved.blocks, _sortedReplacer);
+            const ptBody = editorDataToPT(saved);
+            const json = JSON.stringify(ptBody, _sortedReplacer);
             if (json === sidebarLastJson) { sidebarFlushSaving = false; return; }
             sidebarLastJson = json;
             showSaveIndicator(sidebarEl, 'saving');
-            api.saveSidebar(json).then(() => {
+            api.saveSidebar(ptBody).then(() => {
                 showSaveIndicator(sidebarEl, 'saved');
             }).catch(() => {
                 showSaveIndicator(sidebarEl, 'error');
@@ -445,11 +412,12 @@ function initBlockEditor(): void {
                 sidebarSaveTimer = null;
             }
             const saved = sidebarEditor.save();
-            const json = JSON.stringify(saved.blocks, _sortedReplacer);
+            const ptBody = editorDataToPT(saved);
+            const json = JSON.stringify(ptBody, _sortedReplacer);
             if (json === sidebarLastJson) return;
             sidebarLastJson = json;
             const body = new URLSearchParams();
-            body.append('blocks', json);
+            body.append('body', json);
             // Ver.2.9 TS#3/TS#7: sendBeacon時はキャッシュ済み最終有効トークンを使用
             body.append('csrf', _lastValidCsrfToken || csrfToken);
             // #13: sendBeacon失敗時のユーザー通知
@@ -493,133 +461,6 @@ function showSaveIndicator(container: HTMLElement, state: 'saving' | 'saved' | '
     if (state !== 'saving') {
         const indicatorRef = indicator;
         setTimeout(() => { indicatorRef.className = 'ce-save-indicator'; }, 2000);
-    }
-}
-
-// --- Format switching ---
-
-function initFormatSwitcher(): void {
-    document.querySelectorAll<HTMLElement>('.ce-format-bar').forEach(bar => {
-        const slug = bar.dataset.slug;
-        if (!slug) return;
-
-        bar.querySelectorAll<HTMLButtonElement>('button[data-format]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const newFormat = btn.dataset.format;
-                if (!newFormat || btn.classList.contains('active')) return;
-
-                // #42: confirm()ダイアログのformat引数をescHtml() + confirm後のchangingフラグリセット
-                if (!confirm(i18n.t('confirm_format_switch', { format: escHtml(newFormat) }))) {
-                    changing = false;
-                    return;
-                }
-                // R5-27: switchFormat前にchangingフラグセット
-                changing = true;
-                switchFormat(slug, newFormat);
-            });
-        });
-    });
-}
-
-// Ver.2.9 TS#21: switchFormat location.reload重複防止フラグ
-let _switchFormatReloading = false;
-function switchFormat(slug: string, newFormat: string): void {
-    // Ver.2.9 TS#21: reload中の重複呼び出し防止
-    if (_switchFormatReloading) return;
-    // #15: switchFormat失敗時のロールバック — 元データを保持
-    // #109: 未使用変数previousEditorRef削除
-    let previousContent = '';
-    let previousFormat = '';
-    // Ver.2.9 TS#43: switchFormatデータ整形 — newFormatの入力検証
-    if (newFormat !== 'blocks' && newFormat !== 'markdown' && newFormat !== 'html') return;
-
-    // Gather current content before switching
-    let currentContent = '';
-
-    if (activeEditor) {
-        // Currently in blocks mode — extract text from blocks
-        const saved = activeEditor.save();
-        previousContent = JSON.stringify(saved.blocks);
-        previousFormat = 'blocks';
-        currentContent = saved.blocks.map(b => {
-            const d = b.data;
-            switch (b.type) {
-                case 'paragraph': return String(d.text || '');
-                case 'heading': return String(d.text || '');
-                case 'list': return ((d.items as string[]) || []).join('\n');
-                case 'code': return String(d.code || '');
-                case 'quote': return String(d.text || '');
-                default: return '';
-            }
-        }).filter(Boolean).join('\n\n');
-
-        // Destroy current editor
-        activeEditor.destroy();
-        activeEditor = null;
-    } else {
-        // Currently in text mode — get from the span
-        const span = document.getElementById(slug);
-        if (span) {
-            const textarea = span.querySelector('textarea');
-            if (textarea) {
-                currentContent = textarea.value;
-                previousContent = textarea.value;
-            } else {
-                currentContent = span.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-                previousContent = currentContent;
-            }
-            previousFormat = span.dataset.format || 'markdown';
-        }
-    }
-
-    // Strip HTML tags for clean text when switching to markdown
-    if (newFormat === 'markdown') {
-        const tmp = document.createElement('div');
-        // #43: sanitizeHtml適用
-        tmp.innerHTML = sanitizeHtml(currentContent);
-        currentContent = tmp.textContent || '';
-    }
-    // R5-21: switchFormat内容最大長チェック — 巨大データの送信防止
-    if (currentContent.length > FIELD_SAVE_MAX_LENGTH) {
-        alert(i18n.t('content_too_large') || 'Content too large for format switch.');
-        return;
-    }
-
-    // #15: ロールバック関数
-    const rollback = (): void => {
-        if (previousFormat === 'blocks' && previousContent) {
-            api.savePage(slug, previousContent, 'blocks').finally(() => {
-                location.reload();
-            });
-        } else {
-            alert(i18n.t('format_switch_error') || 'Format switch failed. Reloading to recover.');
-            location.reload();
-        }
-    };
-
-    // Save with new format via API
-    if (newFormat === 'blocks') {
-        // #44: 段落分割ロジック改善（\n\n分割、連続空行も統一）
-        const blocks = currentContent.split(/\n{2,}/).filter(Boolean).map(text => ({
-            type: 'paragraph',
-            data: { text: sanitizeHtml(text.replace(/\n/g, '<br>')) },
-        }));
-
-        api.savePage(slug, JSON.stringify(blocks), 'blocks').then(() => {
-            // Ver.2.9 TS#21: reload重複防止
-            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
-        }).catch(() => {
-            // #15: 失敗時にロールバック
-            rollback();
-        });
-    } else {
-        api.savePage(slug, currentContent, newFormat).then(() => {
-            // Ver.2.9 TS#21: reload重複防止
-            if (!_switchFormatReloading) { _switchFormatReloading = true; location.reload(); }
-        }).catch(() => {
-            // #15: 失敗時にロールバック
-            rollback();
-        });
     }
 }
 
@@ -1224,13 +1065,11 @@ function initEditInplace(): void {
     if (_editInplaceInitialized) return;
     _editInplaceInitialized = true;
     // Render content for visitors
-    renderMarkdownContent();
-    renderBlocksContent();
+    renderPTContent();
 
     // Wait for i18n to be ready before initializing editor UI
     const initEditorUI = (): void => {
         initBlockEditor();
-        initFormatSwitcher();
         initPageReorder();
         initPageSearch();
         initBulkActions();

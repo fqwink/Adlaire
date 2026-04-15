@@ -132,5 +132,9 @@
     "password_fields_required": "すべてのパスワードフィールドを入力してください。",
     "password_mismatch": "新しいパスワードと確認が一致しません。",
     "password_same_as_current": "新しいパスワードは現在のパスワードと異なるものにしてください。",
-    "password_updated": "パスワードを更新しました。"
+    "password_updated": "パスワードを更新しました。",
+    "blog_title": "ブログ",
+    "blog_index_heading": "最新の投稿",
+    "blog_no_posts": "投稿はまだありません。",
+    "blog_read_more": "続きを読む"
 }

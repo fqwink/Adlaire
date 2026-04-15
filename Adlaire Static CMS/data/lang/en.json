@@ -132,5 +132,9 @@
     "password_fields_required": "All password fields are required.",
     "password_mismatch": "New password and confirmation do not match.",
     "password_same_as_current": "New password must be different from current password.",
-    "password_updated": "Password updated successfully."
+    "password_updated": "Password updated successfully.",
+    "blog_title": "Blog",
+    "blog_index_heading": "Latest Posts",
+    "blog_no_posts": "No posts yet.",
+    "blog_read_more": "Read more"
 }

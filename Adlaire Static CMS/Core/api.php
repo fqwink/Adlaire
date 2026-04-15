@@ -53,7 +53,7 @@ function handleEdit(): void
     if ($fieldname === '') {
         return;
     }
-    $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'content', 'status', 'format', 'blocks'];
+    $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'status'];
     if (!in_array($fieldname, $allowedConfigFields, true) && !FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
         exit;
@@ -83,12 +83,9 @@ function handleEdit(): void
     if ($storage->isConfigKey($fieldname)) {
         $result = $storage->writeConfigValue($fieldname, $content);
     } else {
-        // Preserve existing page format when editing inline
-        $existing = $storage->readPageData($fieldname);
-        $format = ($existing !== false && isset($existing['format'])) ? $existing['format'] : 'blocks';
-        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'published';
-        $blocks = ($existing !== false && isset($existing['blocks'])) ? $existing['blocks'] : null;
-        $result = $storage->writePage($fieldname, $content, $format, $blocks, $status);
+        // Page content inline save — not supported in PT format.
+        // Page content must be saved via the /api/pages endpoint.
+        $result = false;
     }
 
     if (!$result) {
@@ -179,7 +176,13 @@ function handleApi(): void
         'generate'  => handleApiGenerate($storage),
         'users'     => handleApiUsers($storage, $method),
         'license'   => handleApiLicense($method),
-        default     => apiError(404, 'Unknown endpoint'),
+        // Ver.3.5: メディア管理API（API_RULEBOOK.md §4.9）
+        'media'          => handleApiMedia($method),
+        // Ver.3.7: テーマ設定API（API_RULEBOOK.md §4.10）
+        'theme-settings' => handleApiThemeSettings($storage, $method),
+        // R8-38: バルク操作エンドポイント追加（api.ts は ?api=bulk に送信）
+        'bulk'           => handleApiBulk($storage, $method),
+        default          => apiError(404, 'Unknown endpoint'),
     };
     exit;
 }
@@ -221,12 +224,17 @@ function handleApiLicense(string $method): void
         $domain = $_SERVER['HTTP_HOST'] ?? '';
         $version = App::VERSION;
 
+        // R6-37: JSON_THROW_ON_ERROR を除去し他の json_encode と一貫したエラーチェックに統一
         $payload = json_encode([
             'system_key' => $systemKey,
             'domain' => $domain,
             'product_version' => $version,
             'timestamp' => gmdate('c'),
-        ], JSON_THROW_ON_ERROR);
+        ]);
+        if ($payload === false) {
+            apiError(500, 'Failed to encode license payload');
+            return;
+        }
 
         $context = stream_context_create([
             'http' => [
@@ -305,12 +313,17 @@ function handleApiPages(FileStorage $storage, string $method): void
         apiPageReorder($storage);
         return;
     }
+    // R8-38: bulk-status / bulk-delete は ?api=bulk 経由に移行（handleApiBulk）
+    // 後方互換として ?api=pages&action=bulk-* も継続サポート
     if ($method === 'POST' && $action === 'bulk-status') {
-        apiBulkStatus($storage);
+        $slugs = is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : [];
+        $status = is_string($_POST['status'] ?? null) ? (string) ($_POST['status'] ?? '') : '';
+        apiBulkStatus($storage, $slugs, $status);
         return;
     }
     if ($method === 'POST' && $action === 'bulk-delete') {
-        apiBulkDelete($storage);
+        $slugs = is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : [];
+        apiBulkDelete($storage, $slugs);
         return;
     }
     if ($action === 'sidebar') {
@@ -336,8 +349,11 @@ function apiPageList(FileStorage $storage): void
     $summary = [];
     foreach ($pages as $slug => $data) {
         $summary[$slug] = [
-            'format'     => $data['format'] ?? 'blocks',
             'status'     => $data['status'] ?? 'published',
+            'type'       => $data['type'] ?? 'page',
+            'posted_at'  => $data['posted_at'] ?? '',
+            'category'   => $data['category'] ?? '',
+            'author'     => $data['author'] ?? '',
             'created_at' => $data['created_at'] ?? '',
             'updated_at' => $data['updated_at'] ?? '',
         ];
@@ -356,7 +372,19 @@ function apiPageGet(FileStorage $storage, string $slug): void
         apiError(404, 'Page not found');
         return;
     }
-    apiResponse(['page' => $slug, 'data' => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    // Return only the fields the frontend needs (exclude large body from summary)
+    $response = [
+        'body'       => $data['body'] ?? [],
+        'status'     => $data['status'] ?? 'published',
+        'type'       => $data['type'] ?? 'page',
+        'posted_at'  => $data['posted_at'] ?? '',
+        'category'   => $data['category'] ?? '',
+        'tags'       => $data['tags'] ?? [],
+        'author'     => $data['author'] ?? '',
+        'created_at' => $data['created_at'] ?? '',
+        'updated_at' => $data['updated_at'] ?? '',
+    ];
+    apiResponse(['page' => $slug, 'data' => $response], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 }
 
 function apiPageSave(FileStorage $storage): void
@@ -367,31 +395,25 @@ function apiPageSave(FileStorage $storage): void
     }
 
     $slug = $_POST['slug'] ?? null;
-    $content = $_POST['content'] ?? null;
-    $format = $_POST['format'] ?? 'blocks';
+    $bodyJson = $_POST['body'] ?? null;
 
-    if (!is_string($slug) || !is_string($content)) {
-        apiError(400, 'Missing slug or content');
+    if (!is_string($slug)) {
+        apiError(400, 'Missing slug');
         return;
     }
-
     if (!FileStorage::validateSlug($slug)) {
         apiError(400, 'Invalid slug');
         return;
     }
 
-    if (!in_array($format, ['markdown', 'blocks'], true)) {
-        apiError(400, 'Invalid format');
+    if (!is_string($bodyJson)) {
+        apiError(400, 'Missing body');
         return;
     }
-
-    $blocks = null;
-    if ($format === 'blocks' && isset($_POST['blocks'])) {
-        $blocks = json_decode($_POST['blocks'], true, 512);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
-            apiError(400, 'Invalid blocks JSON');
-            return;
-        }
+    $body = json_decode($bodyJson, true, API_PAGE_BODY_DECODE_DEPTH);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($body)) {
+        apiError(400, 'Invalid body JSON');
+        return;
     }
 
     if (isset($_POST['status'])) {
@@ -402,37 +424,45 @@ function apiPageSave(FileStorage $storage): void
         }
     } else {
         $existing = $storage->readPageData($slug);
-        $status = ($existing !== false && isset($existing['status'])) ? $existing['status'] : 'draft';
+        $status = ($existing !== false) ? ($existing['status'] ?? 'draft') : 'draft';
     }
-    $result = $storage->writePage($slug, $content, $format, $blocks, $status);
+
+    $type = isset($_POST['type']) && in_array($_POST['type'], ['page', 'post'], true)
+        ? $_POST['type']
+        : 'page';
+    $postedAt = is_string($_POST['posted_at'] ?? null) ? $_POST['posted_at'] : '';
+    // R6-30: author / category フィールド最大長チェック（DBなしフラットファイル保護）
+    $category = is_string($_POST['category'] ?? null) ? substr($_POST['category'], 0, 200) : '';
+    $tagsRaw = is_string($_POST['tags'] ?? null) ? $_POST['tags'] : '';
+    $tags = ($tagsRaw !== '') ? json_decode($tagsRaw, true) : [];
+    if (!is_array($tags)) {
+        $tags = [];
+    }
+    $author = is_string($_POST['author'] ?? null) ? substr($_POST['author'], 0, 200) : '';
+
+    $result = $storage->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
     if (!$result) {
         apiError(500, 'Write failed');
         return;
     }
 
     $warnings = [];
+    if ($status === 'published' && $body === []) {
+        $warnings[] = 'empty_content';
+    }
     if ($status === 'published') {
-        $isEmpty = false;
-        if ($format === 'blocks' && trim($content) === '' && ($blocks === null || $blocks === [])) {
-            $isEmpty = true;
-        }
-        if ($format === 'markdown' && trim($content) === '') {
-            $isEmpty = true;
-        }
-        if ($isEmpty) {
-            $warnings[] = 'empty_content';
-        }
-        if ($format === 'blocks' && is_array($blocks)) {
-            $hasHeading = false;
-            foreach ($blocks as $b) {
-                if (($b['type'] ?? '') === 'heading') {
+        $hasHeading = false;
+        foreach ($body as $node) {
+            if (is_array($node) && ($node['_type'] ?? '') === 'block') {
+                $style = $node['style'] ?? '';
+                if (in_array($style, ['h1', 'h2', 'h3'], true)) {
                     $hasHeading = true;
                     break;
                 }
             }
-            if (!$hasHeading) {
-                $warnings[] = 'no_heading';
-            }
+        }
+        if (!$hasHeading) {
+            $warnings[] = 'no_heading';
         }
     }
 
@@ -555,6 +585,9 @@ function apiRevisionRestore(FileStorage $storage, string $slug): void
 
 // --- Search API ---
 
+/** R6-13: JSON decode depth for page body (PT format, depth 64 is sufficient) */
+const API_PAGE_BODY_DECODE_DEPTH = 64;
+
 /** Maximum search query length */
 const API_SEARCH_MAX_QUERY_LENGTH = 200;
 
@@ -581,24 +614,26 @@ function handleApiSearch(FileStorage $storage): void
     $results = [];
 
     foreach ($pages as $slug => $data) {
-        $content = mb_strtolower($data['content'] ?? '', 'UTF-8');
+        $ptBody = is_array($data['body'] ?? null) ? $data['body'] : [];
+        $plainText = extractTextFromPT($ptBody);
+        $content = mb_strtolower($plainText, 'UTF-8');
         $pos = mb_strpos($content, $query, 0, 'UTF-8');
         if ($pos === false) {
             continue;
         }
 
         $start = max(0, $pos - API_SEARCH_SNIPPET_CONTEXT);
-        $snippet = mb_substr($data['content'], $start, API_SEARCH_SNIPPET_LENGTH, 'UTF-8');
+        $snippet = mb_substr($plainText, $start, API_SEARCH_SNIPPET_LENGTH, 'UTF-8');
         if ($start > 0) {
             $snippet = '...' . $snippet;
         }
 
         $results[] = [
             'slug'       => $slug,
-            'snippet'    => strip_tags($snippet),
-            'format'     => $data['format'],
-            'status'     => $data['status'],
-            'updated_at' => $data['updated_at'],
+            'snippet'    => $snippet,
+            'type'       => $data['type'] ?? 'page',
+            'status'     => $data['status'] ?? 'published',
+            'updated_at' => $data['updated_at'] ?? '',
         ];
     }
 
@@ -770,7 +805,8 @@ function handleApiImport(FileStorage $storage): void
     $imported = ['config' => false, 'pages' => 0];
 
     // Import config (whitelist keys only)
-    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language', 'sidebar_blocks', 'page_order'];
+    // Ver.3.7: theme_settings を追加
+    $allowedConfigKeys = ['themeSelect', 'menu', 'title', 'subside', 'description', 'keywords', 'copyright', 'language', 'sidebar_blocks', 'page_order', 'theme_settings'];
     if (isset($data['config']) && is_array($data['config'])) {
         $filteredConfig = array_intersect_key($data['config'], array_flip($allowedConfigKeys));
         if ($filteredConfig !== []) {
@@ -779,11 +815,11 @@ function handleApiImport(FileStorage $storage): void
         }
     }
 
-    // Import pages (whitelist keys only)
-    $allowedPageKeys = ['content', 'format', 'blocks', 'status', 'created_at', 'updated_at'];
+    // Import pages (PT format)
+    $allowedPageKeys = ['body', 'status', 'type', 'posted_at', 'category', 'tags', 'author', 'created_at', 'updated_at'];
     if (isset($data['pages']) && is_array($data['pages'])) {
         foreach ($data['pages'] as $slug => $pageData) {
-            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($pageData) || !isset($pageData['content'])) {
+            if (!is_string($slug) || !FileStorage::validateSlug($slug) || !is_array($pageData) || !isset($pageData['body'])) {
                 continue;
             }
             $pageData = array_intersect_key($pageData, array_flip($allowedPageKeys));
@@ -796,10 +832,14 @@ function handleApiImport(FileStorage $storage): void
                     unset($pageData['updated_at']);
                 }
             }
-            $format = $pageData['format'] ?? 'blocks';
-            $blocks = $pageData['blocks'] ?? null;
+            $body = is_array($pageData['body'] ?? null) ? $pageData['body'] : [];
             $status = $pageData['status'] ?? 'published';
-            $storage->writePage($slug, $pageData['content'], $format, $blocks, $status);
+            $type = $pageData['type'] ?? 'page';
+            $postedAt = $pageData['posted_at'] ?? '';
+            $category = $pageData['category'] ?? '';
+            $tags = is_array($pageData['tags'] ?? null) ? $pageData['tags'] : [];
+            $author = $pageData['author'] ?? '';
+            $storage->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
             $imported['pages']++;
         }
     }
@@ -824,7 +864,8 @@ function handleApiImport(FileStorage $storage): void
                 if (!is_string($ts) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $ts)) {
                     continue;
                 }
-                if (!is_array($revData) || !isset($revData['content'])) {
+                // R6-12: PT形式では 'body' キーを使用（'content' は旧形式）
+                if (!is_array($revData) || !isset($revData['body'])) {
                     continue;
                 }
                 $revFile = $revDir . '/' . $ts . '.json';
@@ -911,9 +952,26 @@ function handleApiUsers(FileStorage $storage, string $method): void
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $action = $_POST['action'] ?? '';
 
-        if ($action === 'generate') {
+        // R6-3: application/json ボディを $_POST にフォールバックして読む
+        $jsonBody = null;
+        $ct = is_string($_SERVER['CONTENT_TYPE'] ?? null) ? ($_SERVER['CONTENT_TYPE'] ?? '') : '';
+        if (str_contains($ct, 'application/json')) {
+            $raw = file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $jsonBody = $decoded;
+                }
+            }
+        }
+
+        $action = is_string($jsonBody['action'] ?? null)
+            ? (string) ($jsonBody['action'] ?? '')
+            : (is_string($_POST['action'] ?? null) ? (string) ($_POST['action'] ?? '') : '');
+
+        // R6-5: 'generate_sub_master' および 'generate' の両方を受け付ける
+        if ($action === 'generate' || $action === 'generate_sub_master') {
             $credentials = $storage->generateSubMasterCredentials();
             $loginId = $credentials['login_id'];
             $password = $credentials['password'];
@@ -952,7 +1010,12 @@ function handleApiUsers(FileStorage $storage, string $method): void
         }
 
         if ($action === 'disable') {
-            $username = is_string($_POST['user'] ?? null) ? trim($_POST['user'] ?? '') : '';
+            // R6-7: 'username' および旧来の 'user' フィールド両方に対応
+            $username = is_string($jsonBody['username'] ?? null)
+                ? trim((string) ($jsonBody['username'] ?? ''))
+                : (is_string($_POST['username'] ?? null)
+                    ? trim((string) ($_POST['username'] ?? ''))
+                    : (is_string($_POST['user'] ?? null) ? trim((string) ($_POST['user'] ?? '')) : ''));
             if ($username === '') {
                 apiError(400, 'Invalid username');
                 return;
@@ -962,7 +1025,8 @@ function handleApiUsers(FileStorage $storage, string $method): void
                 apiError(404, 'User not found');
                 return;
             }
-            if (!empty($targetUser['is_main'])) {
+            // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+            if (($targetUser['is_main'] ?? false) === true) {
                 apiError(400, 'Cannot disable main master');
                 return;
             }
@@ -974,23 +1038,29 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
 
-        if ($action === 'password') {
+        // R6-6: 'update_main_password' および 'password' の両方を受け付ける
+        if ($action === 'password' || $action === 'update_main_password') {
             $sessionUser = is_string($_SESSION['user'] ?? null) ? ($_SESSION['user'] ?? '') : '';
-            $password = is_string($_POST['password'] ?? null) ? ($_POST['password'] ?? '') : '';
-            if ($password === '' || strlen($password) < 8) {
+            // 'new_password' フィールド（api.ts 送信）と旧来の 'password' フィールド両方に対応
+            $newPassword = is_string($jsonBody['new_password'] ?? null)
+                ? (string) ($jsonBody['new_password'] ?? '')
+                : (is_string($_POST['new_password'] ?? null)
+                    ? (string) ($_POST['new_password'] ?? '')
+                    : (is_string($_POST['password'] ?? null) ? (string) ($_POST['password'] ?? '') : ''));
+            if ($newPassword === '' || strlen($newPassword) < 8) {
                 apiError(400, 'Password must be at least 8 characters');
                 return;
             }
-            if (strlen($password) > 256) {
+            if (strlen($newPassword) > 256) {
                 apiError(400, 'Password is too long');
                 return;
             }
             $weakPasswords = ['admin', 'password', '12345678', 'adlaire'];
-            if (in_array(strtolower($password), $weakPasswords, true)) {
+            if (in_array(strtolower($newPassword), $weakPasswords, true)) {
                 apiError(400, 'Password is too weak');
                 return;
             }
-            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
             if (!$storage->writeUser($sessionUser, ['password' => $newHash])) {
                 apiError(500, 'Failed to update password');
                 return;
@@ -1016,7 +1086,19 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
+
+        // R6-4: $_GET['username'] に優先、JSON ボディからも読む
         $username = is_string($_GET['username'] ?? null) ? trim($_GET['username'] ?? '') : '';
+        if ($username === '') {
+            // JSON ボディ（api.ts が送信する形式）からフォールバック
+            $raw = file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && is_string($decoded['username'] ?? null)) {
+                    $username = trim((string) ($decoded['username'] ?? ''));
+                }
+            }
+        }
         if ($username === '') {
             apiError(400, 'Invalid username');
             return;
@@ -1027,7 +1109,8 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
         $targetUser = $storage->getUser($username);
-        if ($targetUser !== false && !empty($targetUser['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if ($targetUser !== false && ($targetUser['is_main'] ?? false) === true) {
             apiError(400, 'Cannot delete main master');
             return;
         }
@@ -1084,8 +1167,8 @@ function apiSidebar(FileStorage $storage, string $method): void
 {
     $app = App::getInstance();
     if ($method === 'GET') {
-        $blocks = $app->getSidebarBlocks();
-        apiResponse(['blocks' => $blocks], JSON_UNESCAPED_UNICODE);
+        $body = $app->getSidebarBody();
+        apiResponse(['body' => $body], JSON_UNESCAPED_UNICODE);
         return;
     }
     if ($method === 'POST') {
@@ -1093,17 +1176,17 @@ function apiSidebar(FileStorage $storage, string $method): void
             apiError(403, 'CSRF verification failed');
             return;
         }
-        $raw = $_POST['blocks'] ?? '';
+        $raw = $_POST['body'] ?? '';
         if (!is_string($raw)) {
-            apiError(400, 'Invalid blocks parameter');
+            apiError(400, 'Invalid body parameter');
             return;
         }
-        $blocks = json_decode($raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($blocks)) {
-            apiError(400, 'Invalid blocks JSON');
+        $ptBody = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($ptBody)) {
+            apiError(400, 'Invalid body JSON');
             return;
         }
-        $result = $app->saveSidebarBlocks($blocks);
+        $result = $app->saveSidebarBody($ptBody);
         if (!$result) {
             apiError(500, 'Write failed');
             return;
@@ -1114,23 +1197,64 @@ function apiSidebar(FileStorage $storage, string $method): void
     apiError(405, 'Method not allowed');
 }
 
-function apiBulkStatus(FileStorage $storage): void
+// R8-38: handleApiBulk — バルク操作エンドポイント（JSON ボディ対応）
+// api.ts は ?api=bulk に JSON ボディで action/slugs/status を送信する
+function handleApiBulk(FileStorage $storage, string $method): void
 {
+    if ($method !== 'POST') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
     if (!csrf_verify()) {
         apiError(403, 'CSRF verification failed');
         return;
     }
 
-    $slugs = $_POST['slugs'] ?? [];
-    $status = is_string($_POST['status'] ?? '') ? ($_POST['status'] ?? '') : '';
-    if (!is_array($slugs) || !in_array($status, ['draft', 'published'], true)) {
-        apiError(400, 'Invalid parameters');
+    // JSON ボディ解析
+    $jsonBody = null;
+    $ct = is_string($_SERVER['CONTENT_TYPE'] ?? null) ? ($_SERVER['CONTENT_TYPE'] ?? '') : '';
+    if (str_contains($ct, 'application/json')) {
+        $raw = file_get_contents('php://input');
+        if ($raw !== false && $raw !== '') {
+            $decoded = json_decode($raw, true, 16);
+            if (is_array($decoded)) {
+                $jsonBody = $decoded;
+            }
+        }
+    }
+
+    $action = is_string($jsonBody['action'] ?? null) ? (string) ($jsonBody['action'] ?? '') : (is_string($_POST['action'] ?? null) ? (string) ($_POST['action'] ?? '') : '');
+    $slugsRaw = is_array($jsonBody['slugs'] ?? null) ? ($jsonBody['slugs'] ?? []) : (is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : []);
+
+    if ($action === 'status') {
+        $status = is_string($jsonBody['status'] ?? null) ? (string) ($jsonBody['status'] ?? '') : (is_string($_POST['status'] ?? null) ? (string) ($_POST['status'] ?? '') : '');
+        apiBulkStatus($storage, $slugsRaw, $status);
+    } elseif ($action === 'delete') {
+        apiBulkDelete($storage, $slugsRaw);
+    } else {
+        apiError(400, 'Invalid bulk action');
+    }
+}
+
+function apiBulkStatus(FileStorage $storage, array $slugs, string $status): void
+{
+    if (!in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid status');
+        return;
+    }
+    if (count($slugs) === 0) {
+        apiError(400, 'No slugs provided');
         return;
     }
 
     $updated = 0;
     foreach ($slugs as $slug) {
         if (is_string($slug) && FileStorage::validateSlug($slug)) {
+            // R6-25: 存在しない slug に対するステータス更新を防止
+            if ($storage->readPageData($slug) === false) {
+                continue;
+            }
             if ($storage->updatePageStatus($slug, $status)) {
                 $updated++;
             }
@@ -1140,21 +1264,15 @@ function apiBulkStatus(FileStorage $storage): void
     apiResponse(['status' => 'ok', 'updated' => $updated]);
 }
 
-function apiBulkDelete(FileStorage $storage): void
+function apiBulkDelete(FileStorage $storage, array $slugs): void
 {
-    if (!csrf_verify()) {
-        apiError(403, 'CSRF verification failed');
-        return;
-    }
-
     if (!isMainMasterSession($storage)) {
         apiError(403, 'Main master access required');
         return;
     }
 
-    $slugs = $_POST['slugs'] ?? [];
-    if (!is_array($slugs) || count($slugs) === 0) {
-        apiError(400, 'Invalid parameters');
+    if (count($slugs) === 0) {
+        apiError(400, 'No slugs provided');
         return;
     }
 
@@ -1185,6 +1303,11 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         apiError(400, 'Missing t1 or t2');
         return;
     }
+    // R6-40: タイムスタンプ形式バリデーション（任意文字列でのファイルアクセス試行防止）
+    if (!preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $t1) || !preg_match('/^\d{8}_\d{6}(_[a-f0-9]+)?$/', $t2)) {
+        apiError(400, 'Invalid timestamp format');
+        return;
+    }
     if ($t1 === $t2) {
         apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => [], 'removed' => [], 'changed' => []], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         return;
@@ -1197,13 +1320,15 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
         return;
     }
 
-    $blocks1 = is_array($data1['blocks'] ?? null) ? $data1['blocks'] : [];
-    $blocks2 = is_array($data2['blocks'] ?? null) ? $data2['blocks'] : [];
+    // R6-8: PT形式では 'body' キーを使用（'blocks' は旧形式）
+    $blocks1 = is_array($data1['body'] ?? null) ? $data1['body'] : [];
+    $blocks2 = is_array($data2['body'] ?? null) ? $data2['body'] : [];
 
     $added = [];
     $removed = [];
     $changed = [];
 
+    // R8-16: ブロック比較は位置ベースの浅い比較（deep diff は実装対象外）
     $max = max(count($blocks1), count($blocks2));
     for ($i = 0; $i < $max; $i++) {
         $b1 = $blocks1[$i] ?? null;
@@ -1222,6 +1347,308 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     }
 
     apiResponse(['slug' => $slug, 't1' => $t1, 't2' => $t2, 'added' => $added, 'removed' => $removed, 'changed' => $changed], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+// --- Media API (Ver.3.5: API_RULEBOOK.md §4.9) ---
+
+/** Media storage directory (relative to CMS root) */
+const API_MEDIA_DIR = 'data/media';
+
+/** Allowed media extensions */
+const API_MEDIA_ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
+/** Maximum upload file size (10 MB) */
+const API_MEDIA_MAX_SIZE = 10 * 1024 * 1024;
+
+/**
+ * Validate a media filename: only alphanumerics, dash, underscore, dot. No path traversal.
+ */
+function validateMediaFilename(string $name): bool
+{
+    // R9-28: 先頭・末尾ドットを拒否（隠しファイル・拡張子なしファイル対策）
+    return $name !== ''
+        && $name[0] !== '.'
+        && $name[-1] !== '.'
+        && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $name) === 1
+        && !str_contains($name, '..');
+}
+
+function handleApiMedia(string $method): void
+{
+    $mediaDir = dirname(__DIR__) . '/' . API_MEDIA_DIR;
+
+    if ($method === 'GET') {
+        // List media files
+        $files = [];
+        if (is_dir($mediaDir)) {
+            $entries = scandir($mediaDir);
+            if ($entries !== false) {
+                foreach ($entries as $entry) {
+                    if ($entry === '.' || $entry === '..') {
+                        continue;
+                    }
+                    $path = $mediaDir . '/' . $entry;
+                    if (!is_file($path) || is_link($path)) {
+                        continue;
+                    }
+                    $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                    if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+                        continue;
+                    }
+                    $files[] = [
+                        'name'       => $entry,
+                        'size'       => (int) filesize($path),
+                        'updated_at' => date('c', (int) filemtime($path)),
+                    ];
+                }
+            }
+        }
+        apiResponse(['files' => $files], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+
+        // Create media directory if needed
+        if (!is_dir($mediaDir)) {
+            if (!@mkdir($mediaDir, 0755, true) && !is_dir($mediaDir)) {
+                // R6-33: ディレクトリ作成失敗時のエラーログ追加
+                error_log('Adlaire: Failed to create media directory: ' . $mediaDir);
+                apiError(500, 'Failed to create media directory');
+                return;
+            }
+        }
+
+        $uploadedFile = $_FILES['file'] ?? null;
+        if (!is_array($uploadedFile) || !isset($uploadedFile['tmp_name']) || !is_string($uploadedFile['tmp_name'])) {
+            apiError(400, 'No file uploaded');
+            return;
+        }
+
+        $tmpName = $uploadedFile['tmp_name'];
+        // R6-10: $_FILES エラーコードチェック（PHPアップロードエラー検出）
+        $uploadError = (int) ($uploadedFile['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            apiError(400, 'Upload error: ' . $uploadError);
+            return;
+        }
+        if (!is_uploaded_file($tmpName)) {
+            apiError(400, 'Invalid upload');
+            return;
+        }
+
+        // R6-29: $_FILES['size'] は信頼できないため実際のファイルサイズを再確認
+        // R8-35: filesize() が false を返す場合（ファイル不存在等）に (int)→0 になるため個別チェック
+        $fileSizeRaw = filesize($tmpName);
+        if ($fileSizeRaw === false) {
+            apiError(400, 'Cannot read uploaded file size');
+            return;
+        }
+        $fileSize = (int) $fileSizeRaw;
+        if ($fileSize === 0) {
+            apiError(400, 'Empty file not allowed');
+            return;
+        }
+        if ($fileSize > API_MEDIA_MAX_SIZE) {
+            apiError(413, 'File exceeds 10MB limit');
+            return;
+        }
+
+        $originalName = is_string($uploadedFile['name'] ?? null) ? $uploadedFile['name'] : '';
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+            apiError(400, 'Unsupported file type');
+            return;
+        }
+
+        // R6-11: MIMEタイプ検証（拡張子偽装対策）
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo !== false) {
+            $mimeType = finfo_file($finfo, $tmpName);
+            finfo_close($finfo);
+            if ($mimeType === false || !in_array($mimeType, $allowedMimes, true)) {
+                apiError(400, 'Invalid file type');
+                return;
+            }
+        }
+
+        // Sanitize filename: strip path components, allow only safe characters
+        $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $baseName) ?? 'file';
+        $safeName = trim($safeName, '_');
+        // R6-45: 予測可能な 'upload' フォールバック名をランダム化
+        if ($safeName === '') {
+            $safeName = 'file_' . bin2hex(random_bytes(4));
+        }
+
+        // Deduplicate: append timestamp suffix if file exists
+        $filename = $safeName . '.' . $ext;
+        $destPath = $mediaDir . '/' . $filename;
+        // R6-18: time()の衝突リスク排除 — random_bytes使用
+        if (file_exists($destPath)) {
+            $filename = $safeName . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $destPath = $mediaDir . '/' . $filename;
+        }
+
+        if (!move_uploaded_file($tmpName, $destPath)) {
+            apiError(500, 'Failed to save file');
+            return;
+        }
+        chmod($destPath, 0644);
+
+        $url = '/' . API_MEDIA_DIR . '/' . $filename;
+        apiResponse(['status' => 'ok', 'filename' => $filename, 'url' => $url]);
+        return;
+    }
+
+    if ($method === 'DELETE') {
+        $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!is_string($csrfToken) || $csrfToken === '') {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $csrfSession = $_SESSION['csrf'] ?? '';
+        if (!is_string($csrfSession) || $csrfSession === '' || !hash_equals($csrfSession, $csrfToken)) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+
+        $file = is_string($_GET['file'] ?? null) ? trim($_GET['file'] ?? '') : '';
+        if (!validateMediaFilename($file)) {
+            apiError(400, 'Invalid filename');
+            return;
+        }
+
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        if (!in_array($ext, API_MEDIA_ALLOWED_EXTENSIONS, true)) {
+            apiError(400, 'Unsupported file type');
+            return;
+        }
+
+        $filePath = $mediaDir . '/' . $file;
+        // Resolve real path to prevent path traversal
+        $realMedia = realpath($mediaDir);
+        $realFile = realpath($filePath);
+        if ($realFile === false || $realMedia === false || !str_starts_with($realFile, $realMedia . DIRECTORY_SEPARATOR)) {
+            apiError(400, 'Invalid file path');
+            return;
+        }
+        if (!is_file($realFile) || is_link($realFile)) {
+            apiError(404, 'File not found');
+            return;
+        }
+
+        if (!unlink($realFile)) {
+            apiError(500, 'Failed to delete file');
+            return;
+        }
+
+        apiResponse(['status' => 'ok', 'deleted' => $file]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
+}
+
+// --- Theme Settings API (Ver.3.7: API_RULEBOOK.md §4.10) ---
+
+function handleApiThemeSettings(FileStorage $storage, string $method): void
+{
+    // Validate theme name helper
+    $validateTheme = static function (string $name): string|false {
+        if ($name === '') {
+            return false;
+        }
+        $themesBase = dirname(__DIR__) . '/themes';
+        $themePath = $themesBase . '/' . $name;
+        if (!is_dir($themePath) || is_link($themePath)) {
+            return false;
+        }
+        // Path traversal safety: realpath must be inside themes/
+        $realBase = realpath($themesBase);
+        $realTheme = realpath($themePath);
+        if ($realBase === false || $realTheme === false || !str_starts_with($realTheme, $realBase . DIRECTORY_SEPARATOR)) {
+            return false;
+        }
+        return $name;
+    };
+
+    if ($method === 'GET') {
+        $themeRaw = is_string($_GET['theme'] ?? null) ? basename(trim($_GET['theme'] ?? '')) : '';
+        $theme = $validateTheme($themeRaw);
+        if ($theme === false) {
+            apiError(404, 'Theme not found');
+            return;
+        }
+        $config = $storage->readConfig();
+        $themeSettings = is_array($config['theme_settings'] ?? null) ? $config['theme_settings'] : [];
+        $settings = is_array($themeSettings[$theme] ?? null) ? $themeSettings[$theme] : [];
+        apiResponse(['theme' => $theme, 'settings' => $settings], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    if ($method === 'POST') {
+        if (!csrf_verify()) {
+            apiError(403, 'CSRF verification failed');
+            return;
+        }
+        $themeRaw = is_string($_POST['theme'] ?? null) ? basename(trim($_POST['theme'] ?? '')) : '';
+        $theme = $validateTheme($themeRaw);
+        if ($theme === false) {
+            apiError(404, 'Theme not found');
+            return;
+        }
+        $settingsJson = is_string($_POST['settings'] ?? null) ? ($_POST['settings'] ?? '') : '';
+        if ($settingsJson === '') {
+            apiError(400, 'settings parameter required');
+            return;
+        }
+        $settings = json_decode($settingsJson, true, 32);
+        if (!is_array($settings) || json_last_error() !== JSON_ERROR_NONE) {
+            apiError(400, 'Invalid settings JSON');
+            return;
+        }
+        // R8-33: settings のキー数・キー長・値の型を検証（スカラーまたは1次元配列のみ許可）
+        if (count($settings) > 100) {
+            apiError(400, 'Too many settings keys');
+            return;
+        }
+        foreach ($settings as $key => $value) {
+            if (!is_string($key) || strlen($key) > 100) {
+                apiError(400, 'Invalid settings key');
+                return;
+            }
+            if (is_array($value)) {
+                foreach ($value as $subKey => $subVal) {
+                    if (!is_scalar($subVal) && $subVal !== null) {
+                        apiError(400, 'Settings values must be scalars or flat arrays');
+                        return;
+                    }
+                }
+            } elseif (!is_scalar($value) && $value !== null) {
+                apiError(400, 'Settings values must be scalars or flat arrays');
+                return;
+            }
+        }
+        // Read current theme_settings, merge for this theme, write back
+        $config = $storage->readConfig();
+        $themeSettings = is_array($config['theme_settings'] ?? null) ? $config['theme_settings'] : [];
+        $themeSettings[$theme] = $settings;
+        if (!$storage->writeConfig(['theme_settings' => $themeSettings])) {
+            apiError(500, 'Failed to save theme settings');
+            return;
+        }
+        apiResponse(['status' => 'ok', 'theme' => $theme]);
+        return;
+    }
+
+    apiError(405, 'Method not allowed');
 }
 
 function apiResponse(array $data, int $flags = 0): void

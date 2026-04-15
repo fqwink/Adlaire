@@ -45,6 +45,8 @@ final class FileStorage
         'themeSelect', 'menu', 'title',
         'subside', 'description', 'keywords', 'copyright',
         'language', 'page_order', 'sidebar_blocks',
+        // Ver.3.7: テーマ固有設定
+        'theme_settings',
     ];
 
     /** Maximum number of config backup generations to retain */
@@ -129,17 +131,30 @@ final class FileStorage
     }
 
     /**
-     * Migrate from legacy flat file format to new structure.
-     * Runs once automatically when config.json does not exist.
+     * Migrate from legacy formats to current structure.
+     * Phase 1: legacy flat-file → JSON (only when config.json absent).
+     * Phase 2: blocks JSON → Portable Text (runs once per installation).
      */
     public function migrate(): void
     {
-        if ($this->migrated || file_exists($this->configFile)) {
-            $this->migrated = true;
+        if ($this->migrated) {
             return;
         }
         $this->migrated = true;
 
+        if (!file_exists($this->configFile)) {
+            $this->migrateLegacyFiles();
+        }
+
+        $this->migratePagesToPT();
+    }
+
+    /**
+     * Migrate legacy flat files to Portable Text JSON page format.
+     * Called only when config.json does not exist (fresh/V2.x install).
+     */
+    private function migrateLegacyFiles(): void
+    {
         $realBase = realpath($this->basePath);
         if ($realBase === false) {
             $realBase = $this->basePath;
@@ -176,15 +191,34 @@ final class FileStorage
                 }
                 $dest = $this->pagesDir . '/' . $name . '.json';
                 if (!file_exists($dest)) {
-                    $mtime = date('c', filemtime($file) ?: time());
+                    // R9-49: filemtime false 時にエラーログ追加（レガシー移行コード）
+                    $fileMtime = filemtime($file);
+                    if ($fileMtime === false) {
+                        error_log('Adlaire: filemtime() failed during legacy migration for file: ' . $file);
+                    }
+                    $mtime = date('c', $fileMtime ?: time());
                     $content = file_get_contents($file);
                     $rawContent = $content !== false ? $content : '';
-                    $pageBlocks = [['type' => 'paragraph', 'data' => ['text' => $rawContent]]];
+                    $ptBody = [[
+                        '_type' => 'block',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'style' => 'normal',
+                        'markDefs' => [],
+                        'children' => [[
+                            '_type' => 'span',
+                            '_key' => bin2hex(random_bytes(4)),
+                            'text' => $rawContent,
+                            'marks' => [],
+                        ]],
+                    ]];
                     $pageData = [
-                        'content'    => $rawContent,
-                        'format'     => 'blocks',
+                        'body'       => $ptBody,
                         'status'     => 'published',
-                        'blocks'     => $pageBlocks,
+                        'type'       => 'page',
+                        'posted_at'  => '',
+                        'category'   => '',
+                        'tags'       => [],
+                        'author'     => '',
                         'created_at' => $mtime,
                         'updated_at' => $mtime,
                     ];
@@ -203,6 +237,185 @@ final class FileStorage
                 @unlink($legacyFile);
             }
         }
+    }
+
+    /**
+     * Migrate existing page JSON files from blocks format to Portable Text format.
+     * Runs once per installation (marker: data/.pt_migrated).
+     */
+    private function migratePagesToPT(): void
+    {
+        $markerFile = $this->basePath . '/.pt_migrated';
+        if (file_exists($markerFile)) {
+            return;
+        }
+
+        $files = glob($this->pagesDir . '/*.json');
+        if (!is_array($files)) {
+            $this->atomicWrite($markerFile, date('c'));
+            return;
+        }
+
+        foreach ($files as $file) {
+            if (is_link($file)) {
+                continue;
+            }
+            $json = $this->lockedRead($file);
+            if ($json === false || $json === '') {
+                continue;
+            }
+            $data = json_decode($json, true);
+            if (!is_array($data)) {
+                continue;
+            }
+
+            // Skip if already in PT format
+            if (isset($data['body']) && is_array($data['body']) && !isset($data['content']) && !isset($data['blocks'])) {
+                continue;
+            }
+
+            $body = [];
+            if (isset($data['blocks']) && is_array($data['blocks'])) {
+                $body = $this->convertBlocksToPT($data['blocks']);
+            } elseif (isset($data['content']) && is_string($data['content']) && $data['content'] !== '') {
+                $body = [[
+                    '_type' => 'block',
+                    '_key' => bin2hex(random_bytes(4)),
+                    'style' => 'normal',
+                    'markDefs' => [],
+                    'children' => [[
+                        '_type' => 'span',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'text' => $data['content'],
+                        'marks' => [],
+                    ]],
+                ]];
+            }
+
+            $newData = [
+                'body'       => $body,
+                'status'     => $data['status'] ?? 'published',
+                'type'       => $data['type'] ?? 'page',
+                'posted_at'  => $data['posted_at'] ?? '',
+                'category'   => $data['category'] ?? '',
+                'tags'       => is_array($data['tags'] ?? null) ? $data['tags'] : [],
+                'author'     => $data['author'] ?? '',
+                'created_at' => $data['created_at'] ?? date('c'),
+                'updated_at' => $data['updated_at'] ?? date('c'),
+            ];
+
+            $newJson = json_encode($newData, self::JSON_FLAGS);
+            if ($newJson !== false) {
+                $this->atomicWrite($file, $newJson);
+            }
+        }
+
+        $this->atomicWrite($markerFile, date('c'));
+    }
+
+    /**
+     * Convert legacy blocks array to Portable Text nodes.
+     * @param array<int, array{type: string, data: array<string, mixed>}> $blocks
+     * @return list<array<string, mixed>>
+     */
+    public function convertBlocksToPT(array $blocks): array
+    {
+        $pt = [];
+        foreach ($blocks as $block) {
+            if (!is_array($block)) {
+                continue;
+            }
+            $type = (string) ($block['type'] ?? '');
+            $d = is_array($block['data'] ?? null) ? $block['data'] : [];
+            switch ($type) {
+                case 'paragraph':
+                    $pt[] = [
+                        '_type' => 'block',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'style' => 'normal',
+                        'markDefs' => [],
+                        'children' => [[
+                            '_type' => 'span',
+                            '_key' => bin2hex(random_bytes(4)),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
+                            'marks' => [],
+                        ]],
+                    ];
+                    break;
+                case 'heading':
+                    $level = max(1, min(3, (int) ($d['level'] ?? 2)));
+                    $pt[] = [
+                        '_type' => 'block',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'style' => 'h' . $level,
+                        'markDefs' => [],
+                        'children' => [[
+                            '_type' => 'span',
+                            '_key' => bin2hex(random_bytes(4)),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
+                            'marks' => [],
+                        ]],
+                    ];
+                    break;
+                case 'list':
+                    $items = is_array($d['items'] ?? null) ? $d['items'] : [];
+                    $listStyle = (($d['style'] ?? '') === 'ordered') ? 'number' : 'bullet';
+                    foreach ($items as $item) {
+                        $pt[] = [
+                            '_type' => 'block',
+                            '_key' => bin2hex(random_bytes(4)),
+                            'style' => 'normal',
+                            'listItem' => $listStyle,
+                            'level' => 1,
+                            'markDefs' => [],
+                            'children' => [[
+                                '_type' => 'span',
+                                '_key' => bin2hex(random_bytes(4)),
+                                'text' => strip_tags((string) $item),
+                                'marks' => [],
+                            ]],
+                        ];
+                    }
+                    break;
+                case 'code':
+                    $pt[] = [
+                        '_type' => 'code',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'code' => (string) ($d['code'] ?? ''),
+                        'language' => (string) ($d['language'] ?? ''),
+                    ];
+                    break;
+                case 'quote':
+                    $pt[] = [
+                        '_type' => 'block',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'style' => 'blockquote',
+                        'markDefs' => [],
+                        'children' => [[
+                            '_type' => 'span',
+                            '_key' => bin2hex(random_bytes(4)),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
+                            'marks' => [],
+                        ]],
+                    ];
+                    break;
+                case 'delimiter':
+                    $pt[] = [
+                        '_type' => 'delimiter',
+                        '_key' => bin2hex(random_bytes(4)),
+                    ];
+                    break;
+                case 'image':
+                    $pt[] = [
+                        '_type' => 'image',
+                        '_key' => bin2hex(random_bytes(4)),
+                        'url' => (string) ($d['url'] ?? ''),
+                        'caption' => (string) ($d['caption'] ?? ''),
+                    ];
+                    break;
+            }
+        }
+        return $pt;
     }
 
     /**
@@ -299,7 +512,7 @@ final class FileStorage
     }
 
     /**
-     * @return array{content: string, format: string, status: string, created_at: string, updated_at: string, blocks?: array}|false
+     * @return array{body: list<array<string, mixed>>, status: string, type: string, posted_at: string, category: string, tags: list<string>, author: string, created_at: string, updated_at: string}|false
      */
     public function readPageData(string $slug): array|false
     {
@@ -324,28 +537,36 @@ final class FileStorage
             error_log('Adlaire: Failed to parse page data: ' . $slug . ' - ' . json_last_error_msg());
             return false;
         }
-        return is_array($data) && isset($data['content']) ? $data : false;
+        return is_array($data) && isset($data['body']) ? $data : false;
     }
 
     /**
-     * @param array<int, array{type: string, data: array<string, mixed>}>|null $blocks
+     * Write a page in Portable Text format.
+     * @param list<array<string, mixed>> $body Portable Text nodes
+     * @param list<string> $tags
      */
-    public function writePage(string $slug, string $content, string $format = 'blocks', ?array $blocks = null, string $status = 'published'): bool
-    {
+    public function writePage(
+        string $slug,
+        array $body,
+        string $status = 'published',
+        string $type = 'page',
+        string $postedAt = '',
+        string $category = '',
+        array $tags = [],
+        string $author = ''
+    ): bool {
         if (!self::validateSlug($slug)) {
             return false;
-        }
-
-        if (!in_array($format, ['markdown', 'blocks'], true)) {
-            $format = 'blocks';
         }
         if (!in_array($status, ['draft', 'published'], true)) {
             $status = 'published';
         }
+        if (!in_array($type, ['page', 'post'], true)) {
+            $type = 'page';
+        }
 
         $path = $this->pagesDir . '/' . $slug . '.json';
 
-        // Ensure target is within pagesDir
         $realPagesDir = realpath($this->pagesDir);
         if ($realPagesDir === false) {
             return false;
@@ -359,22 +580,21 @@ final class FileStorage
         $existing = $this->readPageData($slug);
         $createdAt = ($existing !== false) ? $existing['created_at'] : $now;
 
-        // Save revision before overwriting
         if ($existing !== false) {
             $this->saveRevision($slug, $existing);
         }
 
         $data = [
-            'content'    => $content,
-            'format'     => $format,
+            'body'       => $body,
             'status'     => $status,
+            'type'       => $type,
+            'posted_at'  => $postedAt,
+            'category'   => $category,
+            'tags'       => array_values(array_filter($tags, 'is_string')),
+            'author'     => $author,
             'created_at' => $createdAt,
             'updated_at' => $now,
         ];
-
-        if ($format === 'blocks' && $blocks !== null) {
-            $data['blocks'] = $blocks;
-        }
 
         $json = json_encode($data, self::JSON_FLAGS);
         if ($json === false) {
@@ -435,7 +655,7 @@ final class FileStorage
     }
 
     /**
-     * @return array<string, array{content: string, format: string, status: string, created_at: string, updated_at: string, blocks?: array}>
+     * @return array<string, array<string, mixed>>
      */
     public function listPages(): array
     {
@@ -473,16 +693,8 @@ final class FileStorage
                 default => $val,
             };
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {
-                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
-                if ($cachedIndex !== null) {
-                    foreach ($cachedIndex as $slug => $meta) {
-                        $data = $this->readPageData($slug);
-                        if ($data !== false) {
-                            $pages[$slug] = $data;
-                        }
-                    }
-                    return $pages;
-                }
+                // R8-19: メモリ超過時は追加ロードを行わず、現在の結果を返す
+                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages, returning partial results');
                 return $pages;
             }
         }
@@ -511,12 +723,16 @@ final class FileStorage
                 }
             }
 
-            // Write index cache (metadata only — excludes content/blocks for performance)
+            // Write index cache (metadata only — excludes body for performance)
             $cacheSummary = [];
             foreach ($pages as $slug => $data) {
                 $cacheSummary[$slug] = [
-                    'format'     => $data['format'] ?? 'blocks',
                     'status'     => $data['status'] ?? 'published',
+                    'type'       => $data['type'] ?? 'page',
+                    'posted_at'  => $data['posted_at'] ?? '',
+                    'category'   => $data['category'] ?? '',
+                    'author'     => $data['author'] ?? '',
+                    'tags'       => is_array($data['tags'] ?? null) ? $data['tags'] : [],
                     'created_at' => $data['created_at'] ?? '',
                     'updated_at' => $data['updated_at'] ?? '',
                 ];
@@ -577,13 +793,32 @@ final class FileStorage
     }
 
     /**
-     * List published pages only (for visitor-facing use).
+     * List published pages only (all types, for visitor-facing use).
      * @return array<string, array<string, mixed>>
      */
     public function listPublishedPages(): array
     {
         $all = $this->listPages();
         return array_filter($all, fn(array $data) => $data['status'] === 'published');
+    }
+
+    /**
+     * List published posts only (type: post, status: published).
+     * Sorted newest first by posted_at, then updated_at.
+     * @return array<string, array<string, mixed>>
+     */
+    public function listPublishedPosts(): array
+    {
+        $all = $this->listPublishedPages();
+        $posts = array_filter($all, fn(array $data) => ($data['type'] ?? 'page') === 'post');
+        uasort($posts, static function (array $a, array $b): int {
+            $dateA = ($a['posted_at'] !== '' && is_string($a['posted_at'])) ? $a['posted_at'] : ($a['updated_at'] ?? '');
+            $dateB = ($b['posted_at'] !== '' && is_string($b['posted_at'])) ? $b['posted_at'] : ($b['updated_at'] ?? '');
+            $ta = is_string($dateA) ? (strtotime($dateA) ?: 0) : 0;
+            $tb = is_string($dateB) ? (strtotime($dateB) ?: 0) : 0;
+            return $tb <=> $ta;
+        });
+        return $posts;
     }
 
     public function isConfigKey(string $key): bool
@@ -655,13 +890,8 @@ final class FileStorage
         if (count($files) <= self::MAX_BACKUPS) {
             return;
         }
-        usort($files, static function (string $a, string $b): int {
-            $mtimeA = filemtime($a);
-            $mtimeB = filemtime($b);
-            if ($mtimeA === false) { $mtimeA = 0; }
-            if ($mtimeB === false) { $mtimeB = 0; }
-            return $mtimeA <=> $mtimeB;
-        });
+        // R9-7: mtime 依存をやめ、ファイル名中のタイムスタンプで昇順ソート（クロック後退耐性）
+        usort($files, static fn(string $a, string $b): int => basename($a) <=> basename($b));
         $toRemove = array_slice($files, 0, max(0, count($files) - self::MAX_BACKUPS));
         foreach ($toRemove as $old) {
             @unlink($old);
@@ -697,7 +927,8 @@ final class FileStorage
         // Rotate old revisions
         $files = glob($dir . '/*.json');
         if (is_array($files) && count($files) > self::MAX_REVISIONS) {
-            sort($files);
+            // R8-50: basename でタイムスタンプ順ソートを明示的に保証
+            usort($files, static fn(string $a, string $b): int => basename($a) <=> basename($b));
             $toRemove = array_slice($files, 0, count($files) - self::MAX_REVISIONS);
             foreach ($toRemove as $old) {
                 @unlink($old);
@@ -775,14 +1006,41 @@ final class FileStorage
         }
 
         $data = json_decode($json, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || !isset($data['content'])) {
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
             return false;
         }
 
-        $format = $data['format'] ?? 'blocks';
-        $blocks = $data['blocks'] ?? null;
         $status = $data['status'] ?? 'published';
-        return $this->writePage($slug, $data['content'], $format, $blocks, $status);
+        $type = $data['type'] ?? 'page';
+        $postedAt = $data['posted_at'] ?? '';
+        $category = $data['category'] ?? '';
+        $tags = is_array($data['tags'] ?? null) ? $data['tags'] : [];
+        $author = $data['author'] ?? '';
+
+        // Handle both old format (blocks) and new format (body)
+        if (isset($data['body']) && is_array($data['body'])) {
+            $body = $data['body'];
+        } elseif (isset($data['blocks']) && is_array($data['blocks'])) {
+            $body = $this->convertBlocksToPT($data['blocks']);
+        } elseif (isset($data['content']) && is_string($data['content'])) {
+            $text = $data['content'];
+            $body = $text !== '' ? [[
+                '_type' => 'block',
+                '_key' => bin2hex(random_bytes(4)),
+                'style' => 'normal',
+                'markDefs' => [],
+                'children' => [[
+                    '_type' => 'span',
+                    '_key' => bin2hex(random_bytes(4)),
+                    'text' => $text,
+                    'marks' => [],
+                ]],
+            ]] : [];
+        } else {
+            $body = [];
+        }
+
+        return $this->writePage($slug, $body, $status, $type, $postedAt, $category, $tags, $author);
     }
 
     /** @return list<string> */
@@ -929,7 +1187,8 @@ final class FileStorage
         if (!isset($users[$username])) {
             return false;
         }
-        if (!empty($users[$username]['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if (($users[$username]['is_main'] ?? false) === true) {
             error_log('Adlaire: Cannot delete main master user');
             return false;
         }
@@ -1028,7 +1287,8 @@ final class FileStorage
             error_log('Adlaire: Cannot disable non-existent user: ' . $username);
             return false;
         }
-        if (!empty($users[$username]['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if (($users[$username]['is_main'] ?? false) === true) {
             error_log('Adlaire: Cannot disable main master user');
             return false;
         }
