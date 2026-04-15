@@ -180,6 +180,8 @@ function handleApi(): void
         'media'          => handleApiMedia($method),
         // Ver.3.7: テーマ設定API（API_RULEBOOK.md §4.10）
         'theme-settings' => handleApiThemeSettings($storage, $method),
+        // R8-38: バルク操作エンドポイント追加（api.ts は ?api=bulk に送信）
+        'bulk'           => handleApiBulk($storage, $method),
         default          => apiError(404, 'Unknown endpoint'),
     };
     exit;
@@ -311,12 +313,17 @@ function handleApiPages(FileStorage $storage, string $method): void
         apiPageReorder($storage);
         return;
     }
+    // R8-38: bulk-status / bulk-delete は ?api=bulk 経由に移行（handleApiBulk）
+    // 後方互換として ?api=pages&action=bulk-* も継続サポート
     if ($method === 'POST' && $action === 'bulk-status') {
-        apiBulkStatus($storage);
+        $slugs = is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : [];
+        $status = is_string($_POST['status'] ?? null) ? (string) ($_POST['status'] ?? '') : '';
+        apiBulkStatus($storage, $slugs, $status);
         return;
     }
     if ($method === 'POST' && $action === 'bulk-delete') {
-        apiBulkDelete($storage);
+        $slugs = is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : [];
+        apiBulkDelete($storage, $slugs);
         return;
     }
     if ($action === 'sidebar') {
@@ -1018,7 +1025,8 @@ function handleApiUsers(FileStorage $storage, string $method): void
                 apiError(404, 'User not found');
                 return;
             }
-            if (!empty($targetUser['is_main'])) {
+            // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+            if (($targetUser['is_main'] ?? false) === true) {
                 apiError(400, 'Cannot disable main master');
                 return;
             }
@@ -1101,7 +1109,8 @@ function handleApiUsers(FileStorage $storage, string $method): void
             return;
         }
         $targetUser = $storage->getUser($username);
-        if ($targetUser !== false && !empty($targetUser['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if ($targetUser !== false && ($targetUser['is_main'] ?? false) === true) {
             apiError(400, 'Cannot delete main master');
             return;
         }
@@ -1188,17 +1197,54 @@ function apiSidebar(FileStorage $storage, string $method): void
     apiError(405, 'Method not allowed');
 }
 
-function apiBulkStatus(FileStorage $storage): void
+// R8-38: handleApiBulk — バルク操作エンドポイント（JSON ボディ対応）
+// api.ts は ?api=bulk に JSON ボディで action/slugs/status を送信する
+function handleApiBulk(FileStorage $storage, string $method): void
 {
+    if ($method !== 'POST') {
+        apiError(405, 'Method not allowed');
+        return;
+    }
+
     if (!csrf_verify()) {
         apiError(403, 'CSRF verification failed');
         return;
     }
 
-    $slugs = $_POST['slugs'] ?? [];
-    $status = is_string($_POST['status'] ?? '') ? ($_POST['status'] ?? '') : '';
-    if (!is_array($slugs) || !in_array($status, ['draft', 'published'], true)) {
-        apiError(400, 'Invalid parameters');
+    // JSON ボディ解析
+    $jsonBody = null;
+    $ct = is_string($_SERVER['CONTENT_TYPE'] ?? null) ? ($_SERVER['CONTENT_TYPE'] ?? '') : '';
+    if (str_contains($ct, 'application/json')) {
+        $raw = file_get_contents('php://input');
+        if ($raw !== false && $raw !== '') {
+            $decoded = json_decode($raw, true, 16);
+            if (is_array($decoded)) {
+                $jsonBody = $decoded;
+            }
+        }
+    }
+
+    $action = is_string($jsonBody['action'] ?? null) ? (string) ($jsonBody['action'] ?? '') : (is_string($_POST['action'] ?? null) ? (string) ($_POST['action'] ?? '') : '');
+    $slugsRaw = is_array($jsonBody['slugs'] ?? null) ? ($jsonBody['slugs'] ?? []) : (is_array($_POST['slugs'] ?? null) ? ($_POST['slugs'] ?? []) : []);
+
+    if ($action === 'status') {
+        $status = is_string($jsonBody['status'] ?? null) ? (string) ($jsonBody['status'] ?? '') : (is_string($_POST['status'] ?? null) ? (string) ($_POST['status'] ?? '') : '');
+        apiBulkStatus($storage, $slugsRaw, $status);
+    } elseif ($action === 'delete') {
+        apiBulkDelete($storage, $slugsRaw);
+    } else {
+        apiError(400, 'Invalid bulk action');
+    }
+}
+
+function apiBulkStatus(FileStorage $storage, array $slugs, string $status): void
+{
+    if (!in_array($status, ['draft', 'published'], true)) {
+        apiError(400, 'Invalid status');
+        return;
+    }
+    if (count($slugs) === 0) {
+        apiError(400, 'No slugs provided');
         return;
     }
 
@@ -1218,21 +1264,15 @@ function apiBulkStatus(FileStorage $storage): void
     apiResponse(['status' => 'ok', 'updated' => $updated]);
 }
 
-function apiBulkDelete(FileStorage $storage): void
+function apiBulkDelete(FileStorage $storage, array $slugs): void
 {
-    if (!csrf_verify()) {
-        apiError(403, 'CSRF verification failed');
-        return;
-    }
-
     if (!isMainMasterSession($storage)) {
         apiError(403, 'Main master access required');
         return;
     }
 
-    $slugs = $_POST['slugs'] ?? [];
-    if (!is_array($slugs) || count($slugs) === 0) {
-        apiError(400, 'Invalid parameters');
+    if (count($slugs) === 0) {
+        apiError(400, 'No slugs provided');
         return;
     }
 
@@ -1288,6 +1328,7 @@ function apiRevisionDiff(FileStorage $storage, string $slug): void
     $removed = [];
     $changed = [];
 
+    // R8-16: ブロック比較は位置ベースの浅い比較（deep diff は実装対象外）
     $max = max(count($blocks1), count($blocks2));
     for ($i = 0; $i < $max; $i++) {
         $b1 = $blocks1[$i] ?? null;
@@ -1396,9 +1437,16 @@ function handleApiMedia(string $method): void
         }
 
         // R6-29: $_FILES['size'] は信頼できないため実際のファイルサイズを再確認
-        $fileSize = (int) filesize($tmpName);
-        if ($fileSize <= 0) {
-            $fileSize = (int) ($uploadedFile['size'] ?? 0);
+        // R8-35: filesize() が false を返す場合（ファイル不存在等）に (int)→0 になるため個別チェック
+        $fileSizeRaw = filesize($tmpName);
+        if ($fileSizeRaw === false) {
+            apiError(400, 'Cannot read uploaded file size');
+            return;
+        }
+        $fileSize = (int) $fileSizeRaw;
+        if ($fileSize === 0) {
+            apiError(400, 'Empty file not allowed');
+            return;
         }
         if ($fileSize > API_MEDIA_MAX_SIZE) {
             apiError(413, 'File exceeds 10MB limit');
@@ -1560,6 +1608,28 @@ function handleApiThemeSettings(FileStorage $storage, string $method): void
         if (!is_array($settings) || json_last_error() !== JSON_ERROR_NONE) {
             apiError(400, 'Invalid settings JSON');
             return;
+        }
+        // R8-33: settings のキー数・キー長・値の型を検証（スカラーまたは1次元配列のみ許可）
+        if (count($settings) > 100) {
+            apiError(400, 'Too many settings keys');
+            return;
+        }
+        foreach ($settings as $key => $value) {
+            if (!is_string($key) || strlen($key) > 100) {
+                apiError(400, 'Invalid settings key');
+                return;
+            }
+            if (is_array($value)) {
+                foreach ($value as $subKey => $subVal) {
+                    if (!is_scalar($subVal) && $subVal !== null) {
+                        apiError(400, 'Settings values must be scalars or flat arrays');
+                        return;
+                    }
+                }
+            } elseif (!is_scalar($value) && $value !== null) {
+                apiError(400, 'Settings values must be scalars or flat arrays');
+                return;
+            }
         }
         // Read current theme_settings, merge for this theme, write back
         $config = $storage->readConfig();

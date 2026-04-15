@@ -688,16 +688,8 @@ final class FileStorage
                 default => $val,
             };
             if (memory_get_usage(true) > (int) ($memoryLimitBytes * self::MEMORY_THRESHOLD)) {
-                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages');
-                if ($cachedIndex !== null) {
-                    foreach ($cachedIndex as $slug => $meta) {
-                        $data = $this->readPageData($slug);
-                        if ($data !== false) {
-                            $pages[$slug] = $data;
-                        }
-                    }
-                    return $pages;
-                }
+                // R8-19: メモリ超過時は追加ロードを行わず、現在の結果を返す
+                error_log('Adlaire: Memory usage exceeds 80% of limit during listPages, returning partial results');
                 return $pages;
             }
         }
@@ -935,7 +927,8 @@ final class FileStorage
         // Rotate old revisions
         $files = glob($dir . '/*.json');
         if (is_array($files) && count($files) > self::MAX_REVISIONS) {
-            sort($files);
+            // R8-50: basename でタイムスタンプ順ソートを明示的に保証
+            usort($files, static fn(string $a, string $b): int => basename($a) <=> basename($b));
             $toRemove = array_slice($files, 0, count($files) - self::MAX_REVISIONS);
             foreach ($toRemove as $old) {
                 @unlink($old);
@@ -1194,7 +1187,8 @@ final class FileStorage
         if (!isset($users[$username])) {
             return false;
         }
-        if (!empty($users[$username]['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if (($users[$username]['is_main'] ?? false) === true) {
             error_log('Adlaire: Cannot delete main master user');
             return false;
         }
@@ -1293,7 +1287,8 @@ final class FileStorage
             error_log('Adlaire: Cannot disable non-existent user: ' . $username);
             return false;
         }
-        if (!empty($users[$username]['is_main'])) {
+        // R8-30: !empty() の falsy value 問題を回避し strict に === true で判定
+        if (($users[$username]['is_main'] ?? false) === true) {
             error_log('Adlaire: Cannot disable main master user');
             return false;
         }

@@ -54,6 +54,8 @@ function login_rate_check(): bool
 
     $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
     if (!is_string($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        // R8-21: 無効な IP アドレスを記録し、ローカルホストにフォールバック
+        error_log('Adlaire: Invalid or missing REMOTE_ADDR, falling back to 127.0.0.1');
         $ip = '127.0.0.1';
     }
     $rateDir = __DIR__ . '/../data/system';
@@ -131,6 +133,8 @@ function login_rate_check(): bool
         rewind($fp);
         $encoded = json_encode($attempts);
         if ($encoded === false || fwrite($fp, $encoded) === false) {
+            // R8-53: レート制限データの書き込み失敗をログに記録
+            error_log('Adlaire: Failed to write rate limit attempts data, writing empty array fallback');
             ftruncate($fp, 0);
             rewind($fp);
             fwrite($fp, '[]');

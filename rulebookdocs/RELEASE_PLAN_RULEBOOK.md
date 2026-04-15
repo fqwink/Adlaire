@@ -19,7 +19,7 @@
 
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
-| **Adlaire Static CMS** | Ver.3.7-55 | 2026-04-15 | 本番稼働中 |
+| **Adlaire Static CMS** | Ver.3.8-56 | 2026-04-15 | 本番稼働中 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -35,9 +35,9 @@
 ## Adlaire Release Plan RULEBOOK
 
 - 文書名: Adlaire Release Plan RULEBOOK
-- 文書バージョン: Ver.3.4
+- 文書バージョン: Ver.3.5
 - 作成日: 2026-04-02
-- 最終改訂: 2026-04-13
+- 最終改訂: 2026-04-15
 - 対象製品: Adlaire Static CMS
 - 文書種別: リリース計画・リリース履歴を管理する規範文書
 - 文書目的: Adlaire の全バージョンのリリース計画と履歴を一元管理する
@@ -53,13 +53,21 @@
 
 ### 2. 現行バージョン
 
-**Ver.3.7-55**（2026-04-15）
+**Ver.3.8-56**（2026-04-15）
 
 ---
 
 ### 3. リリース履歴
 
 #### 3.0 Ver.3.0 系（実装済みリリース）
+
+##### Ver.3.8 — バグ修正（53件精査）
+
+全コード精査53件（PHP + TypeScript 全コード対象）。
+重大1件（バルク操作 404 — R8-38 bulk ルート欠落 + JSON ボディ未解析）、
+中程度7件（テーマ設定値検証・filesize false・メモリフォールバック・is_main !empty()・saveRevision ソート順 他）、
+軽微多数。仮陽性35件確認。実装済み: 10件（重大1 + 中程度5 + 軽微4）。
+詳細は §5.9 を参照。
 
 ##### Ver.3.7 — 機能拡充（テーマ設定API + 検索インデックス）
 
@@ -1241,13 +1249,69 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 
 ---
 
-#### 5.9 Ver.3.8 — バグ修正【暫定】
+#### 5.9 Ver.3.8 — バグ修正
 
 > バグ修正を主目的とするバージョン（リリースカレンダー規則: 偶数バージョン）。
+> 精査完了: 2026-04-15。精査件数: 53件（PHP + TypeScript 全コード対象）。
+> 深刻度内訳: 致命的 0件 / 重大 1件 / 中程度 9件 / 軽微 11件 / 仮陽性 32件。
 
-| カテゴリ | 内容 | 状態 |
-|---------|------|:----:|
-| 品質 | 50〜100件精査（PHP + TS） | 計画 |
+##### 精査結果（全53件）
+
+| No. | ファイル | 内容 | 深刻度 | 状態 |
+|-----|---------|------|:------:|:----:|
+| R8-1 | Core/api.php | preg_replace の戻り値 string\|null チェックがない箇所 | 軽微 | 仮陽性（PHP 8 では有効パターン時は null 非返却） |
+| R8-2 | Core/app.php | preg_replace 戻り値 null の可能性（型安全性） | 中程度 | 仮陽性（全箇所で is_string チェックまたは null coalescing 済み） |
+| R8-3 | Core/core.php | memory_limit 単位解析で大文字 G/M/K を処理しない | 中程度 | 仮陽性（strtolower() 適用済みで大文字 G/M/K は小文字化される） |
+| R8-4 | Core/api.php | $_GET['revisions'] GETパラメータの型検証 | 軽微 | 仮陽性（is_string チェック済み） |
+| R8-5 | Core/app.php | host 構築の substr() 戻り値検証 | 軽微 | 仮陽性（substr 失敗ケースなし） |
+| R8-6 | Core/core.php | listPublishedPosts() の strtotime() false 処理で不安定ソート | 軽微 | 仮陽性（`?: 0` で false→0 変換済み、安定ソート保証） |
+| R8-7 | Core/api.php | CONTENT_LENGTH が未セット時の処理 | 軽微 | 仮陽性（(int)キャスト済みで0扱い OK） |
+| R8-8 | Core/api.php | Content-Type が空の場合の import 許可判定 | 軽微 | 仮陽性（空 Content-Type 許可は意図的） |
+| R8-9 | Core/renderer.php | preg_replace 後 lang 変数の null 可能性 | 軽微 | 仮陽性（ternary で null 安全化済み） |
+| R8-10 | Core/core.php | ini_get('memory_limit') false 返却時の処理 | 中程度 | 仮陽性（false 時 $val=0 → elseif $val>0 が不成立 → メモリチェックスキップで安全） |
+| R8-11 | Core/api.php | tempnam() パス + chmod() の組み合わせ | 軽微 | 仮陽性（機能的問題なし） |
+| R8-12 | Core/app.php | preg_replace 後のスラッグが空文字の可能性 | 軽微 | 仮陽性（generateSlug で別途保護済み） |
+| R8-13 | Core/core.php | glob() 失敗時（false）に cleanupRevisions が空配列継続 | 中程度 | 仮陽性（saveRevision 内の rotation で is_array($files) チェック済み） |
+| R8-14 | Core/api.php | json_decode 深度制限なし（handleApiImport） | 軽微 | 仮陽性（PHP デフォルト 512 depth で十分） |
+| R8-15 | Core/core.php | rotateBackups() の glob() false 返却時に count() でエラー | 軽微 | 仮陽性（`$files === false` チェック済みで count() 到達前に return） |
+| R8-16 | Core/api.php | apiRevisionDiff のブロック比較が浅い（deep diff なし） | 軽微 | **実装済**（コード内に注記追加。deep diff は仕様対象外） |
+| R8-17 | Core/renderer.php | 画像 URL バリデーションパターンの特殊文字処理 | 軽微 | 仮陽性（パターンは適切） |
+| R8-18 | Core/app.php | session_regenerate_id() 前の session_destroy() 順序 | 軽微 | 仮陽性（順序は正しい） |
+| R8-19 | Core/core.php | メモリ超過時のキャッシュフォールバックが空配列を返す | 中程度 | **実装済**（メモリ超過時に追加ロードを行わず部分結果を返すよう修正） |
+| R8-20 | Core/api.php | $_FILES['name'] 拡張子判定の信頼性 | 軽微 | 仮陽性（R6-11 MIME 検証で対応済み） |
+| R8-21 | Core/helpers.php | IP アドレス検証で filter_var 失敗時のデフォルト '127.0.0.1' | 軽微 | **実装済**（無効 IP 時に error_log を追加） |
+| R8-22 | Core/api.php | route table の漏れ | 軽微 | 仮陽性（全エンドポイント定義済み） |
+| R8-23 | Core/core.php | updatePageStatus() が同一ステータス時に revision を作成 | 軽微 | 仮陽性（"Skip if status is already the same" チェック済み・revision 生成なし） |
+| R8-24 | Core/app.php | logout 後の header() 二重呼び出し可能性 | 軽微 | 仮陽性（exit で保護済み） |
+| R8-25 | Core/api.php | php://input json_decode 深度制限なし | 軽微 | 仮陽性（PHP デフォルト 512 depth で十分） |
+| R8-26 | Core/helpers.php | file_put_contents LOCK_EX の実装依存 | 軽微 | 仮陽性（ドキュメント問題、機能的 OK） |
+| R8-27 | Core/core.php | strip_tags によるリンク削除（移行処理コンテキスト） | 軽微 | 仮陽性（意図的） |
+| R8-28 | Core/api.php | array_intersect_key によるホワイトリスト判定 | 軽微 | 仮陽性（正しい実装） |
+| R8-29 | Core/renderer.php | escHtml 二重エスケープ不可 | 軽微 | 仮陽性（入力がすでにエスケープされていれば二重しない） |
+| R8-30 | Core/api.php + Core/core.php | is_main 判定に !empty() 使用（falsy value 問題） | 軽微 | **実装済**（api.php と core.php 計4箇所を `=== true` 厳密比較に修正） |
+| R8-31 | Core/core.php | glob() 失敗時の readPageList 周辺のnull チェック | 軽微 | 仮陽性（false チェック済み） |
+| R8-32 | Core/app.php | config key アクセスの型安全 | 軽微 | 仮陽性（存在チェック済み） |
+| R8-33 | Core/api.php | handleApiThemeSettings POST の settings 値型・長さ検証なし | 中程度 | **実装済**（キー数≤100・キー長≤100・値はスカラーまたは1次元配列のみ許可） |
+| R8-34 | Core/core.php | writePage の status falsy value 判定 | 軽微 | 仮陽性（in_array 厳密比較済み） |
+| R8-35 | Core/api.php | handleApiMedia POST の filesize($tmpName) が false → 0 で空ファイルを許可 | 中程度 | **実装済**（filesize false チェックと空ファイル拒否を追加） |
+| R8-36 | Core/renderer.php | marks の array_reverse が参照で動作 | 軽微 | 仮陽性（値コピーなので外部スコープに影響なし） |
+| R8-37 | Core/helpers.php | flock LOCK_NB の動作がPHP実装依存 | 軽微 | 仮陽性（ドキュメント問題） |
+| R8-38 | ts/api.ts + Core/api.php | bulkStatus/bulkDelete が ?api=bulk に送信するが PHP route table に 'bulk' が存在しない + JSON ボディを $_POST で読む → バルク操作が常に 404 失敗 | **重大** | **実装済**（route table に 'bulk' を追加・JSON ボディ解析対応） |
+| R8-39 | Core/app.php | t() 翻訳関数でパラメータ置換の ':' プレフィックス処理 | 軽微 | 仮陽性（動作は正しい） |
+| R8-40 | Core/core.php | キャッシュ検証の filemtime 秒精度でミリ秒更新を検出しない | 軽微 | 仮陽性（実運用上許容） |
+| R8-41 | Core/api.php | handleApiImport のリビジョンタイムスタンプパターンのマッチ漏れ | 中程度 | 仮陽性（パターン `/^\d{8}_\d{6}(_[a-f0-9]+)?$/` は saveRevision の出力フォーマットと一致） |
+| R8-42 | Core/renderer.php | リスト flush タイミング（listItem 切替時の処理） | 軽微 | 仮陽性（正常動作） |
+| R8-43 | Core/app.php | password_hash 後の session 設定一貫性 | 軽微 | 仮陽性（トランザクション的一貫性はフラットファイルの制約） |
+| R8-44 | Core/core.php | listPublishedPosts() の uasort で strtotime() false が 0 扱い | 軽微 | 仮陽性（R8-6 と同一。`?: 0` で false→0 変換済み） |
+| R8-45 | Core/api.php | CSRF 検証の multipart/form-data 対応 | 軽微 | 仮陽性（csrf_verify() はフォームパラメータ対応済み） |
+| R8-46 | ts/editor.ts | sanitizeHtml() の出力がアコーディオンコンテンツとして直接 innerHTML に使用 | 軽微 | 仮陽性（R6-1 サーバー側 strip_tags で保護済み） |
+| R8-47 | ts/api.ts | reorderPages() 空配列時の早期 return で呼び出し元が完了判定できない | 軽微 | 仮陽性（戻り値型 Promise<void>。空配列 return は resolved Promise と同等で呼び出し元に影響なし） |
+| R8-48 | ts/editor.ts | escHtml 処理後の HTML コンテンツの二重エスケープ | 軽微 | 仮陽性（escHtml はテキストノードのみに適用） |
+| R8-49 | Core/api.php | theme 名の basename() + realpath() 検証 | 軽微 | 仮陽性（Ver.3.7 実装で正しく realpath チェック済み） |
+| R8-50 | Core/core.php | saveRevision のリビジョン rotation で glob() ASC ソートが時系列と不一致の可能性 | 中程度 | **実装済**（usort + basename 比較で明示的タイムスタンプ順ソートに変更） |
+| R8-51 | Core/api.php | is_main === true の !empty() 検証 | 軽微 | 仮陽性（R8-30 と重複） |
+| R8-52 | Core/renderer.php | html_entity_decode() 後の危険スキーム検証 | 軽微 | 仮陽性（decode 後に $lower で検証済み、正しい実装） |
+| R8-53 | Core/helpers.php | ftruncate() 後の rewind() でエラーログなし | 軽微 | **実装済**（fwrite 失敗時のフォールバックパスに error_log を追加） |
 
 ---
 
