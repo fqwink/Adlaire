@@ -384,7 +384,20 @@ function generateBlogIndexHtml(App $app, array $posts, string $theme): string
     $listHtml = '<ul class="blog-list">';
     foreach ($posts as $slug => $data) {
         $safeSlug = esc($slug);
-        $postTitle = esc(str_replace('-', ' ', $slug));
+        $ptBody = is_array($data['body'] ?? null) ? $data['body'] : [];
+        $rawTitle = '';
+        foreach ($ptBody as $node) {
+            if (!is_array($node) || ($node['_type'] ?? '') !== 'block') {
+                continue;
+            }
+            $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+            $text = implode('', array_map(fn(mixed $c): string => is_array($c) ? (string) ($c['text'] ?? '') : '', $children));
+            if ($text !== '') {
+                $rawTitle = $text;
+                break;
+            }
+        }
+        $postTitle = esc($rawTitle !== '' ? $rawTitle : str_replace('-', ' ', $slug));
         $postedAt = is_string($data['posted_at'] ?? null) && $data['posted_at'] !== '' ? $data['posted_at'] : ($data['updated_at'] ?? '');
         $dateStr = (is_string($postedAt) && strlen($postedAt) >= 10) ? esc(substr($postedAt, 0, 10)) : '';
         $category = is_string($data['category'] ?? null) ? esc($data['category']) : '';

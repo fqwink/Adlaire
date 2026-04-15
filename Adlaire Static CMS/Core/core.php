@@ -263,7 +263,7 @@ final class FileStorage
             }
 
             // Skip if already in PT format
-            if (isset($data['body']) && !isset($data['content'])) {
+            if (isset($data['body']) && is_array($data['body']) && !isset($data['content']) && !isset($data['blocks'])) {
                 continue;
             }
 
@@ -330,7 +330,7 @@ final class FileStorage
                         'children' => [[
                             '_type' => 'span',
                             '_key' => bin2hex(random_bytes(4)),
-                            'text' => (string) ($d['text'] ?? ''),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
                             'marks' => [],
                         ]],
                     ];
@@ -345,7 +345,7 @@ final class FileStorage
                         'children' => [[
                             '_type' => 'span',
                             '_key' => bin2hex(random_bytes(4)),
-                            'text' => (string) ($d['text'] ?? ''),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
                             'marks' => [],
                         ]],
                     ];
@@ -364,7 +364,7 @@ final class FileStorage
                             'children' => [[
                                 '_type' => 'span',
                                 '_key' => bin2hex(random_bytes(4)),
-                                'text' => (string) $item,
+                                'text' => strip_tags((string) $item),
                                 'marks' => [],
                             ]],
                         ];
@@ -387,7 +387,7 @@ final class FileStorage
                         'children' => [[
                             '_type' => 'span',
                             '_key' => bin2hex(random_bytes(4)),
-                            'text' => (string) ($d['text'] ?? ''),
+                            'text' => strip_tags((string) ($d['text'] ?? '')),
                             'marks' => [],
                         ]],
                     ];
@@ -731,6 +731,9 @@ final class FileStorage
                     'status'     => $data['status'] ?? 'published',
                     'type'       => $data['type'] ?? 'page',
                     'posted_at'  => $data['posted_at'] ?? '',
+                    'category'   => $data['category'] ?? '',
+                    'author'     => $data['author'] ?? '',
+                    'tags'       => is_array($data['tags'] ?? null) ? $data['tags'] : [],
                     'created_at' => $data['created_at'] ?? '',
                     'updated_at' => $data['updated_at'] ?? '',
                 ];

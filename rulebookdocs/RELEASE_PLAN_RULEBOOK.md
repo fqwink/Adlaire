@@ -19,7 +19,7 @@
 
 | プロジェクト | 現行バージョン | リリース日 | 状態 |
 |---|---|---|---|
-| **Adlaire Static CMS** | Ver.3.0-48 | 2026-04-12 | 本番稼働中 |
+| **Adlaire Static CMS** | Ver.3.2-50 | 2026-04-15 | 本番稼働中 |
 | **Adlaire Deploy** | Ver.1.9-14 | 2026-04-06 | 実装済み（Phase 1〜14 完了） |
 | **Adlaire License Server** | 初期実装済 | — | リリース計画未策定 |
 | **Adlaire BaaS** | 未実装 | — | 仕様策定段階 |
@@ -53,7 +53,7 @@
 
 ### 2. 現行バージョン
 
-**Ver.3.0-48**（2026-04-12）
+**Ver.3.2-50**（2026-04-15）
 
 ---
 
@@ -971,28 +971,114 @@ Ver.2.3 アーキテクチャ刷新後の全コード精査50件（PHP 30件 + T
 #### 5.2 Ver.3.1 — ブログ基盤 + Portable Text 導入（X.1 破壊的変更）
 
 > 仕様策定完了（2026-04-13）: `API_RULEBOOK.md` §2.2・§2.9・§3.1・§4.1・§6.2〜6.4 / `GENERATOR_RULEBOOK.md` §9.1〜9.2・§10
+> リリース: 2026-04-14（Ver.3.1-49）
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
-| **破壊的変更** | Portable Text（Sanity PT 準拠）コンテンツ形式導入（`API_RULEBOOK.md` §2.9） | 計画 |
-| **破壊的変更** | ページデータ `body` フィールド新設（旧 `content`/`format`/`blocks` フィールドを廃止宣言） | 計画 |
-| **破壊的変更** | 起動時に旧形式データを Portable Text へ自動マイグレーション（廃止ポリシー準拠、一度のみ） | 計画 |
-| 新機能 | 投稿タイプ新設（`type: post` フィールド追加、ページと投稿の区別） | 計画 |
-| 新機能 | 投稿メタデータ（投稿日時・カテゴリ・タグ・著者） | 計画 |
-| 新機能 | ブログ一覧ページ（投稿一覧の静的生成・ページネーション） | 計画 |
-| 管理UI | ダッシュボードにポスト/ページ切替フィルタ | 計画 |
+| **破壊的変更** | Portable Text（Sanity PT 準拠）コンテンツ形式導入（`API_RULEBOOK.md` §2.9） | 実装済 |
+| **破壊的変更** | ページデータ `body` フィールド新設（旧 `content`/`format`/`blocks` フィールドを廃止宣言） | 実装済 |
+| **破壊的変更** | 起動時に旧形式データを Portable Text へ自動マイグレーション（廃止ポリシー準拠、一度のみ） | 実装済 |
+| 新機能 | 投稿タイプ新設（`type: post` フィールド追加、ページと投稿の区別） | 実装済 |
+| 新機能 | 投稿メタデータ（投稿日時・カテゴリ・タグ・著者） | 実装済 |
+| 新機能 | ブログ一覧ページ（投稿一覧の静的生成・ページネーション） | 実装済 |
+| 管理UI | ダッシュボードにポスト/ページ切替フィルタ | 実装済 |
 
 ---
 
-#### 5.3 Ver.3.2 — バグ修正【暫定】
+#### 5.3 Ver.3.2 — バグ修正
 
 > バグ修正を主目的とするバージョン（リリースカレンダー規則: 偶数バージョン）。
-> 仕様策定: バグ修正は精査後に確定する。詳細仕様は各分類ベースルールブックに策定後、本セクションを更新する。
+> 精査実施日: 2026-04-14 / 精査件数: 56件（PHP + TS 全ファイル対象）
+
+##### 精査結果サマリー
+
+| 深刻度 | 件数 |
+|:------:|:----:|
+| 致命的 | 4件 |
+| 重大   | 4件 |
+| 中程度 | 5件 |
+| 軽微   | 5件 |
+| 問題なし | 38件 |
+| **合計** | **56件** |
+
+##### 精査結果（全件）
+
+| # | ファイル | 内容 | 深刻度 | 対応 |
+|:-:|---------|------|:------:|:----:|
+| 1 | `index.php:122-127` | プレビュールーティング: PT形式廃止後も `content`/`format`/`blocks` キーを参照 → PT ページでプレビュー不能 | **致命的** | 修正 |
+| 2 | `Core/renderer.php:174` | `renderBlocksToHtml()` paragraph — `esc()` なしでテキスト出力 → XSS | **致命的** | 修正 |
+| 3 | `Core/renderer.php:175` | `renderBlocksToHtml()` heading — `esc()` なしでテキスト出力 → XSS | **致命的** | 修正 |
+| 4 | `Core/api.php:597,604` | 全文検索: PT形式ページに存在しない `content` キーを参照 → 全PT ページの検索結果ゼロ | **致命的** | 修正 |
+| 5 | `ts/api.ts:141` | `savePage()` タグ形式不一致: `tags.join(',')` 送信 ↔ PHP側 `json_decode()` → タグが保存されない | **重大** | 修正 |
+| 6 | `Core/core.php:730-736` | `listPages()` キャッシュに `category`/`author`/`tags` が含まれない → キャッシュ命中時にこれらのフィールドが常に空 | **重大** | 修正 |
+| 7 | `Core/core.php convertBlocksToPT()` | マイグレーション: ブロックテキストの HTML をストリップせずに PT span.text へ転記 → マイグレーション後に生 HTML タグが表示 | **重大** | 修正 |
+| 8 | `Core/renderer.php:176` | `renderBlocksToHtml()` list items — `esc()` なしで出力 → XSS | **重大** | 修正 |
+| 9 | `Core/api.php:612` | 全文検索結果: 廃止済みの `'format' => $data['format']` フィールドを返す → null が混入 | **中程度** | 修正 |
+| 10 | `Core/core.php:266` | マイグレーションスキップ判定: `isset($data['body']) && !isset($data['content'])` — 両フィールドを持つ中途半端なデータをスキップしてしまう可能性 | **中程度** | 修正 |
+| 11 | `Core/generator.php:387` | ブログ一覧タイトル: スラッグのハイフンを空白に変換するだけで実際のコンテンツタイトルを取得しない | **中程度** | 修正 |
+| 12 | `Core/renderer.php:178` | `renderBlocksToHtml()` quote — `esc()` なしでテキスト出力 → XSS | **中程度** | 修正 |
+| 13 | `Core/api.php:56` | `$allowedConfigFields` に廃止済みの `'content'`/`'format'`/`'blocks'` が残存 | **軽微** | 修正 |
+| 14 | `Core/core.php:676-677` | メモリ制限文字列パース: `-1`（無制限）の場合に不正な数値変換が発生する可能性 | **軽微** | 修正 |
+| 15 | `Core/api.php:780` | インポート: `json_decode` の深さ制限 64 — 深くネストされた構造で予期せぬ動作の可能性 | **軽微** | Ver.3.4 延期 |
+| 16 | `Core/api.php:218` | ライセンスサーバードメインを `$_SERVER['HTTP_HOST']` から直接取得しているが検証が弱い | **軽微** | Ver.3.4 延期 |
+| 17 | `Core/renderer.php:144` | 画像 URL: パターン検証は raw URL で実施、危険スキーム検査はデコード後に実施 — 多重エンコード攻撃への防御（現状は正しい多層チェック） | 問題なし | — |
+| 18 | `Core/renderer.php:97-100` | リンク href: デコード後の値で危険スキーム検査 — 意図通りの多層防御実装 | 問題なし | — |
+| 19 | `Core/renderer.php:80` | span テキスト: `esc()` で事前エスケープ後に marks 適用 — XSS 問題なし | 問題なし | — |
+| 20 | `Core/renderer.php:205-230` | `renderMarkdownToHtml()`: 入力を `htmlspecialchars()` で事前エスケープ後に正規表現を適用 — `$1` 置換は安全なエスケープ済みコンテンツに対して実施 | 問題なし | — |
+| 21 | `Core/renderer.php:196` | `renderMarkdownToHtml()`: `<script>` タグ除去後に `htmlspecialchars()` で全体エスケープ — 多重防御として有効 | 問題なし | — |
+| 22 | `Core/renderer.php:133` | コードブロック: `esc()` で正しくエスケープ — 問題なし | 問題なし | — |
+| 23 | `Core/core.php:520-523` | `readPageData()`: パス検証後に `realpath()` で正規化 — 壊れたシンボリックリンクは実在ファイルなし扱いで安全 | 問題なし | — |
+| 24 | `index.php:120` | `readPageData()` の戻り値: `if ($previewData !== false)` で正しくチェック済み — 問題なし | 問題なし | — |
+| 25 | `Core/core.php:598-607` | `atomicWrite()`: `tempnam()` + `rename()` を使用、同一ディレクトリ内のアトミック書き込み — OS 依存の rename アトミック性あり | 問題なし | — |
+| 26 | `Core/api.php:493-503` | DELETE エンドポイント: `X-CSRF-Token` ヘッダー方式 — フォーム POST 方式と異なるが、どちらも正しい CSRF 保護 | 問題なし | — |
+| 27 | `Core/app.php:106-111` | `HTTP_HOST` 検証: `HOST_PATTERN` による正規表現チェック実施 — 問題なし | 問題なし | — |
+| 28 | `Core/core.php:587-590` | `writePage()`: `array_filter` で tags の非文字列要素を除去 — 安全 | 問題なし | — |
+| 29 | `Core/api.php:773-810` | インポート: POST ボディの JSON を検証済み構造で処理 — `$allowedPageKeys` によるフィルタあり | 問題なし | — |
+| 30 | `Core/core.php:443-500` | `writeConfig()`: バックアップ → アトミック書き込み — 失敗時のロールバックは未実装だが書き込み失敗は false 返却で検出可能 | 問題なし | — |
+| 31 | `ts/api.ts:78-88` | `buildApiUrl()`: エンドポイントを英数字・ハイフンのみに制限 — インジェクション対策あり | 問題なし | — |
+| 32 | `ts/api.ts:55-58` | `updateCsrfFromResponse()`: `X-CSRF-Token` ヘッダーから正しく更新 | 問題なし | — |
+| 33 | `ts/api.ts:62-72` | `extractApiError()`: HTML タグを除去してサニタイズ — 問題なし | 問題なし | — |
+| 34 | `ts/api.ts:164-174` | `deletePage()`: スラッグ検証・`X-CSRF-Token` ヘッダー付き DELETE リクエスト | 問題なし | — |
+| 35 | `ts/editInplace.ts beforeunload` | `sendBeacon` + XHR 同期フォールバック — CSRF トークン付き | 問題なし | — |
+| 36 | `ts/editor.ts sanitizeHtml()` | クライアント側 HTML サニタイズ — 許可要素の明示的ホワイトリスト | 問題なし | — |
+| 37 | `Core/core.php validateSlug()` | スラッグ: 英小文字・数字・ハイフンのみ許可、長さ制限あり | 問題なし | — |
+| 38 | `Core/core.php:301` | `atomicWrite()`: `json_encode` 失敗時は書き込みスキップ — データ破損防止 | 問題なし | — |
+| 39 | `Core/api.php verifyApiAuth()` | セッション + ユーザー状態のダブルチェック | 問題なし | — |
+| 40 | `Core/core.php CSRF` | HMAC-SHA256 + セッション紐付け — 適切な CSRF 保護 | 問題なし | — |
+| 41 | `Core/core.php rate limiting` | ログイン試行回数制限: ファイルベースロック — 問題なし | 問題なし | — |
+| 42 | `ts/markdown.ts` | テーブル: 1000行/50列制限 — DoS 対策あり | 問題なし | — |
+| 43 | `ts/markdown.ts` | 危険 URL プロトコルチェック（画像・リンク）| 問題なし | — |
+| 44 | `Core/renderer.php renderPortableTextToHtml()` | 全ノードタイプで適切にエスケープ処理 | 問題なし | — |
+| 45 | `Core/generator.php` | 静的生成の出力パスを `realpath()` + ベースパスチェックで検証 | 問題なし | — |
+| 46 | `Core/admin-ui.php` | 全出力箇所で `esc()` 使用 — XSS 問題なし | 問題なし | — |
+| 47 | `Core/api.php apiPageList()` | キャッシュから読み込む際の型安全チェックあり | 問題なし | — |
+| 48 | `Core/core.php migrateLegacyFiles()` | マイグレーションマーカーファイルで重複実行防止 | 問題なし | — |
+| 49 | `Core/core.php readPageData()` | `is_array($data['body'])` を確認してから返却 | 問題なし | — |
+| 50 | `Core/api.php apiSidebar()` | GET/POST で分岐、POST は body を PT 配列として検証 | 問題なし | — |
+| 51 | `ts/i18n.ts` | 言語コードを `'ja'`/`'en'` のみに制限 | 問題なし | — |
+| 52 | `ts/autosize.ts` | `MutationObserver` + `WeakRef` + `AbortController` でクリーンアップ | 問題なし | — |
+| 53 | `Core/core.php lockedRead()` | `flock(LOCK_SH)` による共有ロック読み込み | 問題なし | — |
+| 54 | `Core/core.php lockedWrite()` | `flock(LOCK_EX)` による排他ロック書き込み | 問題なし | — |
+| 55 | `Core/app.php getSidebarBody()` | 旧形式自動検出 + `convertBlocksToPT()` オンザフライ変換 | 問題なし | — |
+| 56 | `Core/generator.php generateBlogIndex()` | ブログ一覧 HTML: 全出力で `esc()` 使用 — XSS 問題なし | 問題なし | — |
+
+##### 修正実装内容
 
 | カテゴリ | 内容 | 状態 |
 |---------|------|:----:|
-| 品質 | 50〜100件精査（PHP + TS） | 計画 |
-| 品質 | Ver.3.1 ブログ機能のバグ修正 | 計画 |
+| 品質 | 56件精査完了（PHP 全ファイル + TS 全ファイル対象） | 実装済 |
+| **致命的** | `index.php:122-127` — プレビュールーティング PT 対応（`pageBody` キー使用） | 実装済 |
+| **致命的** | `renderer.php:174-175` — `renderBlocksToHtml()` paragraph/heading に `esc()` 追加 | 実装済 |
+| **致命的** | `api.php:597,604` — 全文検索: `content` → `body` PT ノードテキスト抽出に変更 | 実装済 |
+| 重大 | `ts/api.ts:141` — タグ: `tags.join(',')` → `JSON.stringify(tags)` に変更 | 実装済 |
+| 重大 | `core.php:730-736` — `listPages()` キャッシュに `category`/`author`/`tags` を追加 | 実装済 |
+| 重大 | `core.php convertBlocksToPT()` — `strip_tags()` でブロックテキストの HTML を除去 | 実装済 |
+| 重大 | `renderer.php:176,178` — `renderBlocksToHtml()` list/quote に `esc()` 追加 | 実装済 |
+| 中程度 | `api.php:612` — 検索結果から廃止済み `'format'` フィールドを削除 | 実装済 |
+| 中程度 | `core.php:266` — マイグレーションスキップ判定: `is_array($data['body'])` に変更 | 実装済 |
+| 中程度 | `generator.php:387` — ブログタイトル: PT content から first block テキストを抽出 | 実装済 |
+| 軽微 | `api.php:56` — `$allowedConfigFields` から廃止済みフィールドを削除 | 実装済 |
+| 軽微 | `core.php:676-677` — メモリ制限文字列パース: `-1` 処理を追加 | 実装済 |
 
 ---
 

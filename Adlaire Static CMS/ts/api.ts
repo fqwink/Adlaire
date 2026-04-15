@@ -138,7 +138,7 @@ export const api = {
         if (type) params.append('type', type);
         if (postedAt) params.append('posted_at', postedAt);
         if (category) params.append('category', category);
-        if (tags.length > 0) params.append('tags', tags.join(','));
+        if (tags.length > 0) params.append('tags', JSON.stringify(tags));
         if (author) params.append('author', author);
 
         const res = await fetch(buildApiUrl('pages'), {

@@ -28,6 +28,39 @@ const RENDERER_MAX_HEADING_LEVEL = 3;
 const RENDERER_MIN_HEADING_LEVEL = 1;
 
 /**
+ * Extract plain text from a Portable Text body array (for search indexing).
+ * @param list<array<string, mixed>> $body
+ */
+function extractTextFromPT(array $body): string
+{
+    $parts = [];
+    foreach ($body as $node) {
+        if (!is_array($node)) {
+            continue;
+        }
+        $type = (string) ($node['_type'] ?? '');
+        if ($type === 'block') {
+            $children = is_array($node['children'] ?? null) ? $node['children'] : [];
+            $texts = [];
+            foreach ($children as $child) {
+                if (is_array($child) && ($child['_type'] ?? '') === 'span') {
+                    $texts[] = (string) ($child['text'] ?? '');
+                }
+            }
+            if ($texts !== []) {
+                $parts[] = implode('', $texts);
+            }
+        } elseif ($type === 'code') {
+            $code = (string) ($node['code'] ?? '');
+            if ($code !== '') {
+                $parts[] = $code;
+            }
+        }
+    }
+    return implode(' ', $parts);
+}
+
+/**
  * Render Portable Text body to static HTML string (server-side).
  * @param list<array<string, mixed>> $body
  */
@@ -171,11 +204,11 @@ function renderBlocksToHtml(array $blocks): string
         $type = (string) ($block['type'] ?? '');
         $d = is_array($block['data'] ?? null) ? $block['data'] : [];
         $html .= match ($type) {
-            'paragraph' => '<p>' . (string) ($d['text'] ?? '') . '</p>',
-            'heading'   => (function() use ($d): string { $l = max(RENDERER_MIN_HEADING_LEVEL, min(RENDERER_MAX_HEADING_LEVEL, (int) ($d['level'] ?? 2))); return "<h{$l}>" . (string) ($d['text'] ?? '') . "</h{$l}>"; })(),
-            'list'      => (function() use ($d): string { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; $items = is_array($d['items'] ?? null) ? $d['items'] : []; return "<{$t}>" . implode('', array_map(fn(mixed $i): string => '<li>' . (string) $i . '</li>', $items)) . "</{$t}>"; })(),
+            'paragraph' => '<p>' . esc((string) ($d['text'] ?? '')) . '</p>',
+            'heading'   => (function() use ($d): string { $l = max(RENDERER_MIN_HEADING_LEVEL, min(RENDERER_MAX_HEADING_LEVEL, (int) ($d['level'] ?? 2))); return "<h{$l}>" . esc((string) ($d['text'] ?? '')) . "</h{$l}>"; })(),
+            'list'      => (function() use ($d): string { $t = (($d['style'] ?? '') === 'ordered') ? 'ol' : 'ul'; $items = is_array($d['items'] ?? null) ? $d['items'] : []; return "<{$t}>" . implode('', array_map(fn(mixed $i): string => '<li>' . esc((string) $i) . '</li>', $items)) . "</{$t}>"; })(),
             'code'      => '<pre><code>' . esc((string) ($d['code'] ?? '')) . '</code></pre>',
-            'quote'     => '<blockquote>' . (string) ($d['text'] ?? '') . '</blockquote>',
+            'quote'     => '<blockquote>' . esc((string) ($d['text'] ?? '')) . '</blockquote>',
             'delimiter' => '<hr>',
             'image'     => (function() use ($d): string { $url = (string) ($d['url'] ?? ''); $decoded = html_entity_decode($url, ENT_QUOTES, 'UTF-8'); $lower = strtolower(trim($decoded)); if ($url === '' || !preg_match(RENDERER_IMAGE_URL_PATTERN, $url) || preg_match(RENDERER_DANGEROUS_SCHEME_PATTERN, $lower) || preg_match(RENDERER_PROTOCOL_RELATIVE_PATTERN, $decoded)) { $url = ''; } $caption = (string) ($d['caption'] ?? ''); return '<figure><img src="' . esc($url) . '" alt="' . esc($caption) . '" loading="lazy">' . ($caption !== '' ? '<figcaption>' . esc($caption) . '</figcaption>' : '') . '</figure>'; })(),
             default     => '',

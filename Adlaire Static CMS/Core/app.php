@@ -15,9 +15,9 @@ declare(strict_types=1);
 final class App
 {
     public const VERSION_MAJOR = 3;
-    public const VERSION_MINOR = 1;
-    public const VERSION_BUILD = 49;
-    public const VERSION = 'Ver.3.1-49';
+    public const VERSION_MINOR = 2;
+    public const VERSION_BUILD = 50;
+    public const VERSION = 'Ver.3.2-50';
 
     /** Session timeout in seconds (30 minutes) */
     private const SESSION_TIMEOUT = 1800;

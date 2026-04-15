@@ -53,7 +53,7 @@ function handleEdit(): void
     if ($fieldname === '') {
         return;
     }
-    $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'content', 'status', 'format', 'blocks'];
+    $allowedConfigFields = ['title', 'description', 'keywords', 'copyright', 'sidebar', 'themeSelect', 'language', 'menu', 'status'];
     if (!in_array($fieldname, $allowedConfigFields, true) && !FileStorage::validateSlug($fieldname)) {
         header('HTTP/1.1 400 Bad Request');
         exit;
@@ -594,24 +594,26 @@ function handleApiSearch(FileStorage $storage): void
     $results = [];
 
     foreach ($pages as $slug => $data) {
-        $content = mb_strtolower($data['content'] ?? '', 'UTF-8');
+        $ptBody = is_array($data['body'] ?? null) ? $data['body'] : [];
+        $plainText = extractTextFromPT($ptBody);
+        $content = mb_strtolower($plainText, 'UTF-8');
         $pos = mb_strpos($content, $query, 0, 'UTF-8');
         if ($pos === false) {
             continue;
         }
 
         $start = max(0, $pos - API_SEARCH_SNIPPET_CONTEXT);
-        $snippet = mb_substr($data['content'], $start, API_SEARCH_SNIPPET_LENGTH, 'UTF-8');
+        $snippet = mb_substr($plainText, $start, API_SEARCH_SNIPPET_LENGTH, 'UTF-8');
         if ($start > 0) {
             $snippet = '...' . $snippet;
         }
 
         $results[] = [
             'slug'       => $slug,
-            'snippet'    => strip_tags($snippet),
-            'format'     => $data['format'],
-            'status'     => $data['status'],
-            'updated_at' => $data['updated_at'],
+            'snippet'    => $snippet,
+            'type'       => $data['type'] ?? 'page',
+            'status'     => $data['status'] ?? 'published',
+            'updated_at' => $data['updated_at'] ?? '',
         ];
     }
 
