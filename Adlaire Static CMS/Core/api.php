@@ -1365,7 +1365,12 @@ const API_MEDIA_MAX_SIZE = 10 * 1024 * 1024;
  */
 function validateMediaFilename(string $name): bool
 {
-    return $name !== '' && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $name) === 1 && !str_contains($name, '..');
+    // R9-28: 先頭・末尾ドットを拒否（隠しファイル・拡張子なしファイル対策）
+    return $name !== ''
+        && $name[0] !== '.'
+        && $name[-1] !== '.'
+        && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $name) === 1
+        && !str_contains($name, '..');
 }
 
 function handleApiMedia(string $method): void

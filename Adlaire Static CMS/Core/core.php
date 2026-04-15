@@ -191,7 +191,12 @@ final class FileStorage
                 }
                 $dest = $this->pagesDir . '/' . $name . '.json';
                 if (!file_exists($dest)) {
-                    $mtime = date('c', filemtime($file) ?: time());
+                    // R9-49: filemtime false 時にエラーログ追加（レガシー移行コード）
+                    $fileMtime = filemtime($file);
+                    if ($fileMtime === false) {
+                        error_log('Adlaire: filemtime() failed during legacy migration for file: ' . $file);
+                    }
+                    $mtime = date('c', $fileMtime ?: time());
                     $content = file_get_contents($file);
                     $rawContent = $content !== false ? $content : '';
                     $ptBody = [[
@@ -885,13 +890,8 @@ final class FileStorage
         if (count($files) <= self::MAX_BACKUPS) {
             return;
         }
-        usort($files, static function (string $a, string $b): int {
-            $mtimeA = filemtime($a);
-            $mtimeB = filemtime($b);
-            if ($mtimeA === false) { $mtimeA = 0; }
-            if ($mtimeB === false) { $mtimeB = 0; }
-            return $mtimeA <=> $mtimeB;
-        });
+        // R9-7: mtime 依存をやめ、ファイル名中のタイムスタンプで昇順ソート（クロック後退耐性）
+        usort($files, static fn(string $a, string $b): int => basename($a) <=> basename($b));
         $toRemove = array_slice($files, 0, max(0, count($files) - self::MAX_BACKUPS));
         foreach ($toRemove as $old) {
             @unlink($old);
